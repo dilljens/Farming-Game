@@ -1,0 +1,56 @@
+body {
+font-family: Arial, sans-serif;
+background-color: #f8f6f6;
+}
+table {
+border-collapse: collapse;
+width: 60%; /* Adjust width as needed */
+margin: 20px auto;
+}
+th, td {
+border: 1px solid #777777;
+text-align: left;
+padding: 8px;
+}
+th {
+background-color: #f2f2f2;
+}
+td.editable {
+background-color: #fff;
+}
+input[type="number"] {
+width: 100%;
+padding: 8px;
+border: none;
+box-sizing: border-box;
+}
+.input-cell {
+padding: 0; /* Remove padding for input cells */
+}
+.input-cell input {
+border: 1px solid #dddddd;
+margin-top: -1px; /* Align with the table border */
+border-radius: 0; /* Keep consistent with the table style */
+}
+.highlight {
+background-color: #67dd4c;
+}
+/* Your existing styles */
+.tables-container {
+display: flex;
+justify-content: center;
+align-items: flex-start;
+gap: 20px; /* Adjust the gap between tables as needed */
+}
+.roll-table {
+border-collapse: collapse;
+margin-top: 10px;
+}
+.roll-table th, .roll-table td {
+border: 1px solid #777777;
+text-align: center;
+padding: 8px;
+}
+.roll-table th {
+background-color: #f2f2f2;
+}

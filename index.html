@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spreadsheet Replica</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+
+<body>
+  <div class="tables-container">
+    <!-- Your existing financial table -->
+  
+    <!-- New Roll table based on the image provided -->
+    <table class="roll-table">
+      <tr>
+        <th>Roll</th>
+        <th>1</th>
+        <th>2</th>
+        <th>3</th>
+        <th>4</th>
+        <th>5</th>
+        <th>6</th>
+      </tr>
+      <tr>
+        <td>Hay</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+      </tr>
+      <tr>
+        <td>Grain</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+      </tr>
+      <tr>
+        <td>Fruit</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+      </tr>
+      <tr>
+        <td>Cows</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+        <td>0</td>
+      </tr>
+    </table>
+  </div>
+  <table id="spreadsheet">
+    <tr>
+      <th>Assets</th>
+      <th>Qty</th>
+      <th>Cost</th>
+      <th>Net</th>
+    </tr>
+    <tr>
+      <td>Hay (10)</td>
+      <td contenteditable="true" class="editable qty-hay">1</td>
+      <td>20,000</td>
+      <td class="net">0</td>
+    </tr>
+    <tr>
+      <td>Grain (10)</td>
+      <td contenteditable="true" class="editable qty-grain">1</td>
+      <td>20,000</td>
+      <td class="net">0</td>
+    </tr>
+    <tr>
+      <td>Fruit (5)</td>
+      <td contenteditable="true" class="editable qty-fruit">0</td>
+      <td>25,000</td>
+      <td class="net">0</td>
+    </tr>
+    <tr>
+      <td>Farm (10)</td>
+      <td contenteditable="true" class="editable qty-farm">0</td>
+      <td>5,000</td>
+      <td class="net">0</td>
+    </tr>
+    <tr>
+      <td>Cows (10)</td>
+      <td contenteditable="true" class="editable qty-cows">0</td>
+      <td>10,000</td>
+      <td class="net">0</td>
+    </tr>
+    <tr>
+      <td>Harvester</td>
+      <td contenteditable="true" class="editable qty-harvester">0</td>
+      <td>10,000</td>
+      <td class="net">0</td>
+    </tr>
+    <tr>
+      <td>Tractor</td>
+      <td contenteditable="true" class="editable qty-tractor">0</td>
+      <td>10,000</td>
+      <td class="net">0</td>
+    </tr>
+    <tr class="highlight">
+      <td>Net Cash</td>
+      <td></td>
+      <td></td>
+      <td class="net-cash">0</td>
+    </tr>
+    <tr class="highlight">
+      <td>Total Worth</td>
+      <td></td>
+      <td></td>
+      <td class="total-worth">0</td>
+    </tr>
+    <tr class="highlight">
+      <td>Interest</td>
+      <td></td>
+      <td></td>
+      <td class="interest">0</td>
+    </tr>
+  </table>
+  
+
+<table class="financial-table" id="financialTable">
+  <!-- Headers -->
+  <tr>
+    <th>Cash</th>
+    <td class="small-input">
+      <input type="number" id="cashInput" placeholder="Enter Cash value" />
+    </td>
+    <th>Loan</th>
+    <td class="small-input">
+      <input type="number" id="loanInput" placeholder="Enter Loan value" />
+    </td>
+  </tr>
+
+  <!-- Headers for Transactions and Totals -->
+  <tr>
+    <th>Transaction</th>
+    <th>Cash Total</th>
+    <th>Transaction</th>
+    <th>Loan Total</th>
+  </tr>
+  <tr>
+    
+    <td class="cash-transaction"></td>
+    <td class="cash-total"></td>
+    <!-- other cells -->
+    
+    <td class="loan-transaction"></td>
+    <td class="loan-total"></td>
+    <!-- other cells -->
+</tr>
+
+  <!-- Transaction and Total rows (5 rows) -->
+  <!-- Repeat this structure 5 times -->
+  <!-- <tr>
+    <td class="cash-transaction"></td>
+    <td class="cash-total"></td>
+    <td class="loan-transaction"></td>
+    <td class="loan-total"></td>
+  </tr> -->
+  <!-- <tr>
+    <td class="cash-transaction"></td>
+    <td class="cash-total"></td>
+    <td class="loan-transaction"></td>
+    <td class="loan-total"></td>
+  </tr>
+  <tr>
+    <td class="cash-transaction"></td>
+    <td class="cash-total"></td>
+    <td class="loan-transaction"></td>
+    <td class="loan-total"></td>
+  </tr>
+  <tr>
+    <td class="cash-transaction"></td>
+    <td class="cash-total"></td>
+    <td class="loan-transaction"></td>
+    <td class="loan-total"></td>
+  </tr>
+  <tr>
+    <td class="cash-transaction"></td>
+    <td class="cash-total"></td>
+    <td class="loan-transaction"></td>
+    <td class="loan-total"></td>
+  </tr> -->
+</table>
+
+<script src="scripts.js"></script>
+
+
+</body>
+</html>
