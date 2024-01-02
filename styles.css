@@ -1,3 +1,16 @@
+@media screen and (max-width: 600px) {
+    .tables-container {
+      flex-direction: column;
+      align-items: center;
+    }
+  
+    table {
+      width: 100%; /* Take up full width on smaller screens */
+    }
+  
+    /* Add any additional styles for mobile here */
+  }
+  
 body {
 font-family: Arial, sans-serif;
 background-color: #f8f6f6;
