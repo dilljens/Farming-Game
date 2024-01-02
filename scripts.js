@@ -57,8 +57,8 @@ function handleTransaction(inputId, transactionClass, totalClass) {
 
         shiftAndInsertTransaction(inputId,transactionClass);
         // Calculate the new total
-        updateTotal(transactionClass, totalClass);
-        
+        updateTotals();
+        saveQuantitiesToLocalStorage();
         // Clear the input field after the transaction is added
         inputElement.value = '';
     }
@@ -89,8 +89,7 @@ function shiftAndInsertTransaction(inputId, transactionClass) {
 
         // After shifting values, recalculate the total
         // updateTotal(transactionClass);
-        const totalClass = transactionClass.includes('cash') ? 'cash-total' : 'loan-total';
-        updateTotal(transactionClass, totalClass);
+        updateTotals();
         // Example usage in shiftAndInsertTransaction
         transactionCells[0].textContent = numberWithCommasAndDecimals(newValue);
 
@@ -102,9 +101,7 @@ function makeCellEditable(cell) {
     
     // Event listener for input events to update the total immediately after a change
     cell.addEventListener('input', () => {
-        const transactionClass = cell.classList.contains('cash-transaction') ? 'cash-transaction' : 'loan-transaction';
-        const totalClass = cell.classList.contains('cash-transaction') ? 'cash-total' : 'loan-total';
-        updateTotal(transactionClass, totalClass);
+        updateTotals();
     });
 
     // Event listener for keydown events to handle the Enter key
@@ -112,9 +109,8 @@ function makeCellEditable(cell) {
         if (e.key === 'Enter') {
             e.preventDefault(); // Prevent the default Enter key action
             cell.blur(); // Remove focus from the cell
-            const transactionClass = cell.classList.contains('cash-transaction') ? 'cash-transaction' : 'loan-transaction';
-            const totalClass = cell.classList.contains('cash-transaction') ? 'cash-total' : 'loan-total';
-            updateTotal(transactionClass, totalClass); // Recalculate the total when Enter is pressed
+            updateTotals(); // Recalculate the total when Enter is pressed
+            
         }
     });
 }
@@ -130,20 +126,29 @@ function createTransactionCell(row, className, value = '', isEditable = false) {
     }
 }
 
-function updateTotal(transactionClass, totalClass) {
-    const transactions = document.querySelectorAll(`.${transactionClass}`);
-    let sum = 0;
+function updateTotals() {
+    // Define the classes for both cash and loan transactions and their corresponding totals
+    const transactionTypes = [
+        { transactionClass: 'cash-transaction', totalClass: 'cash-total' },
+        { transactionClass: 'loan-transaction', totalClass: 'loan-total' }
+    ];
 
-    transactions.forEach(cell => {
-        let cellValue = parseFloat(cell.textContent.replace(/,/g, '')) || 0;
-        sum += cellValue;
+    // Iterate over each transaction type and update their totals
+    transactionTypes.forEach(({ transactionClass, totalClass }) => {
+        const transactions = document.querySelectorAll(`.${transactionClass}`);
+        let sum = 0;
+
+        transactions.forEach(cell => {
+            let cellValue = parseFloat(cell.textContent.replace(/,/g, '')) || 0;
+            sum += cellValue;
+        });
+
+        const totalCell = document.querySelector(`.${totalClass}`);
+        if (totalCell) {
+            totalCell.textContent = numberWithCommasAndDecimals(sum);
+        }
     });
 
-    const totalCell = document.querySelector(`.${totalClass}`);
-    if (totalCell) {
-        totalCell.textContent = numberWithCommasAndDecimals(sum);
-    }
-    
     // Update net cash, total worth, and interest after updating totals
     updateNetCash();
     updateTotalWorth();
@@ -305,6 +310,176 @@ function populateRollTable() {
 // Call this function to populate the roll table when the page loads or when quantities update
 populateRollTable();
 
+let data = {
+    qty: {
+        hay: 1,
+        grain: 1,
+        fruit: 0,
+        farm: 0,
+        cows: 0,
+        harvester: 0,
+        tractor: 0
+    },
+    transactions: {
+        cash: [],
+        loan: []
+    }
+};
+
+function saveQuantitiesToLocalStorage() {
+    // Get the current quantities from the page
+    const data = {
+      qty: {
+        Hay: parseInt(document.querySelector('.qty-hay').textContent) || 0,
+        Grain: parseInt(document.querySelector('.qty-grain').textContent) || 0,
+        Fruit: parseInt(document.querySelector('.qty-fruit').textContent) || 0,
+        Farm: parseInt(document.querySelector('.qty-farm').textContent) || 0,
+        Cows: parseInt(document.querySelector('.qty-cows').textContent) || 0,
+        Harvester: parseInt(document.querySelector('.qty-harvester').textContent) || 0,
+        Tractor: parseInt(document.querySelector('.qty-tractor').textContent) || 0
+      },
+      transactions: {
+        cash: getTransactionData('cash-transaction'),
+        loan: getTransactionData('loan-transaction')
+      }
+    };
+    console.log("Data to be saved:", data);
+    // Save the updated data to localStorage
+    localStorage.setItem('farmingGameData', JSON.stringify(data));
+}
+
+  
+function getTransactionData(transactionClass) {
+    const transactionCells = document.querySelectorAll(`.${transactionClass}`);
+    const transactions = Array.from(transactionCells).map(cell => cell.textContent);
+    console.log(`Transactions for ${transactionClass}:`, transactions); // Debugging
+    return transactions;
+}
+ 
+document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
+    cell.addEventListener('blur', saveQuantitiesToLocalStorage);
+});
+
+function loadFromLocalStorage() {
+    const savedData = localStorage.getItem('farmingGameData');
+    if (savedData) {
+        const loadedData = JSON.parse(savedData);
+        // Update the global data object
+        data = loadedData;
+        // Apply quantity data to the page
+        document.querySelector('.qty-hay').textContent = data.qty.Hay.toString();
+        document.querySelector('.qty-grain').textContent = data.qty.Grain.toString();
+        document.querySelector('.qty-fruit').textContent = data.qty.Fruit.toString();
+        // Ensure you have a .qty-farm and .qty-cows class elements in your HTML
+        document.querySelector('.qty-farm').textContent = data.qty.Farm.toString();
+        document.querySelector('.qty-cows').textContent = data.qty.Cows.toString();
+        document.querySelector('.qty-harvester').textContent = data.qty.Harvester.toString();
+        document.querySelector('.qty-tractor').textContent = data.qty.Tractor.toString();
+        
+        // Update the transaction lists
+        // This assumes you have a function to update the transaction list on the page
+        updateTransactionList(loadedData.transactions.cash, 'cash');
+        updateTransactionList(loadedData.transactions.loan, 'loan');
+        populateRollTable();
+        // Debugging: Log out loaded transaction data
+        console.log("Loaded transactions for cash:", loadedData.transactions.cash);
+        console.log("Loaded transactions for loan:", loadedData.transactions.loan);
+    }
+}
+function updateTransactionList(transactions, type) {
+    const table = document.getElementById('financialTable');
+    const transactionRowsSelector = type === 'cash' ? '.cash-transaction-row' : '.loan-transaction-row';
+
+    // Remove previous transaction rows of the specified type
+    document.querySelectorAll(transactionRowsSelector).forEach(row => row.remove());
+
+    // Add new transaction rows
+    transactions.forEach(transaction => {
+        const newRow = table.insertRow();
+        newRow.classList.add(`${type}-transaction-row`);
+
+        if (type === 'cash') {
+            createTransactionCell(newRow, 'cash-transaction', transaction);
+            createTransactionCell(newRow, 'cash-total'); // Total cell, update as needed
+            createTransactionCell(newRow, 'loan-transaction', '', true); // Empty cell for alignment
+            createTransactionCell(newRow, 'loan-total', '', true); // Empty cell for alignment
+        } else { // For 'loan'
+            createTransactionCell(newRow, 'cash-transaction', '', true); // Empty cell for alignment
+            createTransactionCell(newRow, 'cash-total', '', true); // Empty cell for alignment
+            createTransactionCell(newRow, 'loan-transaction', transaction);
+            createTransactionCell(newRow, 'loan-total'); // Total cell, update as needed
+        }
+    });
+}
+
+function createTransactionCell(row, className, value = '', isEditable = false) {
+    const cell = row.insertCell();
+    cell.className = className;
+    cell.textContent = value;
+    if (isEditable) {
+        makeCellEditable(cell);
+    }
+}
+
+// Make sure to call updateTransactionList whenever you load the data from localStorage
+// For example:
+loadFromLocalStorage();
+
+function resetData() {
+    // Define your base state
+    const baseState = {
+        qty: {
+            Hay: 1, Grain: 1, Fruit: 0, Farm: 0, Cows: 0, Harvester: 0, Tractor: 0
+        },
+        transactions: {
+            cash: [],
+            loan: []
+        }
+    };
+
+    // Update the data object
+    data = baseState;
+
+    // Update the UI accordingly
+    // Reset quantity fields to the base state
+    document.querySelector('.qty-hay').textContent = '1';
+    document.querySelector('.qty-grain').textContent = '1';
+    document.querySelector('.qty-fruit').textContent = '0';
+    document.querySelector('.qty-farm').textContent = '0';
+    document.querySelector('.qty-cows').textContent = '0';
+    document.querySelector('.qty-harvester').textContent = '0';
+    document.querySelector('.qty-tractor').textContent = '0';
+
+    // Clear transaction fields
+    document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
+        cell.textContent = '';
+    });
+    // Remove all rows except the first one
+    // clearTransactionsExceptFirst(cashTransactions);
+    // clearTransactionsExceptFirst(loanTransactions);
+    localStorage.setItem('farmingGameData', JSON.stringify(baseState));
+    // Update totals and other calculations
+    updateTotals(); // This function should replace updateNetCash, updateTotalWorth, and updateInterest if it updates all totals as previously defined
+    calculateNet();
+    updateNetCash();
+    updateTotalWorth();
+    updateInterest();
+
+    // Save the reset state to localStorage
+
+    // Repopulate the roll table
+    populateRollTable();
+}
+
+document.getElementById('resetButton').addEventListener('click', resetData); 
+
+document.querySelectorAll('.editable').forEach(cell => {
+    cell.addEventListener('input', saveQuantitiesToLocalStorage);
+});
+
+// Load data when the document is fully loaded
+document.addEventListener('DOMContentLoaded', loadFromLocalStorage);
+
 
 window.addEventListener('DOMContentLoaded', (event) => {
     // Attach event listeners to quantity cells
@@ -340,8 +515,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     transactionCells.forEach(makeCellEditable);
 
     // Initial total calculation
-    updateTotal('cash-transaction', 'cash-total');
-    updateTotal('loan-transaction', 'loan-total');
+    updateTotals();
     // Call this function after the page loads
     document.addEventListener('DOMContentLoaded', (event) => {
     makeEditableCellsExitOnEnter();
