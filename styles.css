@@ -36,9 +36,8 @@ body {
     background-color: #f8f6f6;
 }
 table {
-    border-collapse: collapse;
-    width: 60%; /* Default width */
-    max-width: 100%; /* Prevent tables from growing beyond the screen size */
+    table-layout: auto;
+    width: 100%;
     margin: 20px auto;
 }
 th, td {
@@ -74,17 +73,20 @@ background-color: #67dd4c;
 display: flex;
 justify-content: center;
 align-items: flex-start;
-gap: 20px; /* Adjust the gap between tables as needed */
+gap: 20px; 
 }
 .roll-table {
 border-collapse: collapse;
-margin-top: 10px;
+/* margin-top: 10px; */
+/* margin: 20px auto; */
 }
 .roll-table th, .roll-table td {
 border: 1px solid #777777;
 text-align: center;
 padding: 8px;
+/* margin: 20px auto; */
 }
 .roll-table th {
 background-color: #f2f2f2;
+
 }
