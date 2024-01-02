@@ -1,5 +1,5 @@
 function calculateNet() {
-    console.log('Calculating net values...');
+    //console.log('Calculating net values...');
     const rows = document.querySelectorAll('#spreadsheet tr');
 
     rows.forEach((row, index) => {
@@ -224,48 +224,40 @@ function makeEditableCellsExitOnEnter() {
 
 // This function should be called during initial setup and whenever new editable cells are added
 makeEditableCellsExitOnEnter();
-console.log('log working')
+//console.log('log working')
 function numberWithCommasAndDecimals(x) {
-    console.log('numberWithCommasAndDecimals called with:', x);
+    //console.log('numberWithCommasAndDecimals called with:', x);
 
     // Parse the input as a float and ensure two decimal places
     const numericValue = parseFloat(x);
     if (isNaN(numericValue)) {
-        console.error('Input is not a valid number:', x);
+        //console.error('Input is not a valid number:', x);
         return '0.00';
     }
 
     // Convert the number to a string with two decimal places
     let parts = numericValue.toFixed(2).split(".");
-    console.log('Split parts:', parts);
+    //console.log('Split parts:', parts);
 
     // Add commas to the integer part
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    console.log('Integer part with commas:', parts[0]);
+    //console.log('Integer part with commas:', parts[0]);
 
     // If the decimal part is only one digit, append a zero
     if (parts[1].length < 2) {
         parts[1] = parts[1] + '0';
     }
-    console.log('Decimal part after check:', parts[1]);
+    //console.log('Decimal part after check:', parts[1]);
 
     // Combine the integer part with the decimal part
     const formattedNumber = parts[0] + "." + parts[1];
-    console.log('Formatted number:', formattedNumber);
+    //console.log('Formatted number:', formattedNumber);
 
     return formattedNumber;
 }
 
 // Example usage:
-console.log(numberWithCommasAndDecimals('1107.1')); // Should log '1,105.10'
-
-
-
-// Example usage:
-console.log(numberWithCommasAndDecimals('1105.1'));
-numberWithCommasAndDecimals('111.4');
-
-
+//console.log(numberWithCommasAndDecimals('1107.1')); // Should log '1,105.10'
 
 function populateRollTable() {
     // Define the base monetary values for each roll and item type
@@ -326,12 +318,12 @@ window.addEventListener('DOMContentLoaded', (event) => {
     });
 
     calculateNet(); // Initial calculation on page load
-    console.log(document.getElementById('cashInput'));
+    //console.log(document.getElementById('cashInput'));
     makeEditableCellsExitOnEnter();
     const cashInput = document.getElementById('cashInput');
     cashInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-            console.log('Enter pressed on cashInput');
+            //console.log('Enter pressed on cashInput');
             handleTransaction('cashInput', 'cash-transaction', 'cash-total');
             cashInput.blur();
             e.preventDefault();
