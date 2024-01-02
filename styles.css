@@ -1,84 +1,95 @@
 body {
+    font-family: Arial, sans-serif;
+    background-color: #f8f6f6;
     font-size: 2vw;
 }
 
-@media screen and (max-width: 600px) {
-    th, td {
-      padding: 5px; /* Reduce padding for smaller screens */
-      /* other styles */
-    }
-  
-    /* Any other adjustments needed for smaller screens */
-    /* Example: smaller font size, less margin, etc. */
-    body {
-      font-size: 10px; /* smaller font size for mobile */
-    }
-  
-    .input-cell input, .small-input input {
-      padding: 1px; /* smaller padding for input fields */
-    }
-  }
-
-/* Rest of your CSS */
-
-  
-body {
-    font-family: Arial, sans-serif;
-    background-color: #f8f6f6;
-}
 table {
-    table-layout: auto;
     width: 100%;
     margin: 20px auto;
     border-collapse: collapse;
 }
-th, td {
-border: 1px solid #777777;
-text-align: left;
-padding: 8px;
-}
-th {
-background-color: #f2f2f2;
-}
-td.editable {
-background-color: #fff;
-}
-input[type="number"] {
-width: 100%;
-padding: 8px;
-border: none;
-box-sizing: border-box;
-}
-.input-cell {
-padding: 0; /* Remove padding for input cells */
-}
-.input-cell input {
-border: 0px solid #dddddd;
-margin-top: -1px; /* Align with the table border */
-border-radius: 0; /* Keep consistent with the table style */
-}
-.highlight {
-background-color: #67dd4c;
-}
-/* Your existing styles */
-.tables-container {
-display: flex;
-justify-content: center;
-align-items: flex-start;
-gap: 20px; 
-}
-.roll-table {
-border-collapse: collapse;
-margin-top: 10px;
-/* margin: 20px auto; */
-}
-.roll-table th, .roll-table td {
-border: 1px solid #777777;
-text-align: center;
-padding: 8px;
-/* margin: 20px auto; */
-}
-.roll-table th {
-background-color: #f2f2f2;
 
+th, td {
+    border: 1px solid #777777;
+    text-align: left;
+    padding: 8px;
+}
+
+th {
+    background-color: #f2f2f2;
+}
+
+td.editable {
+    background-color: #fff;
+}
+
+input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    border: none;
+    box-sizing: border-box;
+}
+
+.input-cell {
+    padding: 0;
+}
+
+.input-cell input {
+    border: 0px solid #dddddd;
+    margin-top: -1px;
+    border-radius: 0;
+}
+
+.highlight {
+    background-color: #67dd4c;
+}
+
+.tables-container {
+    display: flex;
+    flex-wrap: wrap; /* Allow tables to wrap on smaller screens */
+    justify-content: center;
+    gap: 20px;
+}
+
+.roll-table th, .roll-table td {
+    border: 1px solid #777777;
+    text-align: center;
+    padding: 8px;
+}
+
+.roll-table th {
+    background-color: #f2f2f2;
+}
+
+@media screen and (max-width: 600px) {
+    body {
+        font-size: 2vw; /* Adjust font size for smaller screens */
+    }
+
+    th, td {
+        padding: 2px; /* Reduce padding for smaller screens */
+    }
+    .roll-table th, .roll-table td {
+        border: 1px solid #777777;
+        text-align: center;
+        padding: 2px;
+    }
+    
+    .roll-table th {
+        background-color: #f2f2f2;
+    }
+    .tables-container {
+        gap: 0px; /* Reduce space between tables */
+    }
+
+    .input-cell input, .small-input input {
+        padding: 1px; /* Reduce padding for input fields */
+    }
+    
+    /* Additional styles for mobile */
+    .roll-table, .financial-table {
+        margin-top: 0; /* Remove additional margin on mobile */
+        margin-bottom: 5px; /* Add some space below the tables */
+    }
 }
