@@ -1,19 +1,24 @@
 body {
     font-family: Arial, sans-serif;
     background-color: #f8f6f6;
-    font-size: 2vw;
+    font-size: 14;
 }
 
 table {
-    width: 100%;
+    width: 600px;
     margin: 10px auto;
     border-collapse: collapse;
 }
 
 th, td {
     border: 1px solid #777777;
-    text-align: left;
-    padding: 8px;
+    text-align: center;
+    padding: 2px;
+    white-space: nowrap; /* Prevents text from wrapping and keeps the cell width to the minimum required */
+    overflow: hidden; /* Ensures content doesn't overflow the cell */
+    text-overflow: ellipsis; /* Adds an ellipsis if the text overflows */
+    min-width: 2px; /* Sets a minimum width for the cells, adjust as needed */
+    max-width: 0px; /* Sets a maximum width for the cells to ensure they don't grow too large */
 }
 
 th {
@@ -26,7 +31,7 @@ td.editable {
 
 input[type="number"] {
     width: 100%;
-    padding: 8px;
+    padding: 6px;
     border: none;
     box-sizing: border-box;
 }
@@ -42,21 +47,21 @@ input[type="number"] {
 }
 
 .highlight {
-    background-color: #67dd4c;
+    background-color: #5fd7a9;
 }
 
 .tables-container {
     display: flex;
     flex-wrap: wrap; /* Allow tables to wrap on smaller screens */
     justify-content: center;
-    gap: 10px;
+    gap: 2px;
 }
 
-.roll-table th, .roll-table td {
+/* .roll-table th, .roll-table td {
     border: 1px solid #777777;
     text-align: center;
-    padding: 8px;
-}
+    padding: 4px;
+} */
 
 .roll-table th {
     background-color: #f2f2f2;
@@ -66,7 +71,9 @@ input[type="number"] {
     body {
         font-size: 2vw; /* Adjust font size for smaller screens */
     }
-
+    table {
+        width: 95%;
+    }
     th, td {
         padding: 2px; /* Reduce padding for smaller screens */
     }
