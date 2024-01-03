@@ -439,60 +439,77 @@ function createTransactionCell(row, className, value = '', isEditable = false) {
 // For example:
 loadFromLocalStorage();
 
-function resetData() {
-    const userConfirmed = confirm("Do you want to reset the game?");
-    console.log("confirm screen");
-    if (userConfirmed) {
-        // User clicked "OK", proceed with the reset logic
-        // ... your existing reset logic goes here ...
-        // Define your base state
-        const baseState = {
-            qty: {
-                Hay: 1, Grain: 1, Fruit: 0, Farm: 0, Cows: 0, Harvester: 0, Tractor: 0
-            },
-            transactions: {
-                cash: [],
-                loan: []
-            }
-        };
-
-        // Update the data object
-        data = baseState;
-
-        // Update the UI accordingly
-        // Reset quantity fields to the base state
-        document.querySelector('.qty-hay').textContent = '1';
-        document.querySelector('.qty-grain').textContent = '1';
-        document.querySelector('.qty-fruit').textContent = '0';
-        document.querySelector('.qty-farm').textContent = '0';
-        document.querySelector('.qty-cows').textContent = '0';
-        document.querySelector('.qty-harvester').textContent = '0';
-        document.querySelector('.qty-tractor').textContent = '0';
-
-        // Clear transaction fields
-        document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
-            cell.textContent = '';
-        });
-        // Remove all rows except the first one
-        clearTransactionsExceptFirst('cash-transaction');
-        clearTransactionsExceptFirst('loan-transaction');
-        localStorage.setItem('farmingGameData', JSON.stringify(baseState));
-        // Update totals and other calculations
-        updateTotals(); // This function should replace updateNetCash, updateTotalWorth, and updateInterest if it updates all totals as previously defined
-        calculateNet();
-        updateNetCash();
-        updateTotalWorth();
-        updateInterest();
-
-        // Save the reset state to localStorage
-
-        // Repopulate the roll table
-        populateRollTable();
-    } else {
-        // User clicked "Cancel", do not reset
-        console.log("Reset cancelled by the user.");
-    }
+// Function to show the modal
+function showModal() {
+    document.getElementById('resetModal').classList.remove('hidden');
 }
+
+// Function to hide the modal
+function hideModal() {
+    document.getElementById('resetModal').classList.add('hidden');
+}
+
+// Event listener for the reset button
+document.getElementById('resetButton').addEventListener('click', showModal);
+
+// Event listener for the confirm reset button in the modal
+document.getElementById('confirmReset').addEventListener('click', function() {
+    performReset();
+    hideModal();
+});
+
+// Event listener for the cancel button in the modal
+document.getElementById('cancelReset').addEventListener('click', hideModal);
+
+function performReset() {
+    hideModal();
+    
+    // Define your base state
+    const baseState = {
+        qty: {
+            Hay: 1, Grain: 1, Fruit: 0, Farm: 0, Cows: 0, Harvester: 0, Tractor: 0
+        },
+        transactions: {
+            cash: [],
+            loan: []
+        }
+    };
+
+    // Update the data object
+    data = baseState;
+
+    // Reset quantity fields to the base state
+    document.querySelector('.qty-hay').textContent = '1';
+    document.querySelector('.qty-grain').textContent = '1';
+    document.querySelector('.qty-fruit').textContent = '0';
+    document.querySelector('.qty-farm').textContent = '0';
+    document.querySelector('.qty-cows').textContent = '0';
+    document.querySelector('.qty-harvester').textContent = '0';
+    document.querySelector('.qty-tractor').textContent = '0';
+
+    // Clear transaction fields
+    document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
+        cell.textContent = '';
+    });
+
+    // Remove all rows except the first one for transactions
+    clearTransactionsExceptFirst('cash-transaction');
+    clearTransactionsExceptFirst('loan-transaction');
+
+    // Save the reset state to localStorage
+    localStorage.setItem('farmingGameData', JSON.stringify(baseState));
+
+    // Update totals and other calculations
+    updateTotals(); // Updates all totals
+    calculateNet();
+    updateNetCash();
+    updateTotalWorth();
+    updateInterest();
+
+    // Repopulate the roll table
+    populateRollTable();
+}
+
 
 function clearTransactionsExceptFirst(transactionClass) {
     const table = document.getElementById('financialTable'); // Use the correct ID for your table
@@ -514,7 +531,7 @@ function clearTransactionsExceptFirst(transactionClass) {
     });
 }
 
-document.getElementById('resetButton').addEventListener('click', resetData); 
+// document.getElementById('resetButton').addEventListener('click', resetData); 
 
 document.querySelectorAll('.editable').forEach(cell => {
     cell.addEventListener('input', saveQuantitiesToLocalStorage);
