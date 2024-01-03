@@ -378,39 +378,53 @@ function loadFromLocalStorage() {
         
         // Update the transaction lists
         // This assumes you have a function to update the transaction list on the page
-        updateTransactionList(loadedData.transactions.cash, 'cash');
-        updateTransactionList(loadedData.transactions.loan, 'loan');
+        clearTransactionsExceptFirst('cash-transaction');
+        clearTransactionsExceptFirst('loan-transaction');
+        updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
         populateRollTable();
         // Debugging: Log out loaded transaction data
         console.log("Loaded transactions for cash:", loadedData.transactions.cash);
         console.log("Loaded transactions for loan:", loadedData.transactions.loan);
     }
 }
-function updateTransactionList(transactions, type) {
-    const table = document.getElementById('financialTable');
-    const transactionRowsSelector = type === 'cash' ? '.cash-transaction-row' : '.loan-transaction-row';
 
-    // Remove previous transaction rows of the specified type
-    document.querySelectorAll(transactionRowsSelector).forEach(row => row.remove());
+function updateTransactionLists(transactionsData) {
+    const table = document.getElementById('financialTable'); // Ensure this is the correct ID of your table
 
-    // Add new transaction rows
-    transactions.forEach(transaction => {
-        const newRow = table.insertRow();
-        newRow.classList.add(`${type}-transaction-row`);
+    // Clear existing transactions except the first row which is for input
+    clearTransactionsExceptFirst('cash-transaction');
+    clearTransactionsExceptFirst('loan-transaction');
 
-        if (type === 'cash') {
-            createTransactionCell(newRow, 'cash-transaction', transaction);
-            createTransactionCell(newRow, 'cash-total'); // Total cell, update as needed
-            createTransactionCell(newRow, 'loan-transaction', '', true); // Empty cell for alignment
-            createTransactionCell(newRow, 'loan-total', '', true); // Empty cell for alignment
-        } else { // For 'loan'
-            createTransactionCell(newRow, 'cash-transaction', '', true); // Empty cell for alignment
-            createTransactionCell(newRow, 'cash-total', '', true); // Empty cell for alignment
-            createTransactionCell(newRow, 'loan-transaction', transaction);
-            createTransactionCell(newRow, 'loan-total'); // Total cell, update as needed
-        }
-    });
+    // Define a function to update a single transaction list
+    const updateSingleTransactionList = (transactions, transactionClass) => {
+        transactions.forEach((transactionValue, index) => {
+            let row = table.rows[index + 2]; // +2 to account for header row and input row
+            if (!row) {
+                row = table.insertRow();
+                createTransactionCell(row, 'cash-transaction', '', true);
+                createTransactionCell(row, 'cash-total');
+                createTransactionCell(row, 'loan-transaction', '', true);
+                createTransactionCell(row, 'loan-total', '', true);
+            }
+
+            // Update the cell value for the transaction
+            const transactionCell = row.querySelector(`.${transactionClass}`);
+            if (transactionCell) {
+                // Apply formatting only if the value is not an empty string
+                const cellContent = transactionValue === '' ? '' : numberWithCommasAndDecimals(transactionValue);
+                transactionCell.textContent = cellContent;
+            }
+        });
+    };
+
+    // Update both cash and loan transactions
+    updateSingleTransactionList(transactionsData.cash, 'cash-transaction');
+    updateSingleTransactionList(transactionsData.loan, 'loan-transaction');
 }
+
+// Ensure createTransactionCell function is defined to handle the creation of cells correctly
+
+
 
 function createTransactionCell(row, className, value = '', isEditable = false) {
     const cell = row.insertCell();
@@ -426,49 +440,78 @@ function createTransactionCell(row, className, value = '', isEditable = false) {
 loadFromLocalStorage();
 
 function resetData() {
-    // Define your base state
-    const baseState = {
-        qty: {
-            Hay: 1, Grain: 1, Fruit: 0, Farm: 0, Cows: 0, Harvester: 0, Tractor: 0
-        },
-        transactions: {
-            cash: [],
-            loan: []
+    const userConfirmed = confirm("Do you want to reset the game?");
+    console.log("confirm screen");
+    if (userConfirmed) {
+        // User clicked "OK", proceed with the reset logic
+        // ... your existing reset logic goes here ...
+        // Define your base state
+        const baseState = {
+            qty: {
+                Hay: 1, Grain: 1, Fruit: 0, Farm: 0, Cows: 0, Harvester: 0, Tractor: 0
+            },
+            transactions: {
+                cash: [],
+                loan: []
+            }
+        };
+
+        // Update the data object
+        data = baseState;
+
+        // Update the UI accordingly
+        // Reset quantity fields to the base state
+        document.querySelector('.qty-hay').textContent = '1';
+        document.querySelector('.qty-grain').textContent = '1';
+        document.querySelector('.qty-fruit').textContent = '0';
+        document.querySelector('.qty-farm').textContent = '0';
+        document.querySelector('.qty-cows').textContent = '0';
+        document.querySelector('.qty-harvester').textContent = '0';
+        document.querySelector('.qty-tractor').textContent = '0';
+
+        // Clear transaction fields
+        document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
+            cell.textContent = '';
+        });
+        // Remove all rows except the first one
+        clearTransactionsExceptFirst('cash-transaction');
+        clearTransactionsExceptFirst('loan-transaction');
+        localStorage.setItem('farmingGameData', JSON.stringify(baseState));
+        // Update totals and other calculations
+        updateTotals(); // This function should replace updateNetCash, updateTotalWorth, and updateInterest if it updates all totals as previously defined
+        calculateNet();
+        updateNetCash();
+        updateTotalWorth();
+        updateInterest();
+
+        // Save the reset state to localStorage
+
+        // Repopulate the roll table
+        populateRollTable();
+    } else {
+        // User clicked "Cancel", do not reset
+        console.log("Reset cancelled by the user.");
+    }
+}
+
+function clearTransactionsExceptFirst(transactionClass) {
+    const table = document.getElementById('financialTable'); // Use the correct ID for your table
+    const rows = table.querySelectorAll(`tr:has(.${transactionClass})`);
+    
+    // Remove all rows except the first one with transaction class
+    rows.forEach((row, index) => {
+        if (index > 0) {
+            row.remove();
+        } else {
+            // Clear the content of the first row's cells
+            const cells = row.querySelectorAll(`.${transactionClass}`);
+            cells.forEach(cell => {
+                cell.textContent = '';
+                // Ensure that the first cell is editable if necessary
+                cell.contentEditable = 'true';
+            });
         }
-    };
-
-    // Update the data object
-    data = baseState;
-
-    // Update the UI accordingly
-    // Reset quantity fields to the base state
-    document.querySelector('.qty-hay').textContent = '1';
-    document.querySelector('.qty-grain').textContent = '1';
-    document.querySelector('.qty-fruit').textContent = '0';
-    document.querySelector('.qty-farm').textContent = '0';
-    document.querySelector('.qty-cows').textContent = '0';
-    document.querySelector('.qty-harvester').textContent = '0';
-    document.querySelector('.qty-tractor').textContent = '0';
-
-    // Clear transaction fields
-    document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
-        cell.textContent = '';
     });
-    // Remove all rows except the first one
-    // clearTransactionsExceptFirst(cashTransactions);
-    // clearTransactionsExceptFirst(loanTransactions);
-    localStorage.setItem('farmingGameData', JSON.stringify(baseState));
-    // Update totals and other calculations
-    updateTotals(); // This function should replace updateNetCash, updateTotalWorth, and updateInterest if it updates all totals as previously defined
-    calculateNet();
-    updateNetCash();
-    updateTotalWorth();
-    updateInterest();
-
-    // Save the reset state to localStorage
-
-    // Repopulate the roll table
-    populateRollTable();
 }
 
 document.getElementById('resetButton').addEventListener('click', resetData); 
