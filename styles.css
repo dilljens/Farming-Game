@@ -86,9 +86,7 @@ input[type="number"] {
     .roll-table th {
         background-color: #f2f2f2;
     }
-    .tables-container {
-        gap: 0px; /* Reduce space between tables */
-    }
+
 
     .input-cell input, .small-input input {
         padding: 1px; /* Reduce padding for input fields */
@@ -96,7 +94,7 @@ input[type="number"] {
     
     /* Additional styles for mobile */
     .roll-table, .financial-table {
-        margin-top: 0; /* Remove additional margin on mobile */
+        margin-top: 10px; /* Remove additional margin on mobile */
         margin-bottom: 5px; /* Add some space below the tables */
     }
 }
