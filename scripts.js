@@ -540,6 +540,49 @@ document.querySelectorAll('.editable').forEach(cell => {
 // Load data when the document is fully loaded
 document.addEventListener('DOMContentLoaded', loadFromLocalStorage);
 
+// scripts.js
+// Fetch leaderboard data from the backend
+// function fetchLeaderboardData() {
+//     fetch('https://your-backend.fly.dev/api/leaderboard')
+//         .then(response => response.json())
+//         .then(data => {
+//             updateLeaderboardUI(data);
+//         })
+//         .catch(error => console.error('Error fetching data:', error));
+// }
+
+// function updateLeaderboardUI(data) {
+//     // Update your page's DOM with the leaderboard data
+// }
+
+// Call this function to load the leaderboard when the page loads or at set intervals
+fetchLeaderboardData();
+
+// Add this function to load leaderboard data
+function loadLeaderboard() {
+    // Example leaderboard data
+    var leaderboardData = [
+        { username: "Player1", networth: 100000 },
+        { username: "Player2", networth: 90000 },
+        // Add more data here
+    ];
+
+    var tbody = document.getElementById('leaderboard').getElementsByTagName('tbody')[0];
+    leaderboardData.forEach(function(item) {
+        var row = tbody.insertRow();
+        var usernameCell = row.insertCell(0);
+        var networthCell = row.insertCell(1);
+        usernameCell.innerHTML = item.username;
+        networthCell.innerHTML = `$${item.networth.toLocaleString()}`;
+    });
+}
+
+// Call this function when the page loads
+window.onload = function() {
+    loadLeaderboard();
+    // Call other functions that need to run on page load
+};
+
 
 window.addEventListener('DOMContentLoaded', (event) => {
     // Attach event listeners to quantity cells
