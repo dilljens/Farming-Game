@@ -13,6 +13,13 @@
   
   <body>
         <!-- Leaderboard Section -->
+        <table>
+          <tr>
+            <td contenteditable="true" class="editable username" id="editableUsername">Enter name</td>
+          </tr>
+        </table>
+
+        
     <div class="px-4 sm:px-6 lg:px-8 mt-8">
       <div class="flow-root">
         <div class="inline-block min-w-full align-middle">
@@ -21,7 +28,7 @@
             <thead class="bg-gray-50">
               <tr>
                 <th scope="col" class="py-3.5 pl-4 pr-1 text-center text-sm font-semibold text-gray-900">Username</th>
-                <th scope="col" class="py-3.5 px-2 text-center text-sm font-semibold text-gray-900">Networth</th>
+                <th scope="col" class="py-3.5 px-2 text-center text-sm font-semibold text-gray-900">Net Worth</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -85,84 +92,6 @@
     </table>
   </div>
 
-<!--   
-  <div class="px-4 sm:px-6 lg:px-8">
-    <div class="mt-8 flow-root">
-      <div class="inline-block min-w-full align-middle">
-        <table class="min-w-full divide-y divide-gray-200" id="spreadsheet">
-          <thead class="bg-gray-50">
-            <tr>
-              <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900">Assets</th>
-              <th scope="col" class="py-3.5 px-2 text-left text-sm font-semibold text-gray-900">Qty</th>
-              <th scope="col" class="py-3.5 px-2 text-left text-sm font-semibold text-gray-900">Cost</th>
-              <th scope="col" class="py-3.5 px-2 text-left text-sm font-semibold text-gray-900">Net</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <tr>
-              <td class="py-2 pl-4 pr-3 text-sm text-gray-900">Hay (10)</td>
-              <td class="py-2 px-2 text-sm text-gray-900" contenteditable="true">1</td>
-              <td class="py-2 px-2 text-sm text-gray-900">20,000</td>
-              <td class="py-2 px-2 text-sm text-gray-900">0</td>
-            </tr>
-            <tr>
-              <td class="py-2 pl-4 pr-3 text-sm text-gray-900">Grain (10)</td>
-              <td class="py-2 px-2 text-sm text-gray-900" contenteditable="true">1</td>
-              <td class="py-2 px-2 text-sm text-gray-900">20,000</td>
-              <td class="py-2 px-2 text-sm text-gray-900">0</td>
-            </tr>
-            <tr>
-              <td class="py-2 pl-4 pr-3 text-sm text-gray-900">Fruit (5)</td>
-              <td class="py-2 px-2 text-sm text-gray-900" contenteditable="true">0</td>
-              <td class="py-2 px-2 text-sm text-gray-900">25,000</td>
-              <td class="py-2 px-2 text-sm text-gray-900">0</td>
-            </tr>
-            <tr>
-              <td class="py-2 pl-4 pr-3 text-sm text-gray-900">Farm (10)</td>
-              <td class="py-2 px-2 text-sm text-gray-900" contenteditable="true">0</td>
-              <td class="py-2 px-2 text-sm text-gray-900">5,000</td>
-              <td class="py-2 px-2 text-sm text-gray-900">0</td>
-            </tr>
-            <tr>
-              <td class="py-2 pl-4 pr-3 text-sm text-gray-900">Cows (10)</td>
-              <td class="py-2 px-2 text-sm text-gray-900" contenteditable="true">0</td>
-              <td class="py-2 px-2 text-sm text-gray-900">10,000</td>
-              <td class="py-2 px-2 text-sm text-gray-900">0</td>
-            </tr>
-            <tr>
-              <td class="py-2 pl-4 pr-3 text-sm text-gray-900">Harvester</td>
-              <td class="py-2 px-2 text-sm text-gray-900" contenteditable="true">0</td>
-              <td class="py-2 px-2 text-sm text-gray-900">10,000</td>
-              <td class="py-2 px-2 text-sm text-gray-900">0</td>
-            </tr>
-            <tr>
-              <td class="py-2 pl-4 pr-3 text-sm text-gray-900">Tractor</td>
-              <td class="py-2 px-2 text-sm text-gray-900" contenteditable="true">0</td>
-              <td class="py-2 px-2 text-sm text-gray-900">10,000</td>
-              <td class="py-2 px-2 text-sm text-gray-900">0</td>
-            </tr>
-            Highlighted total rows
-             <tr class="bg-green-300">
-              <td class="py-2 pl-4 pr-3 text-sm text-gray-900">Net Cash</td>
-              <td colspan="2"></td>
-              <td class="py-2 px-2 text-sm text-gray-900">0</td>
-            </tr>
-            <tr class="bg-green-300">
-              <td class="py-2 pl-4 pr-3 text-sm text-gray-900">Total Worth</td>
-              <td colspan="2"></td>
-              <td class="py-2 px-2 text-sm text-gray-900">80,000.00</td>
-            </tr>
-            <tr class="bg-green-300">
-              <td class="py-2 pl-4 pr-3 text-sm text-gray-900">Interest</td>
-              <td colspan="2"></td>
-              <td class="py-2 px-2 text-sm text-gray-900">0</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div> -->
-
   <table id="spreadsheet">
     <tr>
       <th>Assets</th>
@@ -219,7 +148,7 @@
       <td class="net-cash">0</td>
     </tr>
     <tr class="highlight">
-      <td>Total Worth</td>
+      <td>Net Worth</td>
       <td></td>
       <td></td>
       <td class="total-worth">0</td>

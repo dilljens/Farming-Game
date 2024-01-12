@@ -68,6 +68,10 @@ input[type="number"] {
 .roll-table th {
     background-color: #cccccc;
 }
+.editable {
+    cursor: text;
+    /* Additional styles here */
+  }
 
 @media screen and (max-width: 600px) {
     body {

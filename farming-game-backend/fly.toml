@@ -1,12 +1,13 @@
-# fly.toml app configuration file generated for farming-game-backend on 2024-01-04T11:24:41-07:00
+# fly.toml app configuration file generated for farming-game-backend-withered-meadow-3014 on 2024-01-06T16:50:51-07:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = "farming-game-backend"
+app = "farming-game-backend-withered-meadow-3014"
 primary_region = "ord"
 
 [build]
+image = "dilljens/farming-game-backend:latest"
 
 [env]
   PORT = "8080"
