@@ -18,10 +18,8 @@ function calculateNet() {
         }
     });
 
-    updateTotalWorth(); // Update the total worth after net values are calculated
+    updateTotalWorth(false); // Update the total worth after net values are calculated
 }
-
-
 
 function handleTransaction(inputId, transactionClass, totalClass) {
     const inputElement = document.getElementById(inputId);
@@ -151,7 +149,7 @@ function updateTotals() {
 
     // Update net cash, total worth, and interest after updating totals
     updateNetCash();
-    updateTotalWorth();
+    updateTotalWorth(true);
     updateInterest();
 }
 
@@ -189,7 +187,7 @@ function updateInterest() {
     }
 }
 
-function updateTotalWorth() {
+function updateTotalWorth(sendData) {
     // Select all the net value cells
     const netValueCells = document.querySelectorAll('.net');
     let totalWorth = 0;
@@ -211,35 +209,108 @@ function updateTotalWorth() {
     // if (totalWorthCell) totalWorthCell.textContent = totalWorth.toFixed(2); // Format to 2 decimal places
     if (totalWorthCell) totalWorthCell.textContent = numberWithCommasAndDecimals(totalWorth);
     // Send the username and total worth to the server
-    sendDataToServer(totalWorth);
+    if (sendData) sendDataToServer(totalWorth);
 }
 
 function sendDataToServer(totalWorth) {
+    
     const usernameCell = document.getElementById('editableUsername');
     const username = usernameCell.innerText.trim();
-
+    
+    // console.log('Sending data to server:', { username: username, networth: totalWorth });
     // Check if username is valid
     if (username === '' || username === 'Enter name') {
         console.log('Invalid username, not sending data');
         return;
     }
-
-    // Send data to the server
-    fetch('/api/addUser', {
+    fetch('http://localhost:3000/api/addUser', { //for local server
+    // fetch('/api/addUser', {
+        
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ username: username, networth: totalWorth }),
-    })
-    .then(response => response.json())
-    .then(data => console.log('Success:', data))
-    .catch(error => console.error('Error:', error));
+      })
+      .then(response => {
+        console.log('Server response:', response);
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => console.log('Success:', data))
+      .catch(error => console.error('Error:', error));
+      
+}
+
+// This function is called with the event object when the blur event triggers
+function handleBlur(event) {
+    // Extract the value from the event's target (the cell with the username)
+    updateTotalWorth(true);
 }
 
 // Attach event listener for blur event
-document.getElementById('editableUsername').addEventListener('blur', sendDataToServer);
+// document.getElementById('editableUsername').addEventListener('blur', handleBlur);
+// Function to fetch leaderboard data from the server
+// Function to fetch leaderboard data from the server
+function fetchLeaderboardData() {
+    fetch('http://localhost:3000/api/leaderboard')
+    // fetch('/api/leaderboard') // Change this to your actual endpoint if different
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        updateLeaderboardTable(data);
+      })
+      .catch(error => {
+        console.error('Failed to fetch leaderboard data:', error);
+      });
+  }
+  
+  // Function to update the leaderboard table with fetched data
+  function updateLeaderboardTable(data) {
+    const leaderboardTable = document.getElementById('leaderboard');
+    const tbody = leaderboardTable.querySelector('tbody');
+  
+    // Clear existing rows in the table body
+    tbody.innerHTML = '';
+  
+    // Create a new row for each entry in the fetched data
+    data.forEach(entry => {
+      const row = document.createElement('tr');
+  
+      const usernameCell = document.createElement('td');
+      usernameCell.textContent = entry.username;
+      usernameCell.className = 'text-center';
+  
+      const networthCell = document.createElement('td');
+      networthCell.textContent = parseFloat(entry.networth).toLocaleString('en-US'); // Format the number with commas
+      networthCell.className = 'text-center';
+  
+      // Append cells to the row
+      row.appendChild(usernameCell);
+      row.appendChild(networthCell);
+  
+      // Append the row to the table body
+      tbody.appendChild(row);
+    });
+  }
+  
+function startPolling(interval) {
+    setInterval(fetchLeaderboardData, interval);
+}
 
+// Start polling every 30 seconds
+startPolling(100);
+
+  // Call fetchLeaderboardData on page load or when you need to refresh the data
+//   document.addEventListener('DOMContentLoaded', fetchLeaderboardData);
+    // The rest of your script code...
+  
 
 function makeEditableCellsExitOnEnter() {
     const editableCells = document.querySelectorAll('td.editable');
@@ -250,7 +321,7 @@ function makeEditableCellsExitOnEnter() {
                 e.preventDefault(); // Prevent default action (newline or navigation)
                 cell.blur(); // Unfocus the cell, exiting edit mode
                 calculateNet(); // Recalculate net values if needed
-                updateTotalWorth(); // Recalculate total worth if needed
+                updateTotalWorth(true); // Recalculate total worth if needed
             }
         });
     });
@@ -352,7 +423,8 @@ let data = {
     transactions: {
         cash: [],
         loan: []
-    }
+    },
+    username: ''
 };
 
 function saveQuantitiesToLocalStorage() {
@@ -372,7 +444,10 @@ function saveQuantitiesToLocalStorage() {
         loan: getTransactionData('loan-transaction')
       }
     };
-    console.log("Data to be saved:", data);
+    const usernameCell = document.getElementById('editableUsername');
+    data.username = usernameCell.innerText.trim() === 'Enter name' ? '' : usernameCell.innerText.trim();
+
+    // console.log("Data to be saved:", data);
     // Save the updated data to localStorage
     localStorage.setItem('farmingGameData', JSON.stringify(data));
 }
@@ -381,7 +456,7 @@ function saveQuantitiesToLocalStorage() {
 function getTransactionData(transactionClass) {
     const transactionCells = document.querySelectorAll(`.${transactionClass}`);
     const transactions = Array.from(transactionCells).map(cell => cell.textContent);
-    console.log(`Transactions for ${transactionClass}:`, transactions); // Debugging
+    // console.log(`Transactions for ${transactionClass}:`, transactions); // Debugging
     return transactions;
 }
  
@@ -411,9 +486,11 @@ function loadFromLocalStorage() {
         clearTransactionsExceptFirst('loan-transaction');
         updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
         populateRollTable();
+        const usernameCell = document.getElementById('editableUsername');
+        usernameCell.innerText = loadedData.username || 'Enter name';
         // Debugging: Log out loaded transaction data
-        console.log("Loaded transactions for cash:", loadedData.transactions.cash);
-        console.log("Loaded transactions for loan:", loadedData.transactions.loan);
+        // console.log("Loaded transactions for cash:", loadedData.transactions.cash);
+        // console.log("Loaded transactions for loan:", loadedData.transactions.loan);
     }
 }
 
@@ -490,7 +567,7 @@ document.getElementById('confirmReset').addEventListener('click', function() {
 // Event listener for the cancel button in the modal
 document.getElementById('cancelReset').addEventListener('click', hideModal);
 
-function performReset() {
+async function performReset() {
     hideModal();
     
     // Define your base state
@@ -525,16 +602,28 @@ function performReset() {
     clearTransactionsExceptFirst('cash-transaction');
     clearTransactionsExceptFirst('loan-transaction');
 
+    try {
+        // const response = await fetch('/api/resetLeaderboard', { method: 'POST' });
+        fetch('http://localhost:3000/api/resetLeaderboard', { method: 'POST' });
+
+    
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+    
+        const data = await response.json();
+        console.log(data.message);
+    } catch (err) {
+        console.error('Error resetting leaderboard: ', err);
+    }
+    
     // Save the reset state to localStorage
     localStorage.setItem('farmingGameData', JSON.stringify(baseState));
 
     // Update totals and other calculations
     updateTotals(); // Updates all totals
     calculateNet();
-    updateNetCash();
-    updateTotalWorth();
-    updateInterest();
-
+    // updateNetCash();
     // Repopulate the roll table
     populateRollTable();
 }
