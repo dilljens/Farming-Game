@@ -223,8 +223,8 @@ function sendDataToServer(totalWorth) {
         console.log('Invalid username, not sending data');
         return;
     }
-    fetch('http://localhost:3000/api/addUser', { //for local server
-    // fetch('/api/addUser', {
+    // fetch('http://localhost:3000/api/addUser', { //for local server
+    fetch('/api/addUser', {
         
         method: 'POST',
         headers: {
@@ -255,8 +255,8 @@ function handleBlur(event) {
 // Function to fetch leaderboard data from the server
 // Function to fetch leaderboard data from the server
 function fetchLeaderboardData() {
-    fetch('http://localhost:3000/api/leaderboard')
-    // fetch('/api/leaderboard') // Change this to your actual endpoint if different
+    // fetch('http://localhost:3000/api/leaderboard')
+    fetch('/api/leaderboard') // Change this to your actual endpoint if different
       .then(response => {
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);
@@ -603,8 +603,8 @@ async function performReset() {
     clearTransactionsExceptFirst('loan-transaction');
 
     try {
-        // const response = await fetch('/api/resetLeaderboard', { method: 'POST' });
-        fetch('http://localhost:3000/api/resetLeaderboard', { method: 'POST' });
+        // fetch('http://localhost:3000/api/resetLeaderboard', { method: 'POST' });
+        const response = await fetch('/api/resetLeaderboard', { method: 'POST' });
 
     
         if (!response.ok) {
