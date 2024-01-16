@@ -224,7 +224,7 @@ function sendDataToServer(totalWorth) {
         return;
     }
     // fetch('http://localhost:3000/api/addUser', { //for local server
-    fetch('/api/addUser', {
+    fetch('https://dilljens.github.io/Farming-Game/api/addUser', {
         
         method: 'POST',
         headers: {
@@ -256,7 +256,7 @@ function handleBlur(event) {
 // Function to fetch leaderboard data from the server
 function fetchLeaderboardData() {
     // fetch('http://localhost:3000/api/leaderboard')
-    fetch('/api/leaderboard') // Change this to your actual endpoint if different
+    fetch('https://dilljens.github.io/Farming-Game/api/leaderboard') // Change this to your actual endpoint if different
       .then(response => {
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);
@@ -604,7 +604,7 @@ async function performReset() {
 
     try {
         // fetch('http://localhost:3000/api/resetLeaderboard', { method: 'POST' });
-        const response = await fetch('/api/resetLeaderboard', { method: 'POST' });
+        const response = await fetch('https://dilljens.github.io/Farming-Game/api/resetLeaderboard', { method: 'POST' });
 
     
         if (!response.ok) {
