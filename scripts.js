@@ -305,7 +305,7 @@ function startPolling(interval) {
 }
 
 // Start polling every 30 seconds
-startPolling(100);
+// startPolling(100);
 
   // Call fetchLeaderboardData on page load or when you need to refresh the data
 //   document.addEventListener('DOMContentLoaded', fetchLeaderboardData);
