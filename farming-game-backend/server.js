@@ -11,7 +11,11 @@ console.log('DATABASE_URL:', process.env.DATABASE_URL);
 const app = express();
 app.use(express.json());
 
-app.use(cors());
+const cors = require('cors');
+app.use(cors({
+    origin: 'https://dilljens.github.io' // adjust the origin to your frontend's URL
+}));
+
 
 // Start the server
 const PORT = process.env.PORT || 3000;
