@@ -598,8 +598,8 @@ async function performReset() {
     clearTransactionsExceptFirst('loan-transaction');
 
     try {
-        fetch('http://localhost:3000/api/resetLeaderboard', { method: 'POST' });
-        // const response = await fetch('https://farming-game-backend-withered-meadow-3014.fly.dev/api/resetLeaderboard', { method: 'POST' });
+        // fetch('http://localhost:3000/api/resetLeaderboard', { method: 'POST' });
+        const response = await fetch('https://farming-game-backend-withered-meadow-3014.fly.dev/api/resetLeaderboard', { method: 'POST' });
 
     
         if (!response.ok) {
