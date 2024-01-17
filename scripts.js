@@ -223,8 +223,8 @@ function sendDataToServer(totalWorth) {
         console.log('Invalid username, not sending data');
         return;
     }
-    fetch('http://localhost:3000/api/addUser', { //for local server
-    // fetch('https://dilljens.github.io/Farming-Game/api/addUser', {
+    // fetch('http://localhost:3000/api/addUser', { //for local server
+    fetch('https://farming-game-backend-withered-meadow-3014.fly.dev/api/addUser', {
         
         method: 'POST',
         headers: {
@@ -244,73 +244,68 @@ function sendDataToServer(totalWorth) {
       
 }
 
-// This function is called with the event object when the blur event triggers
-function handleBlur(event) {
-    // Extract the value from the event's target (the cell with the username)
-    updateTotalWorth(true);
-}
-
-// Attach event listener for blur event
-// document.getElementById('editableUsername').addEventListener('blur', handleBlur);
-// Function to fetch leaderboard data from the server
-// Function to fetch leaderboard data from the server
-function fetchLeaderboardData() {
-    fetch('http://localhost:3000/api/leaderboard')
-    // fetch('https://dilljens.github.io/Farming-Game/api/leaderboard') // Change this to your actual endpoint if different
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(data => {
-        updateLeaderboardTable(data);
-      })
-      .catch(error => {
-        console.error('Failed to fetch leaderboard data:', error);
-      });
-  }
   
-  // Function to update the leaderboard table with fetched data
-  function updateLeaderboardTable(data) {
+// Function to update the leaderboard table with fetched data
+function updateLeaderboardTable(data) {
     const leaderboardTable = document.getElementById('leaderboard');
     const tbody = leaderboardTable.querySelector('tbody');
-  
+
     // Clear existing rows in the table body
     tbody.innerHTML = '';
-  
+
     // Create a new row for each entry in the fetched data
     data.forEach(entry => {
-      const row = document.createElement('tr');
-  
-      const usernameCell = document.createElement('td');
-      usernameCell.textContent = entry.username;
-      usernameCell.className = 'text-center';
-  
-      const networthCell = document.createElement('td');
-      networthCell.textContent = parseFloat(entry.networth).toLocaleString('en-US'); // Format the number with commas
-      networthCell.className = 'text-center';
-  
-      // Append cells to the row
-      row.appendChild(usernameCell);
-      row.appendChild(networthCell);
-  
-      // Append the row to the table body
-      tbody.appendChild(row);
+        const row = document.createElement('tr');
+
+        const usernameCell = document.createElement('td');
+        usernameCell.textContent = entry.username;
+        usernameCell.className = 'text-center';
+
+        const networthCell = document.createElement('td');
+        networthCell.textContent = parseFloat(entry.networth).toLocaleString('en-US'); // Format the number with commas
+        networthCell.className = 'text-center';
+
+        // Append cells to the row
+        row.appendChild(usernameCell);
+        row.appendChild(networthCell);
+
+        // Append the row to the table body
+        tbody.appendChild(row);
     });
-  }
-  
-function startPolling(interval) {
-    setInterval(fetchLeaderboardData, interval);
 }
 
-// Start polling every 30 seconds
-// startPolling(100);
+  // Function to start a WebSocket connection
+function startWebSocket() {
+    // Replace with your server's WebSocket URL
+    // const ws = new WebSocket('ws://localhost:3000'); 
+    const ws = new WebSocket('wss://farming-game-backend-withered-meadow-3014.fly.dev');
 
-  // Call fetchLeaderboardData on page load or when you need to refresh the data
-//   document.addEventListener('DOMContentLoaded', fetchLeaderboardData);
-    // The rest of your script code...
-  
+    ws.onopen = function() {
+        console.log('WebSocket connection established');
+    };
+
+    ws.onmessage = function(event) {
+        // Parse the incoming message
+        const leaderboardData = JSON.parse(event.data);
+
+        // Update your leaderboard UI
+        updateLeaderboardTable(leaderboardData);
+    };
+
+    ws.onclose = function() {
+        console.log('WebSocket connection closed');
+        // You may want to attempt to reconnect here
+    };
+
+    ws.onerror = function(error) {
+        console.error('WebSocket error:', error);
+        // Handle errors appropriately
+    };
+}
+
+// Start the WebSocket connection when the page loads
+startWebSocket();
+
 
 function makeEditableCellsExitOnEnter() {
     const editableCells = document.querySelectorAll('td.editable');
@@ -604,7 +599,7 @@ async function performReset() {
 
     try {
         fetch('http://localhost:3000/api/resetLeaderboard', { method: 'POST' });
-        // const response = await fetch('https://dilljens.github.io/Farming-Game/api/resetLeaderboard', { method: 'POST' });
+        // const response = await fetch('https://farming-game-backend-withered-meadow-3014.fly.dev/api/resetLeaderboard', { method: 'POST' });
 
     
         if (!response.ok) {
