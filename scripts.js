@@ -223,24 +223,30 @@ function sendDataToServer(totalWorth) {
         console.log('Invalid username, not sending data');
         return;
     }
-    // fetch('http://localhost:3000/api/addUser', { //for local server
-    fetch('https://farming-game-backend-withered-meadow-3014.fly.dev/api/addUser', {
-        
+    let apiUrl;
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+        apiUrl = 'http://localhost:3000/api/addUser';
+    } else {
+        apiUrl = 'https://farming-game-backend-withered-meadow-3014.fly.dev/api/addUser';
+    }
+
+    fetch(apiUrl, {
+    
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+            'Content-Type': 'application/json',
         },
         body: JSON.stringify({ username: username, networth: totalWorth }),
-      })
-      .then(response => {
-        console.log('Server response:', response);
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(data => console.log('Success:', data))
-      .catch(error => console.error('Error:', error));
+    })
+    .then(response => {
+    console.log('Server response:', response);
+    if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    return response.json();
+    })
+    .then(data => console.log('Success:', data))
+    .catch(error => console.error('Error:', error));
       
 }
 
@@ -277,8 +283,14 @@ function updateLeaderboardTable(data) {
   // Function to start a WebSocket connection
 function startWebSocket() {
     // Replace with your server's WebSocket URL
-    // const ws = new WebSocket('ws://localhost:3000'); 
-    const ws = new WebSocket('wss://farming-game-backend-withered-meadow-3014.fly.dev');
+    let wsUrl;
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+        wsUrl = 'ws://localhost:3000';
+    } else {
+        wsUrl = 'wss://farming-game-backend-withered-meadow-3014.fly.dev';
+    }
+    const ws = new WebSocket(wsUrl);
+    
 
     ws.onopen = function() {
         console.log('WebSocket connection established');
@@ -598,10 +610,15 @@ async function performReset() {
     clearTransactionsExceptFirst('loan-transaction');
 
     try {
-        // fetch('http://localhost:3000/api/resetLeaderboard', { method: 'POST' });
-        const response = await fetch('https://farming-game-backend-withered-meadow-3014.fly.dev/api/resetLeaderboard', { method: 'POST' });
+        let resetApiUrl;
+        if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+            resetApiUrl = 'http://localhost:3000/api/resetLeaderboard';
+        } else {
+            resetApiUrl = 'https://farming-game-backend-withered-meadow-3014.fly.dev/api/resetLeaderboard';
+        }
 
-    
+        const response = await fetch(resetApiUrl, { method: 'POST' });
+
         if (!response.ok) {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }

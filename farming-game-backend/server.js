@@ -50,7 +50,11 @@ wss.on('connection', ws => {
     console.log('Received message:', message);
     // Handle incoming messages if needed
   });
-  
+
+  ws.on('error', error => {
+    console.error('WebSocket error:', error);
+  });
+
   // Send current leaderboard data to newly connected client
   updateAndBroadcastLeaderboard();
 });
