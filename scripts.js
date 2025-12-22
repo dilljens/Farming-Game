@@ -37,8 +37,8 @@ function handleTransaction(inputId, transactionClass, totalClass) {
             }
         }
 
-        // // If no empty cell was found, create a new row
-        if (!emptyCellFound) {
+        // // If no empty cell was found, create a new row (limit to 10 rows)
+        if (!emptyCellFound && transactionCells.length < 10) {
             const newRow = table.insertRow(); // Insert below the input cells
             if (inputId === 'cashInput') {
                 createTransactionCell(newRow, 'cash-transaction', '', true); // Empty, editable cell for alignment
@@ -463,8 +463,8 @@ function saveQuantitiesToLocalStorage() {
 function getTransactionData(transactionClass) {
     const transactionCells = document.querySelectorAll(`.${transactionClass}`);
     const transactions = Array.from(transactionCells).map(cell => cell.textContent);
-    // console.log(`Transactions for ${transactionClass}:`, transactions); // Debugging
-    return transactions;
+    // Limit to last 10 transactions to prevent data bloat
+    return transactions.slice(0, 10);
 }
  
 document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
@@ -510,7 +510,9 @@ function updateTransactionLists(transactionsData) {
 
     // Define a function to update a single transaction list
     const updateSingleTransactionList = (transactions, transactionClass) => {
-        transactions.forEach((transactionValue, index) => {
+        // Limit transactions to last 10
+        const limitedTransactions = transactions.slice(0, 10);
+        limitedTransactions.forEach((transactionValue, index) => {
             let row = table.rows[index + 2]; // +2 to account for header row and input row
             if (!row) {
                 row = table.insertRow();
@@ -713,11 +715,21 @@ window.addEventListener('DOMContentLoaded', (event) => {
             e.preventDefault();
         }
     });
+    cashInput.addEventListener('blur', () => {
+        if (cashInput.value.trim() !== '') {
+            handleTransaction('cashInput', 'cash-transaction', 'cash-total');
+        }
+    });
     loanInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
           handleTransaction('loanInput', 'loan-transaction', 'loan-total');
           loanInput.blur();
           e.preventDefault();
+        }
+    });
+    loanInput.addEventListener('blur', () => {
+        if (loanInput.value.trim() !== '') {
+            handleTransaction('loanInput', 'loan-transaction', 'loan-total');
         }
     });
     const transactionCells = document.querySelectorAll('.cash-transaction, .loan-transaction');

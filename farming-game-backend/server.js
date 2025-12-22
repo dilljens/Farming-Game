@@ -8,7 +8,7 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 app.use(cors({
-  origin: 'https://dilljens.github.io', // CORS for your frontend
+  origin: ['https://dilljens.github.io', 'http://localhost:3000', 'http://127.0.0.1:3000'], // CORS for your frontend and local development
   optionsSuccessStatus: 200
 }));
 

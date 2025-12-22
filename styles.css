@@ -31,10 +31,12 @@ td.editable {
 
 input[type="number"] {
     width: 100%;
-    padding: 5px;
-    border: none;
+    padding: 8px;
+    border: 1px solid #ccc;
     box-sizing: border-box;
     background-color: #b4d0fb;
+    font-size: 16px; /* Prevents zoom on iOS */
+    min-height: 44px; /* Minimum touch target size */
 }
 
 .input-cell {
