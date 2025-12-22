@@ -8,7 +8,9 @@ function calculateNet() {
             const costCell = row.cells[2];
             const netCell = row.cells[3];
 
-            const qty = parseFloat(qtyCell.innerText.replace(/,/g, '')) || 0;
+            const qtyValueEl = qtyCell ? qtyCell.querySelector('span.editable') : null;
+
+            const qty = parseFloat((qtyValueEl ? qtyValueEl.textContent : qtyCell.innerText).replace(/,/g, '')) || 0;
             const cost = parseFloat(costCell.innerText.replace(/,/g, '')) || 0;
             const net = qty * cost;
 
@@ -805,6 +807,26 @@ window.addEventListener('DOMContentLoaded', (event) => {
     });
     const transactionCells = document.querySelectorAll('.cash-transaction, .loan-transaction');
     transactionCells.forEach(makeCellEditable);
+
+    // Add event listeners for quantity +/- buttons
+    document.querySelectorAll('.qty-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const targetClass = this.getAttribute('data-target');
+            const qtyCell = document.querySelector(`.${targetClass}`);
+            if (qtyCell) {
+                let currentQty = parseInt(qtyCell.textContent) || 0;
+                if (this.classList.contains('qty-plus')) {
+                    currentQty++;
+                } else if (this.classList.contains('qty-minus')) {
+                    currentQty = Math.max(0, currentQty - 1); // Don't go below 0
+                }
+                qtyCell.textContent = currentQty;
+                calculateNet();
+                populateRollTable();
+                saveQuantitiesToLocalStorage();
+            }
+        });
+    });
 
     // Initial total calculation
     updateTotals();

@@ -15,10 +15,7 @@ th, td {
     text-align: center;
     padding: 2px;
     white-space: nowrap; /* Prevents text from wrapping and keeps the cell width to the minimum required */
-    overflow: hidden; /* Ensures content doesn't overflow the cell */
-    text-overflow: ellipsis; /* Adds an ellipsis if the text overflows */
-    min-width: 2px; /* Sets a minimum width for the cells, adjust as needed */
-    max-width: 0px; /* Sets a maximum width for the cells to ensure they don't grow too large */
+    /* Avoid constraining table cells so tightly that buttons/inputs become unusable. */
 }
 
 th {
@@ -74,6 +71,46 @@ input[type="number"] {
     cursor: text;
     /* Additional styles here */
   }
+
+.qty-cell {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 2px !important;
+    gap: 2px;
+    background-color: #b4d0fb;
+}
+
+.qty-cell span {
+    flex: 1;
+    text-align: center;
+    min-width: 20px;
+    background-color: inherit !important;
+    color: inherit;
+    border: none;
+    outline: none;
+    display: inline-block;
+    padding: 0 4px;
+    margin: 0;
+}
+
+.qty-btn {
+    padding: 1px 5px;
+    border: 1px solid #777;
+    background-color: #e0e0e0;
+    cursor: pointer;
+    font-size: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.qty-btn:hover {
+    background-color: #d0d0d0;
+}
+
+.qty-btn:active {
+    background-color: #c0c0c0;
+}
 
 @media screen and (max-width: 600px) {
     body {
