@@ -37,8 +37,8 @@ function handleTransaction(inputId, transactionClass, totalClass) {
             }
         }
 
-        // // If no empty cell was found, create a new row (limit to 10 rows)
-        if (!emptyCellFound && transactionCells.length < 10) {
+        // // If no empty cell was found, create a new row
+        if (!emptyCellFound) {
             const newRow = table.insertRow(); // Insert below the input cells
             if (inputId === 'cashInput') {
                 createTransactionCell(newRow, 'cash-transaction', '', true); // Empty, editable cell for alignment
@@ -57,6 +57,14 @@ function handleTransaction(inputId, transactionClass, totalClass) {
         // Calculate the new total
         updateTotals();
         saveQuantitiesToLocalStorage();
+        
+        // Remove excess rows beyond 10 transactions
+        // Row 0 = headers, Row 1 = instructions, Row 2 = transaction headers, Row 3+ = transactions
+        const maxRows = 13; // 3 header rows + 10 transaction rows
+        while (table.rows.length > maxRows) {
+            table.deleteRow(table.rows.length - 1);
+        }
+        
         // Clear the input field after the transaction is added
         inputElement.value = '';
     }
@@ -69,29 +77,60 @@ function shiftAndInsertTransaction(inputId, transactionClass) {
 
     // Check that the value is not empty
     if (newValue !== '') {
+        // Determine which transaction type (cash or loan)
+        const transactionType = transactionClass.includes('cash') ? 'cash' : 'loan';
+        
+        // Add new transaction to the beginning of the global data array
+        data.transactions[transactionType].unshift(newValue);
+        
         // Select all the transaction cells for cash or loan
         const transactionCells = document.querySelectorAll(`.${transactionClass}`);
         
-        // Shift the transaction values down by one cell
-        for (let i = transactionCells.length - 1; i > 0; i--) {
-            transactionCells[i].textContent = transactionCells[i - 1].textContent;
-        }
-
-        // Insert the new value at the top
-        if (transactionCells.length > 0) {
-            transactionCells[0].textContent = newValue;
-        }
+        // Update only the visible cells (first 10 from data)
+        const visibleTransactions = data.transactions[transactionType].slice(0, 10);
+        visibleTransactions.forEach((value, index) => {
+            if (transactionCells[index]) {
+                transactionCells[index].textContent = numberWithCommasAndDecimals(value);
+            }
+        });
 
         // Clear the input element
         inputElement.value = '';
 
         // After shifting values, recalculate the total
-        // updateTotal(transactionClass);
         updateTotals();
-        // Example usage in shiftAndInsertTransaction
-        transactionCells[0].textContent = numberWithCommasAndDecimals(newValue);
 
     }
+}
+
+function syncDOMToData() {
+    // Sync visible transaction cells back to the data object
+    const cashCells = document.querySelectorAll('.cash-transaction');
+    const loanCells = document.querySelectorAll('.loan-transaction');
+    
+    // Ensure data.transactions exists
+    if (!data.transactions) {
+        data.transactions = { cash: [], loan: [] };
+    }
+    
+    // Update cash transactions from DOM - create new entries if needed
+    cashCells.forEach((cell, index) => {
+        const cellValue = cell.textContent.trim();
+        if (cellValue !== '') {
+            data.transactions.cash[index] = cellValue;
+        }
+    });
+    
+    // Update loan transactions from DOM - create new entries if needed
+    loanCells.forEach((cell, index) => {
+        const cellValue = cell.textContent.trim();
+        if (cellValue !== '') {
+            data.transactions.loan[index] = cellValue;
+        }
+    });
+    
+    // Save to localStorage after syncing
+    saveQuantitiesToLocalStorage();
 }
 
 function makeCellEditable(cell) {
@@ -99,6 +138,7 @@ function makeCellEditable(cell) {
     
     // Event listener for input events to update the total immediately after a change
     cell.addEventListener('input', () => {
+        syncDOMToData(); // Sync changes back to global data
         updateTotals();
     });
 
@@ -107,6 +147,7 @@ function makeCellEditable(cell) {
         if (e.key === 'Enter') {
             e.preventDefault(); // Prevent the default Enter key action
             cell.blur(); // Remove focus from the cell
+            syncDOMToData(); // Ensure data is synced on Enter
             updateTotals(); // Recalculate the total when Enter is pressed
             
         }
@@ -125,27 +166,32 @@ function createTransactionCell(row, className, value = '', isEditable = false) {
 }
 
 function updateTotals() {
-    // Define the classes for both cash and loan transactions and their corresponding totals
-    const transactionTypes = [
-        { transactionClass: 'cash-transaction', totalClass: 'cash-total' },
-        { transactionClass: 'loan-transaction', totalClass: 'loan-total' }
-    ];
+    // Calculate totals from global data object, not localStorage
+    // This ensures all entries contribute to the total, including newly added ones
+    let cashTotal = 0;
+    let loanTotal = 0;
 
-    // Iterate over each transaction type and update their totals
-    transactionTypes.forEach(({ transactionClass, totalClass }) => {
-        const transactions = document.querySelectorAll(`.${transactionClass}`);
-        let sum = 0;
+    if (data && data.transactions) {
+        // Sum all cash transactions from global data object
+        cashTotal = data.transactions.cash.reduce((sum, val) => {
+            return sum + (parseFloat(val.replace(/,/g, '')) || 0);
+        }, 0);
+        // Sum all loan transactions from global data object
+        loanTotal = data.transactions.loan.reduce((sum, val) => {
+            return sum + (parseFloat(val.replace(/,/g, '')) || 0);
+        }, 0);
+    }
 
-        transactions.forEach(cell => {
-            let cellValue = parseFloat(cell.textContent.replace(/,/g, '')) || 0;
-            sum += cellValue;
-        });
+    // Update the total cells
+    const cashTotalCell = document.querySelector('.cash-total');
+    if (cashTotalCell) {
+        cashTotalCell.textContent = numberWithCommasAndDecimals(cashTotal);
+    }
 
-        const totalCell = document.querySelector(`.${totalClass}`);
-        if (totalCell) {
-            totalCell.textContent = numberWithCommasAndDecimals(sum);
-        }
-    });
+    const loanTotalCell = document.querySelector('.loan-total');
+    if (loanTotalCell) {
+        loanTotalCell.textContent = numberWithCommasAndDecimals(loanTotal);
+    }
 
     // Update net cash, total worth, and interest after updating totals
     updateNetCash();
@@ -435,9 +481,8 @@ let data = {
 };
 
 function saveQuantitiesToLocalStorage() {
-    // Get the current quantities from the page
-    const data = {
-      qty: {
+    // Update quantities from the page
+    data.qty = {
         Hay: parseInt(document.querySelector('.qty-hay').textContent) || 0,
         Grain: parseInt(document.querySelector('.qty-grain').textContent) || 0,
         Fruit: parseInt(document.querySelector('.qty-fruit').textContent) || 0,
@@ -445,15 +490,13 @@ function saveQuantitiesToLocalStorage() {
         Cows: parseInt(document.querySelector('.qty-cows').textContent) || 0,
         Harvester: parseInt(document.querySelector('.qty-harvester').textContent) || 0,
         Tractor: parseInt(document.querySelector('.qty-tractor').textContent) || 0
-      },
-      transactions: {
-        cash: getTransactionData('cash-transaction'),
-        loan: getTransactionData('loan-transaction')
-      }
     };
+    
     const usernameCell = document.getElementById('editableUsername');
     data.username = usernameCell.innerText.trim() === 'Enter name' ? '' : usernameCell.innerText.trim();
 
+    // Transactions are already maintained in the global data object
+    // Don't read from DOM as it only shows 10 entries
     // console.log("Data to be saved:", data);
     // Save the updated data to localStorage
     localStorage.setItem('farmingGameData', JSON.stringify(data));
@@ -463,8 +506,8 @@ function saveQuantitiesToLocalStorage() {
 function getTransactionData(transactionClass) {
     const transactionCells = document.querySelectorAll(`.${transactionClass}`);
     const transactions = Array.from(transactionCells).map(cell => cell.textContent);
-    // Limit to last 10 transactions to prevent data bloat
-    return transactions.slice(0, 10);
+    // Save all transactions - totals need to reflect all entries
+    return transactions;
 }
  
 document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
@@ -535,6 +578,13 @@ function updateTransactionLists(transactionsData) {
     // Update both cash and loan transactions
     updateSingleTransactionList(transactionsData.cash, 'cash-transaction');
     updateSingleTransactionList(transactionsData.loan, 'loan-transaction');
+
+    // Remove any rows beyond the first 10 transaction rows
+    // Row 0 = headers, Row 1 = instructions, Row 2 = transaction headers, Row 3 = first transaction
+    const maxRows = 13; // 3 header rows + 10 transaction rows
+    while (table.rows.length > maxRows) {
+        table.deleteRow(table.rows.length - 1);
+    }
 }
 
 // Ensure createTransactionCell function is defined to handle the creation of cells correctly
