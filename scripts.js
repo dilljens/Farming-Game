@@ -480,22 +480,26 @@ function populateRollTable() {
 // Call this function to populate the roll table when the page loads or when quantities update
 populateRollTable();
 
-let data = {
-    qty: {
-        hay: 1,
-        grain: 1,
-        fruit: 0,
-        farm: 0,
-        cows: 0,
-        harvester: 0,
-        tractor: 0
-    },
-    transactions: {
-        cash: [],
-        loan: []
-    },
-    username: ''
-};
+function getBaseState() {
+    return {
+        qty: {
+            Hay: 1,
+            Grain: 1,
+            Fruit: 0,
+            Farm: 0,
+            Cows: 0,
+            Harvester: 0,
+            Tractor: 0
+        },
+        transactions: {
+            cash: ['5000'],
+            loan: ['5000']
+        },
+        username: ''
+    };
+}
+
+let data = getBaseState();
 
 function saveQuantitiesToLocalStorage() {
     // Update quantities from the page
@@ -558,6 +562,31 @@ function loadFromLocalStorage() {
         // Debugging: Log out loaded transaction data
         // console.log("Loaded transactions for cash:", loadedData.transactions.cash);
         // console.log("Loaded transactions for loan:", loadedData.transactions.loan);
+        updateTotals();
+        calculateNet();
+    } else {
+        // First run: seed with a default starting state.
+        data = getBaseState();
+        localStorage.setItem('farmingGameData', JSON.stringify(data));
+
+        document.querySelector('.qty-hay').textContent = data.qty.Hay.toString();
+        document.querySelector('.qty-grain').textContent = data.qty.Grain.toString();
+        document.querySelector('.qty-fruit').textContent = data.qty.Fruit.toString();
+        document.querySelector('.qty-farm').textContent = data.qty.Farm.toString();
+        document.querySelector('.qty-cows').textContent = data.qty.Cows.toString();
+        document.querySelector('.qty-harvester').textContent = data.qty.Harvester.toString();
+        document.querySelector('.qty-tractor').textContent = data.qty.Tractor.toString();
+
+        clearTransactionsExceptFirst('cash-transaction');
+        clearTransactionsExceptFirst('loan-transaction');
+        updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
+
+        const usernameCell = document.getElementById('editableUsername');
+        usernameCell.innerText = 'Enter name';
+
+        populateRollTable();
+        updateTotals();
+        calculateNet();
     }
 }
 
@@ -570,10 +599,16 @@ function updateTransactionLists(transactionsData) {
 
     // Define a function to update a single transaction list
     const updateSingleTransactionList = (transactions, transactionClass) => {
+        const safeTransactions = Array.isArray(transactions) ? transactions : [];
         // Limit transactions to last 10
-        const limitedTransactions = transactions.slice(0, 10);
+        const limitedTransactions = safeTransactions.slice(0, 10);
         limitedTransactions.forEach((transactionValue, index) => {
-            let row = table.rows[index + 2]; // +2 to account for header row and input row
+            // Table layout in index.html:
+            // Row 0 = cash/loan inputs
+            // Row 1 = instructions
+            // Row 2 = Transaction / Total headers
+            // Row 3 = first transaction row
+            let row = table.rows[index + 3];
             if (!row) {
                 row = table.insertRow();
                 createTransactionCell(row, 'cash-transaction', '', true);
@@ -646,16 +681,7 @@ document.getElementById('cancelReset').addEventListener('click', hideModal);
 async function performReset() {
     hideModal();
     
-    // Define your base state
-    const baseState = {
-        qty: {
-            Hay: 1, Grain: 1, Fruit: 0, Farm: 0, Cows: 0, Harvester: 0, Tractor: 0
-        },
-        transactions: {
-            cash: ['5000'],
-            loan: ['5000']
-        }
-    };
+    const baseState = getBaseState();
 
     // Update the data object
     data = baseState;
@@ -718,7 +744,8 @@ async function performReset() {
 
 function clearTransactionsExceptFirst(transactionClass) {
     const table = document.getElementById('financialTable'); // Use the correct ID for your table
-    const rows = table.querySelectorAll(`tr:has(.${transactionClass})`);
+    // Avoid relying on the CSS :has() selector (not supported in all browsers).
+    const rows = Array.from(table.rows).filter(row => row.querySelector(`.${transactionClass}`));
     
     // Remove all rows except the first one with transaction class
     rows.forEach((row, index) => {
