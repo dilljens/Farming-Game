@@ -3,7 +3,7 @@ function calculateNet() {
     const rows = document.querySelectorAll('#spreadsheet tr');
 
     rows.forEach((row, index) => {
-        if (index > 0 && index < rows.length - 3) {
+        if (index > 0 && index < rows.length - 4) {
             const qtyCell = row.cells[1];
             const costCell = row.cells[2];
             const netCell = row.cells[3];
@@ -18,6 +18,7 @@ function calculateNet() {
         }
     });
 
+    updateTotalAcres(); // Update total acres
     updateTotalWorth(false); // Update the total worth after net values are calculated
 }
 
@@ -197,6 +198,20 @@ function updateTotals() {
     updateNetCash();
     updateTotalWorth(true);
     updateInterest();
+}
+
+function updateTotalAcres() {
+    // Calculate total acres based on Hay (10), Grain (10), and Fruit (5)
+    const hayQty = parseInt(document.querySelector('.qty-hay').textContent) || 0;
+    const grainQty = parseInt(document.querySelector('.qty-grain').textContent) || 0;
+    const fruitQty = parseInt(document.querySelector('.qty-fruit').textContent) || 0;
+    
+    const totalAcres = (hayQty * 10) + (grainQty * 10) + (fruitQty * 5);
+    
+    const totalAcresCell = document.querySelector('.total-acres');
+    if (totalAcresCell) {
+        totalAcresCell.textContent = numberWithCommasAndDecimals(totalAcres);
+    }
 }
 
 
@@ -635,8 +650,8 @@ async function performReset() {
             Hay: 1, Grain: 1, Fruit: 0, Farm: 0, Cows: 0, Harvester: 0, Tractor: 0
         },
         transactions: {
-            cash: [],
-            loan: []
+            cash: ['5000'],
+            loan: ['5000']
         }
     };
 
@@ -660,6 +675,12 @@ async function performReset() {
     // Remove all rows except the first one for transactions
     clearTransactionsExceptFirst('cash-transaction');
     clearTransactionsExceptFirst('loan-transaction');
+
+    // Set initial transaction values
+    const firstCashCell = document.querySelector('.cash-transaction');
+    const firstLoanCell = document.querySelector('.loan-transaction');
+    if (firstCashCell) firstCashCell.textContent = '5000';
+    if (firstLoanCell) firstLoanCell.textContent = '5000';
 
     try {
         let resetApiUrl;
