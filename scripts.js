@@ -564,10 +564,16 @@ function populateRollTable() {
     rollRows.forEach((row, index) => {
       const assetType = row.cells[0].textContent; // Get the asset type (Hay, Grain, etc.)
       const quantity = quantities[assetType] || 0; // Get the quantity for this asset type
+
+            let multiplier = 1;
+            if (assetType === 'Hay') {
+                if (quantity >= 10) multiplier = 2;
+                else if (quantity >= 5) multiplier = 1.5;
+            }
   
       // Calculate and populate the cells for each roll
       baseValues[assetType].forEach((value, rollIndex) => {
-        const profit = quantity * value; // Calculate the profit
+                const profit = quantity * value * multiplier; // Calculate the profit
         row.cells[rollIndex + 1].textContent = numberWithCommasAndDecimals(profit); // Populate the cell with the formatted profit
       });
     });
