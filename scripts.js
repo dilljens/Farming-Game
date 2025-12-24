@@ -348,11 +348,15 @@ function sendDataToServer(totalWorth) {
     const ranchCowsQty = parseInt(document.querySelector('.qty-cows')?.textContent || '0', 10) || 0;
     const cowsQty = farmCowsQty + ranchCowsQty;
 
+    const loanTotalCell = document.querySelector('.loan-total');
+    const debt = loanTotalCell ? (parseFloat(loanTotalCell.textContent.replace(/,/g, '')) || 0) : 0;
+
     // Save to Firestore
     const userDocRef = doc(db, 'leaderboard', username);
     setDoc(userDocRef, {
         username: username,
         networth: totalWorth,
+        debt: debt,
         hay: hayQty,
         grain: grainQty,
         fruit: fruitQty,
@@ -389,6 +393,10 @@ function updateLeaderboardTable(data) {
         networthCell.textContent = parseFloat(entry.networth).toLocaleString('en-US'); // Format the number with commas
         networthCell.className = 'text-center';
 
+        const debtCell = document.createElement('td');
+        debtCell.textContent = parseFloat(entry.debt ?? 0).toLocaleString('en-US');
+        debtCell.className = 'text-center';
+
         const hayCell = document.createElement('td');
         hayCell.textContent = (entry.hay ?? 0).toString();
         hayCell.className = 'text-center';
@@ -408,6 +416,7 @@ function updateLeaderboardTable(data) {
         // Append cells to the row
         row.appendChild(usernameCell);
         row.appendChild(networthCell);
+        row.appendChild(debtCell);
         row.appendChild(hayCell);
         row.appendChild(grainCell);
         row.appendChild(fruitCell);
@@ -587,6 +596,13 @@ function getBaseState() {
             Harvester: 0,
             Tractor: 0
         },
+        ranchRidgeBonus: 0,
+        ranchRidgeSelections: {
+            ahtanum: false,
+            rattlesnake: false,
+            cascades: false,
+            toppenish: false
+        },
         transactions: {
             cash: ['5000'],
             loan: ['5000']
@@ -596,6 +612,19 @@ function getBaseState() {
 }
 
 let data = getBaseState();
+
+function getRanchRidgeBonusFromSelections(selections) {
+    if (!selections) return 0;
+    const bonusByKey = {
+        ahtanum: 2,
+        rattlesnake: 3,
+        cascades: 4,
+        toppenish: 5
+    };
+    return Object.keys(bonusByKey).reduce((sum, key) => {
+        return sum + (selections[key] ? bonusByKey[key] : 0);
+    }, 0);
+}
 
 function saveQuantitiesToLocalStorage() {
     // Update quantities from the page
@@ -611,6 +640,16 @@ function saveQuantitiesToLocalStorage() {
     
     const usernameCell = document.getElementById('editableUsername');
     data.username = usernameCell.innerText.trim() === 'Enter name' ? '' : usernameCell.innerText.trim();
+
+    const ridgeCheckboxes = document.querySelectorAll('.ranch-ridge-checkbox');
+    if (ridgeCheckboxes.length > 0) {
+        if (!data.ranchRidgeSelections) data.ranchRidgeSelections = {};
+        ridgeCheckboxes.forEach((cb) => {
+            const key = cb.getAttribute('data-key');
+            if (key) data.ranchRidgeSelections[key] = cb.checked;
+        });
+        data.ranchRidgeBonus = getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
+    }
 
     // Transactions are already maintained in the global data object
     // Don't read from DOM as it only shows 10 entries
@@ -646,6 +685,20 @@ function loadFromLocalStorage() {
         document.querySelector('.qty-cows').textContent = data.qty.Cows.toString();
         document.querySelector('.qty-harvester').textContent = data.qty.Harvester.toString();
         document.querySelector('.qty-tractor').textContent = data.qty.Tractor.toString();
+
+        // Restore ranch ridge selection (do not re-apply bonus; qty already includes it)
+        if (!data.ranchRidgeSelections) data.ranchRidgeSelections = getBaseState().ranchRidgeSelections;
+        if (loadedData.ranchRidgeSelections) data.ranchRidgeSelections = loadedData.ranchRidgeSelections;
+        data.ranchRidgeBonus = typeof loadedData.ranchRidgeBonus === 'number'
+            ? loadedData.ranchRidgeBonus
+            : getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
+
+        const ridgeCheckboxes = document.querySelectorAll('.ranch-ridge-checkbox');
+        ridgeCheckboxes.forEach((cb) => {
+            const key = cb.getAttribute('data-key');
+            if (!key) return;
+            cb.checked = !!data.ranchRidgeSelections?.[key];
+        });
         
         // Update the transaction lists
         // This assumes you have a function to update the transaction list on the page
@@ -679,6 +732,9 @@ function loadFromLocalStorage() {
 
         const usernameCell = document.getElementById('editableUsername');
         usernameCell.innerText = 'Enter name';
+
+        const ridgeCheckboxes = document.querySelectorAll('.ranch-ridge-checkbox');
+        ridgeCheckboxes.forEach((cb) => { cb.checked = false; });
 
         populateRollTable();
         updateTotals();
@@ -806,6 +862,15 @@ async function performReset() {
     document.querySelector('.qty-cows').textContent = '0';
     document.querySelector('.qty-harvester').textContent = '0';
     document.querySelector('.qty-tractor').textContent = '0';
+
+    data.ranchRidgeBonus = 0;
+    data.ranchRidgeSelections = getBaseState().ranchRidgeSelections;
+    document.querySelectorAll('.ranch-ridge-checkbox').forEach((cb) => { cb.checked = false; });
+
+    const ranchRidgeMenu = document.getElementById('ranchRidgeMenu');
+    const ranchRidgeButton = document.getElementById('ranchRidgeButton');
+    if (ranchRidgeMenu) ranchRidgeMenu.classList.add('hidden');
+    if (ranchRidgeButton) ranchRidgeButton.setAttribute('aria-expanded', 'false');
 
     // Clear transaction fields
     document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
@@ -958,6 +1023,59 @@ window.addEventListener('DOMContentLoaded', (event) => {
             }
         });
     });
+
+    const ranchRidgeButton = document.getElementById('ranchRidgeButton');
+    const ranchRidgeMenu = document.getElementById('ranchRidgeMenu');
+    const ridgeCheckboxes = document.querySelectorAll('.ranch-ridge-checkbox');
+
+    function setRanchRidgeMenuOpen(isOpen) {
+        if (!ranchRidgeMenu || !ranchRidgeButton) return;
+        ranchRidgeMenu.classList.toggle('hidden', !isOpen);
+        ranchRidgeButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+
+    if (ranchRidgeButton && ranchRidgeMenu) {
+        ranchRidgeButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const isOpen = !ranchRidgeMenu.classList.contains('hidden');
+            setRanchRidgeMenuOpen(!isOpen);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!ranchRidgeMenu.classList.contains('hidden')) {
+                const clickedInside = ranchRidgeMenu.contains(e.target) || ranchRidgeButton.contains(e.target);
+                if (!clickedInside) setRanchRidgeMenuOpen(false);
+            }
+        });
+    }
+
+    if (ridgeCheckboxes.length > 0) {
+        ridgeCheckboxes.forEach((cb) => {
+            cb.addEventListener('change', () => {
+                const prevBonus = data.ranchRidgeBonus || 0;
+                if (!data.ranchRidgeSelections) data.ranchRidgeSelections = {};
+
+                ridgeCheckboxes.forEach((box) => {
+                    const key = box.getAttribute('data-key');
+                    if (key) data.ranchRidgeSelections[key] = box.checked;
+                });
+
+                const newBonus = getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
+
+                const ranchCowsQtyEl = document.querySelector('.qty-cows');
+                if (!ranchCowsQtyEl) return;
+                const currentQty = parseInt(ranchCowsQtyEl.textContent, 10) || 0;
+                const updatedQty = Math.max(0, currentQty - prevBonus + newBonus);
+                ranchCowsQtyEl.textContent = updatedQty.toString();
+
+                data.ranchRidgeBonus = newBonus;
+                calculateNet();
+                populateRollTable();
+                saveQuantitiesToLocalStorage();
+            });
+        });
+    }
 
     // Initial total calculation
     updateTotals();

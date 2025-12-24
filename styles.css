@@ -112,6 +112,16 @@ input[type="number"] {
     background-color: #c0c0c0;
 }
 
+.ranch-ridge-cell {
+    position: relative;
+}
+
+.ranch-ridge-dropdown {
+    position: absolute;
+    right: 2px;
+    top: 2px;
+}
+
 @media screen and (max-width: 600px) {
     body {
         font-size: 2vw; /* Adjust font size for smaller screens */
