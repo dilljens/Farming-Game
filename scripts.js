@@ -971,6 +971,16 @@ window.addEventListener('DOMContentLoaded', (event) => {
     makeEditableCellsExitOnEnter();
     const cashInput = document.getElementById('cashInput');
     if (cashInput) {
+        const quickTxButtons = document.querySelectorAll('[data-quick-transaction-value]');
+        quickTxButtons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const rawValue = btn.getAttribute('data-quick-transaction-value');
+                if (!rawValue) return;
+                cashInput.value = rawValue;
+                handleTransaction('cashInput', 'cash-transaction', 'cash-total');
+            });
+        });
+
         cashInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 //console.log('Enter pressed on cashInput');

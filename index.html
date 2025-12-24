@@ -132,12 +132,14 @@
   <table id="spreadsheet">
     <tr>
       <th>Assets</th>
+      <th>Acres</th>
       <th>Qty</th>
       <th>Cost</th>
       <th>Net</th>
     </tr>
-    <tr>
-      <td>Hay (10)</td>
+    <tr data-acres-per-unit="10">
+      <td>Hay</td>
+      <td class="acres">0</td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-hay">-</button>
         <button class="qty-btn qty-plus" data-target="qty-hay">+</button>
@@ -146,8 +148,9 @@
       <td>20,000</td>
       <td class="net">0</td>
     </tr>
-    <tr>
-      <td>Grain (10)</td>
+    <tr data-acres-per-unit="10">
+      <td>Grain</td>
+      <td class="acres">0</td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-grain">-</button>
         <button class="qty-btn qty-plus" data-target="qty-grain">+</button>
@@ -156,8 +159,9 @@
       <td>20,000</td>
       <td class="net">0</td>
     </tr>
-    <tr>
-      <td>Fruit (5)</td>
+    <tr data-acres-per-unit="5">
+      <td>Fruit</td>
+      <td class="acres">0</td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-fruit">-</button>
         <button class="qty-btn qty-plus" data-target="qty-fruit">+</button>
@@ -166,8 +170,9 @@
       <td>25,000</td>
       <td class="net">0</td>
     </tr>
-    <tr>
-      <td>Farm Cows (10)</td>
+    <tr data-acres-per-unit="10">
+      <td>Farm Cows</td>
+      <td class="acres">0</td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-farm">-</button>
         <button class="qty-btn qty-plus" data-target="qty-farm">+</button>
@@ -176,8 +181,9 @@
       <td>5,000</td>
       <td class="net">0</td>
     </tr>
-    <tr>
-      <td>Ranch Cows (10)</td>
+    <tr data-acres-per-unit="10">
+      <td>Ranch Cows</td>
+      <td class="acres">0</td>
       <td class="qty-cell ranch-ridge-cell">
         <button class="qty-btn qty-minus" data-target="qty-cows">-</button>
         <button class="qty-btn qty-plus" data-target="qty-cows">+</button>
@@ -210,6 +216,7 @@
     </tr>
     <tr>
       <td>Harvester</td>
+      <td></td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-harvester">-</button>
         <button class="qty-btn qty-plus" data-target="qty-harvester">+</button>
@@ -220,6 +227,7 @@
     </tr>
     <tr>
       <td>Tractor</td>
+      <td></td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-tractor">-</button>
         <button class="qty-btn qty-plus" data-target="qty-tractor">+</button>
@@ -230,12 +238,14 @@
     </tr>
     <tr class="highlight">
       <td>Total Acres</td>
-      <td></td>
-      <td></td>
       <td class="total-acres">0</td>
+      <td></td>
+      <td></td>
+      <td></td>
     </tr>
     <tr class="highlight">
       <td>Net Cash</td>
+      <td></td>
       <td></td>
       <td></td>
       <td class="net-cash">0</td>
@@ -244,16 +254,35 @@
       <td>Net Worth</td>
       <td></td>
       <td></td>
+      <td></td>
       <td class="total-worth">0</td>
     </tr>
     <tr class="highlight">
       <td>Interest</td>
       <td></td>
       <td></td>
+      <td></td>
       <td class="interest">0</td>
     </tr>
   </table>
-  
+
+<div id="quickTransactionButtons" class="mt-4 mb-2 flex flex-col items-center gap-2">
+  <div class="grid grid-cols-5 gap-2">
+    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="500">+500</button>
+    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="1000">+1000</button>
+    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="1500">+1500</button>
+    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="2000">+2000</button>
+    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="3000">+3000</button>
+  </div>
+  <div class="grid grid-cols-5 gap-2">
+    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-500">-500</button>
+    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-1000">-1000</button>
+    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-1500">-1500</button>
+    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-2000">-2000</button>
+    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-3000">-3000</button>
+  </div>
+</div>
+
 <table class="financial-table" id="financialTable">
   <!-- Headers -->
   <tr>
