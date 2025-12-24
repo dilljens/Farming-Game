@@ -761,6 +761,35 @@ document.getElementById('confirmReset').addEventListener('click', function() {
 // Event listener for the cancel button in the modal
 document.getElementById('cancelReset').addEventListener('click', hideModal);
 
+async function resetLeaderboardForAllPlayers() {
+    try {
+        await authReady;
+
+        const querySnapshot = await getDocs(collection(db, 'leaderboard'));
+        const deletePromises = [];
+        querySnapshot.forEach((leaderboardDoc) => {
+            deletePromises.push(deleteDoc(leaderboardDoc.ref));
+        });
+        await Promise.all(deletePromises);
+        console.log('Leaderboard reset for all players');
+        hideModal();
+    } catch (err) {
+        console.error('Error resetting leaderboard: ', err);
+    }
+}
+
+// Clicking the "Reset Game" title inside the modal resets the leaderboard.
+const resetModalTitle = document.getElementById('modal-title');
+if (resetModalTitle) {
+    resetModalTitle.addEventListener('click', resetLeaderboardForAllPlayers);
+    resetModalTitle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            resetLeaderboardForAllPlayers();
+        }
+    });
+}
+
 async function performReset() {
     hideModal();
     

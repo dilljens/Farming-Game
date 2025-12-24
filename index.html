@@ -36,7 +36,7 @@
               <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
                 <div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
                   <div class="mt-3 text-center sm:mt-5">
-                    <h3 class="text-lg font-semibold leading-6 text-gray-900" id="modal-title">Reset Game</h3>
+                    <h3 class="text-lg font-semibold leading-6 text-gray-900 cursor-pointer" id="modal-title" role="button" tabindex="0" title="Reset leaderboard">Reset Game</h3>
                     <div class="mt-2">
                       <p class="text-sm text-gray-500">It's pretty obvious what this button does. You don't really need to read about it.</p>
                     </div>
@@ -58,12 +58,12 @@
                     <table class="max-w-full divide-y divide-gray-200 mt-4" id="leaderboard">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th scope="col" class="py-3.5 pl-4 pr-1 text-center text-sm font-semibold text-gray-900">Username</th>
-                                <th scope="col" class="py-3.5 px-2 text-center text-sm font-semibold text-gray-900">Net Worth</th>
-                              <th scope="col" class="py-3.5 px-2 text-center text-sm font-semibold text-gray-900">Hay</th>
-                              <th scope="col" class="py-3.5 px-2 text-center text-sm font-semibold text-gray-900">Grain</th>
-                              <th scope="col" class="py-3.5 px-2 text-center text-sm font-semibold text-gray-900">Fruit</th>
-                              <th scope="col" class="py-3.5 px-2 text-center text-sm font-semibold text-gray-900">Cows</th>
+                              <th scope="col" class="py-2 pl-4 pr-1 text-center text-xs font-semibold text-gray-900">Username</th>
+                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Net Worth</th>
+                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Hay</th>
+                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Grain</th>
+                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Fruit</th>
+                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Cows</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
@@ -241,13 +241,6 @@
     <th>Loan</th>
     <td class="small-input">
       <input type="number" id="loanInput" placeholder="Enter Loan value" />
-    </td>
-  </tr>
-
-  <!-- Instructions for mobile users -->
-  <tr>
-    <td colspan="4" style="text-align: center; font-size: 12px; color: #666; padding: 5px;">
-      Tap outside the input or press Enter to submit transaction
     </td>
   </tr>
 
