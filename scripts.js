@@ -341,11 +341,22 @@ function sendDataToServer(totalWorth) {
         return;
     }
 
+    const hayQty = parseInt(document.querySelector('.qty-hay')?.textContent || '0', 10) || 0;
+    const grainQty = parseInt(document.querySelector('.qty-grain')?.textContent || '0', 10) || 0;
+    const fruitQty = parseInt(document.querySelector('.qty-fruit')?.textContent || '0', 10) || 0;
+    const farmCowsQty = parseInt(document.querySelector('.qty-farm')?.textContent || '0', 10) || 0;
+    const ranchCowsQty = parseInt(document.querySelector('.qty-cows')?.textContent || '0', 10) || 0;
+    const cowsQty = farmCowsQty + ranchCowsQty;
+
     // Save to Firestore
     const userDocRef = doc(db, 'leaderboard', username);
     setDoc(userDocRef, {
         username: username,
         networth: totalWorth,
+        hay: hayQty,
+        grain: grainQty,
+        fruit: fruitQty,
+        cows: cowsQty,
         updatedAt: new Date()
     })
     .then(() => {
@@ -378,9 +389,29 @@ function updateLeaderboardTable(data) {
         networthCell.textContent = parseFloat(entry.networth).toLocaleString('en-US'); // Format the number with commas
         networthCell.className = 'text-center';
 
+        const hayCell = document.createElement('td');
+        hayCell.textContent = (entry.hay ?? 0).toString();
+        hayCell.className = 'text-center';
+
+        const grainCell = document.createElement('td');
+        grainCell.textContent = (entry.grain ?? 0).toString();
+        grainCell.className = 'text-center';
+
+        const fruitCell = document.createElement('td');
+        fruitCell.textContent = (entry.fruit ?? 0).toString();
+        fruitCell.className = 'text-center';
+
+        const cowsCell = document.createElement('td');
+        cowsCell.textContent = (entry.cows ?? 0).toString();
+        cowsCell.className = 'text-center';
+
         // Append cells to the row
         row.appendChild(usernameCell);
         row.appendChild(networthCell);
+        row.appendChild(hayCell);
+        row.appendChild(grainCell);
+        row.appendChild(fruitCell);
+        row.appendChild(cowsCell);
 
         // Append the row to the table body
         tbody.appendChild(row);
@@ -411,18 +442,54 @@ authReady
     .catch((err) => console.error('Auth wait failed:', err));
 
 
-function makeEditableCellsExitOnEnter() {
-    const editableCells = document.querySelectorAll('td.editable');
+function getCurrentTotalWorthFromDOM() {
+    const totalWorthCell = document.querySelector('.total-worth');
+    if (!totalWorthCell) return null;
+    return parseFloat(totalWorthCell.textContent.replace(/,/g, '')) || 0;
+}
 
-    editableCells.forEach(cell => {
-        cell.addEventListener('keydown', (e) => {
+function commitUsernameEdit() {
+    const usernameCell = document.getElementById('editableUsername');
+    if (!usernameCell) return;
+
+    const trimmed = usernameCell.innerText.trim();
+    if (trimmed === '') {
+        usernameCell.innerText = 'Enter name';
+        saveQuantitiesToLocalStorage();
+        return;
+    }
+
+    saveQuantitiesToLocalStorage();
+
+    const totalWorth = getCurrentTotalWorthFromDOM();
+    if (totalWorth !== null) scheduleLeaderboardSave(totalWorth);
+}
+
+
+function makeEditableCellsExitOnEnter() {
+    const editableElements = document.querySelectorAll('td.editable, span.editable');
+
+    editableElements.forEach((el) => {
+        if (el.dataset && el.dataset.exitOnEnterBound === '1') return;
+        if (el.dataset) el.dataset.exitOnEnterBound = '1';
+
+        const commit = () => {
+            // Qty / other editable cells
+            calculateNet();
+            populateRollTable();
+            saveQuantitiesToLocalStorage();
+        };
+
+        el.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault(); // Prevent default action (newline or navigation)
-                cell.blur(); // Unfocus the cell, exiting edit mode
-                calculateNet(); // Recalculate net values if needed
-                updateTotalWorth(true); // Recalculate total worth if needed
+                e.preventDefault();
+                el.blur();
+                commit();
             }
         });
+
+        // "Tap outside" / click away
+        el.addEventListener('blur', commit);
     });
 }
 
@@ -772,24 +839,27 @@ document.querySelectorAll('.editable').forEach(cell => {
 document.addEventListener('DOMContentLoaded', loadFromLocalStorage);
 
 
-   
+const editableUsernameEl = document.getElementById('editableUsername');
+if (editableUsernameEl && editableUsernameEl.dataset.usernameHandlersBound !== '1') {
+        editableUsernameEl.dataset.usernameHandlersBound = '1';
 
-document.getElementById('editableUsername').addEventListener('focus', function() {
-    const defaultText = 'Enter name';
-    if (this.innerText === defaultText) {
-      // Option 1: Clear the text
-      // this.innerText = '';
-  
-      // Option 2: Highlight the text
-      window.getSelection().selectAllChildren(this);
-    }
-  });
-  
-  document.getElementById('editableUsername').addEventListener('blur', function() {
-    if (this.innerText.trim() === '') {
-      this.innerText = 'Enter name';
-    }
-  });
+        editableUsernameEl.addEventListener('focus', function() {
+                const defaultText = 'Enter name';
+                if (this.innerText === defaultText) {
+                        window.getSelection().selectAllChildren(this);
+                }
+        });
+
+        editableUsernameEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                        e.preventDefault();
+                        editableUsernameEl.blur();
+                        commitUsernameEdit();
+                }
+        });
+
+        editableUsernameEl.addEventListener('blur', commitUsernameEdit);
+}
 
 window.addEventListener('DOMContentLoaded', (event) => {
     // Attach event listeners to quantity cells
