@@ -1052,13 +1052,13 @@ window.addEventListener('DOMContentLoaded', (event) => {
     calculateNet(); // Initial calculation on page load
     //console.log(document.getElementById('cashInput'));
     makeEditableCellsExitOnEnter();
-    const cashUndoButton = document.getElementById('cashUndoButton');
-    if (cashUndoButton) {
-        cashUndoButton.addEventListener('click', undoLastCashTransaction);
+    const cashUndoCell = document.getElementById('cashUndoCell');
+    if (cashUndoCell) {
+        cashUndoCell.addEventListener('click', undoLastCashTransaction);
     }
-    const loanUndoButton = document.getElementById('loanUndoButton');
-    if (loanUndoButton) {
-        loanUndoButton.addEventListener('click', undoLastLoanTransaction);
+    const loanUndoCell = document.getElementById('loanUndoCell');
+    if (loanUndoCell) {
+        loanUndoCell.addEventListener('click', undoLastLoanTransaction);
     }
     const cashInput = document.getElementById('cashInput');
     if (cashInput) {
