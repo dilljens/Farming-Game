@@ -701,9 +701,6 @@ function loadFromLocalStorage() {
         });
         
         // Update the transaction lists
-        // This assumes you have a function to update the transaction list on the page
-        clearTransactionsExceptFirst('cash-transaction');
-        clearTransactionsExceptFirst('loan-transaction');
         updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
         populateRollTable();
         const usernameCell = document.getElementById('editableUsername');
@@ -726,8 +723,6 @@ function loadFromLocalStorage() {
         document.querySelector('.qty-harvester').textContent = data.qty.Harvester.toString();
         document.querySelector('.qty-tractor').textContent = data.qty.Tractor.toString();
 
-        clearTransactionsExceptFirst('cash-transaction');
-        clearTransactionsExceptFirst('loan-transaction');
         updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
 
         const usernameCell = document.getElementById('editableUsername');
@@ -757,10 +752,9 @@ function updateTransactionLists(transactionsData) {
         limitedTransactions.forEach((transactionValue, index) => {
             // Table layout in index.html:
             // Row 0 = cash/loan inputs
-            // Row 1 = instructions
-            // Row 2 = Transaction / Total headers
-            // Row 3 = first transaction row
-            let row = table.rows[index + 3];
+            // Row 1 = Transaction / Total headers
+            // Row 2 = first transaction row
+            let row = table.rows[index + 2];
             if (!row) {
                 row = table.insertRow();
                 createTransactionCell(row, 'cash-transaction', '', true);
@@ -784,8 +778,8 @@ function updateTransactionLists(transactionsData) {
     updateSingleTransactionList(transactionsData.loan, 'loan-transaction');
 
     // Remove any rows beyond the first 10 transaction rows
-    // Row 0 = headers, Row 1 = instructions, Row 2 = transaction headers, Row 3 = first transaction
-    const maxRows = 13; // 3 header rows + 10 transaction rows
+    // Row 0 = cash/loan inputs, Row 1 = transaction headers, Row 2 = first transaction
+    const maxRows = 12; // 2 header rows + 10 transaction rows
     while (table.rows.length > maxRows) {
         table.deleteRow(table.rows.length - 1);
     }
