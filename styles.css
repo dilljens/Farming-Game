@@ -110,8 +110,22 @@ input[type="number"] {
     background-color: #cccccc;
 }
 
-.roll-table td.roll-clickable {
+.roll-table button.roll-cell-button {
+    width: 100%;
+    display: block;
+    border: 0;
+    background-color: #e0e0e0;
     cursor: pointer;
+    padding: 2px;
+    font: inherit;
+}
+
+.roll-table button.roll-cell-button:hover {
+    background-color: #d0d0d0;
+}
+
+.roll-table button.roll-cell-button:active {
+    background-color: #c0c0c0;
 }
 .editable {
     cursor: text;

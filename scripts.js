@@ -136,6 +136,20 @@ function handleTransaction(inputId, transactionClass, totalClass) {
     }
 }
 
+function addCashTransactionValue(amount) {
+    if (!data.transactions) data.transactions = { cash: [], loan: [] };
+    if (!Array.isArray(data.transactions.cash)) data.transactions.cash = [];
+    if (!Array.isArray(data.transactions.loan)) data.transactions.loan = [];
+
+    const numericValue = parseFloat(String(amount).replace(/,/g, ''));
+    if (!Number.isFinite(numericValue)) return;
+
+    data.transactions.cash.unshift(String(numericValue));
+    updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
+    updateTotals();
+    saveQuantitiesToLocalStorage();
+}
+
 function shiftAndInsertTransaction(inputId, transactionClass) {
     // Get the value from the input
     const inputElement = document.getElementById(inputId);
@@ -604,7 +618,20 @@ function populateRollTable() {
       // Calculate and populate the cells for each roll
       baseValues[assetType].forEach((value, rollIndex) => {
                 const profit = quantity * value * multiplier; // Calculate the profit
-        row.cells[rollIndex + 1].textContent = numberWithCommasAndDecimals(profit); // Populate the cell with the formatted profit
+                const payoutCell = row.cells[rollIndex + 1];
+                if (!payoutCell) return;
+
+                // Make each payout cell contain a real button so it behaves like a button on mobile.
+                let payoutButton = payoutCell.querySelector('button.roll-cell-button');
+                if (!payoutButton) {
+                        payoutCell.textContent = '';
+                        payoutButton = document.createElement('button');
+                        payoutButton.type = 'button';
+                        payoutButton.className = 'roll-cell-button';
+                        payoutCell.appendChild(payoutButton);
+                }
+
+                payoutButton.textContent = numberWithCommasAndDecimals(profit); // Populate the button with formatted profit
       });
     });
   }
@@ -1011,12 +1038,24 @@ window.addEventListener('DOMContentLoaded', (event) => {
             });
         });
 
-        // Make roll table payout cells clickable to add as cash transactions.
-        const rollPayoutCells = document.querySelectorAll('.roll-table tr:not(:first-child) td:not(:first-child)');
-        rollPayoutCells.forEach((cell) => {
-            cell.classList.add('roll-clickable');
-            cell.addEventListener('click', () => {
-                const text = (cell.textContent || '').trim();
+        // Make roll table payout buttons clickable to add as cash transactions.
+        // Use event delegation so it keeps working even if buttons are created later.
+        const rollTable = document.querySelector('.roll-table');
+        if (rollTable && rollTable.dataset.rollClickBound !== '1') {
+            rollTable.dataset.rollClickBound = '1';
+            rollTable.addEventListener('click', (e) => {
+                let btn = e.target;
+                
+                // Check if the clicked element is a button or inside a button
+                if (btn.tagName !== 'BUTTON') {
+                    btn = btn.closest('button.roll-cell-button');
+                }
+                
+                if (!btn || !btn.classList.contains('roll-cell-button')) {
+                    return;
+                }
+
+                const text = (btn.textContent || '').trim();
                 if (!text) return;
 
                 const numericText = text.replace(/,/g, '');
@@ -1026,10 +1065,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 const ok = window.confirm(`Add ${text} to Cash transactions?`);
                 if (!ok) return;
 
-                cashInput.value = numericText;
-                handleTransaction('cashInput', 'cash-transaction', 'cash-total');
+                addCashTransactionValue(value);
             });
-        });
+        }
 
         cashInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
