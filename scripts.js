@@ -1011,6 +1011,26 @@ window.addEventListener('DOMContentLoaded', (event) => {
             });
         });
 
+        // Make roll table payout cells clickable to add as cash transactions.
+        const rollPayoutCells = document.querySelectorAll('.roll-table tr:not(:first-child) td:not(:first-child)');
+        rollPayoutCells.forEach((cell) => {
+            cell.classList.add('roll-clickable');
+            cell.addEventListener('click', () => {
+                const text = (cell.textContent || '').trim();
+                if (!text) return;
+
+                const numericText = text.replace(/,/g, '');
+                const value = parseFloat(numericText);
+                if (!Number.isFinite(value)) return;
+
+                const ok = window.confirm(`Add ${text} to Cash transactions?`);
+                if (!ok) return;
+
+                cashInput.value = numericText;
+                handleTransaction('cashInput', 'cash-transaction', 'cash-total');
+            });
+        });
+
         cashInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 //console.log('Enter pressed on cashInput');
