@@ -1,3 +1,51 @@
+// Firebase imports (CDN ESM modules)
+// Note: Browsers can't resolve bare imports like "firebase/app" without a bundler.
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyAtqaz8FSpuOvvw5fTNisHXlJQ0cdVebfk",
+  authDomain: "farming-game-dc69d.firebaseapp.com",
+  projectId: "farming-game-dc69d",
+  storageBucket: "farming-game-dc69d.firebasestorage.app",
+  messagingSenderId: "66379455382",
+  appId: "1:66379455382:web:8aacd4af449190a32f1bb7",
+  measurementId: "G-KKMBMM437Z"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// Wait for auth before doing any Firestore reads.
+let resolveAuthReady;
+const authReady = new Promise((resolve) => {
+    resolveAuthReady = resolve;
+});
+onAuthStateChanged(auth, (user) => {
+    if (user) resolveAuthReady(user);
+});
+
+// Authenticate anonymously
+signInAnonymously(auth)
+  .then(() => {
+    console.log('Signed in anonymously');
+  })
+  .catch((error) => {
+    console.error('Anonymous sign-in failed:', error);
+  });
+
+let leaderboardSaveTimer = null;
+function scheduleLeaderboardSave(totalWorth) {
+        if (leaderboardSaveTimer) clearTimeout(leaderboardSaveTimer);
+        leaderboardSaveTimer = setTimeout(() => {
+                sendDataToServer(totalWorth);
+        }, 500);
+}
+
 function calculateNet() {
     //console.log('Calculating net values...');
     const rows = document.querySelectorAll('#spreadsheet tr');
@@ -21,7 +69,7 @@ function calculateNet() {
     });
 
     updateTotalAcres(); // Update total acres
-    updateTotalWorth(false); // Update the total worth after net values are calculated
+    updateTotalWorth(true); // Update the total worth after net values are calculated (debounced save)
 }
 
 function handleTransaction(inputId, transactionClass, totalClass) {
@@ -272,7 +320,7 @@ function updateTotalWorth(sendData) {
     // if (totalWorthCell) totalWorthCell.textContent = totalWorth.toFixed(2); // Format to 2 decimal places
     if (totalWorthCell) totalWorthCell.textContent = numberWithCommasAndDecimals(totalWorth);
     // Send the username and total worth to the server
-    if (sendData) sendDataToServer(totalWorth);
+    if (sendData) scheduleLeaderboardSave(totalWorth);
 }
 
 function sendDataToServer(totalWorth) {
@@ -286,30 +334,26 @@ function sendDataToServer(totalWorth) {
         console.log('Invalid username, not sending data');
         return;
     }
-    let apiUrl;
-    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-        apiUrl = 'http://localhost:3000/api/addUser';
-    } else {
-        apiUrl = 'https://farming-game-backend-withered-meadow-3014.fly.dev/api/addUser';
+
+    // Ensure user is authenticated
+    if (!auth.currentUser) {
+        console.log('User not authenticated, skipping save');
+        return;
     }
 
-    fetch(apiUrl, {
-    
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username: username, networth: totalWorth }),
+    // Save to Firestore
+    const userDocRef = doc(db, 'leaderboard', username);
+    setDoc(userDocRef, {
+        username: username,
+        networth: totalWorth,
+        updatedAt: new Date()
     })
-    .then(response => {
-    console.log('Server response:', response);
-    if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-    return response.json();
+    .then(() => {
+        console.log('Data saved to Firestore');
     })
-    .then(data => console.log('Success:', data))
-    .catch(error => console.error('Error:', error));
+    .catch((error) => {
+        console.error('Error saving to Firestore:', error);
+    });
       
 }
 
@@ -343,43 +387,28 @@ function updateLeaderboardTable(data) {
     });
 }
 
-  // Function to start a WebSocket connection
-function startWebSocket() {
-    // Replace with your server's WebSocket URL
-    let wsUrl;
-    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-        wsUrl = 'ws://localhost:3000';
-    } else {
-        wsUrl = 'wss://farming-game-backend-withered-meadow-3014.fly.dev';
-    }
-    const ws = new WebSocket(wsUrl);
+// Function to start Firestore real-time listener
+function startFirestoreListener() {
+    // Listen for real-time updates to the leaderboard
+    const q = query(collection(db, 'leaderboard'), orderBy('networth', 'desc'), limit(10));
     
-
-    ws.onopen = function() {
-        console.log('WebSocket connection established');
-    };
-
-    ws.onmessage = function(event) {
-        // Parse the incoming message
-        const leaderboardData = JSON.parse(event.data);
-
+    onSnapshot(q, (querySnapshot) => {
+        const leaderboardData = [];
+        querySnapshot.forEach((doc) => {
+            leaderboardData.push(doc.data());
+        });
+        
         // Update your leaderboard UI
         updateLeaderboardTable(leaderboardData);
-    };
-
-    ws.onclose = function() {
-        console.log('WebSocket connection closed');
-        // You may want to attempt to reconnect here
-    };
-
-    ws.onerror = function(error) {
-        console.error('WebSocket error:', error);
-        // Handle errors appropriately
-    };
+    }, (error) => {
+        console.error('Firestore listener error:', error);
+    });
 }
 
-// Start the WebSocket connection when the page loads
-startWebSocket();
+// Start the Firestore listener when auth is ready
+authReady
+    .then(() => startFirestoreListener())
+    .catch((err) => console.error('Auth wait failed:', err));
 
 
 function makeEditableCellsExitOnEnter() {
@@ -639,19 +668,6 @@ function updateTransactionLists(transactionsData) {
     }
 }
 
-// Ensure createTransactionCell function is defined to handle the creation of cells correctly
-
-
-
-function createTransactionCell(row, className, value = '', isEditable = false) {
-    const cell = row.insertCell();
-    cell.className = className;
-    cell.textContent = value;
-    if (isEditable) {
-        makeCellEditable(cell);
-    }
-}
-
 // Make sure to call updateTransactionList whenever you load the data from localStorage
 // For example:
 loadFromLocalStorage();
@@ -710,25 +726,8 @@ async function performReset() {
     if (firstCashCell) firstCashCell.textContent = '5000';
     if (firstLoanCell) firstLoanCell.textContent = '5000';
 
-    try {
-        let resetApiUrl;
-        if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-            resetApiUrl = 'http://localhost:3000/api/resetLeaderboard';
-        } else {
-            resetApiUrl = 'https://farming-game-backend-withered-meadow-3014.fly.dev/api/resetLeaderboard';
-        }
-
-        const response = await fetch(resetApiUrl, { method: 'POST' });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-    
-        const data = await response.json();
-        console.log(data.message);
-    } catch (err) {
-        console.error('Error resetting leaderboard: ', err);
-    }
+    // Note: Game reset should NOT wipe the global leaderboard.
+    // After resetting local state, the normal net worth save flow will update only this player's entry.
     
     // Save the reset state to localStorage
     localStorage.setItem('farmingGameData', JSON.stringify(baseState));
@@ -807,31 +806,37 @@ window.addEventListener('DOMContentLoaded', (event) => {
     //console.log(document.getElementById('cashInput'));
     makeEditableCellsExitOnEnter();
     const cashInput = document.getElementById('cashInput');
-    cashInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            //console.log('Enter pressed on cashInput');
-            handleTransaction('cashInput', 'cash-transaction', 'cash-total');
-            cashInput.blur();
-            e.preventDefault();
-        }
-    });
-    cashInput.addEventListener('blur', () => {
-        if (cashInput.value.trim() !== '') {
-            handleTransaction('cashInput', 'cash-transaction', 'cash-total');
-        }
-    });
-    loanInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-          handleTransaction('loanInput', 'loan-transaction', 'loan-total');
-          loanInput.blur();
-          e.preventDefault();
-        }
-    });
-    loanInput.addEventListener('blur', () => {
-        if (loanInput.value.trim() !== '') {
-            handleTransaction('loanInput', 'loan-transaction', 'loan-total');
-        }
-    });
+    if (cashInput) {
+        cashInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                //console.log('Enter pressed on cashInput');
+                handleTransaction('cashInput', 'cash-transaction', 'cash-total');
+                cashInput.blur();
+                e.preventDefault();
+            }
+        });
+        cashInput.addEventListener('blur', () => {
+            if (cashInput.value.trim() !== '') {
+                handleTransaction('cashInput', 'cash-transaction', 'cash-total');
+            }
+        });
+    }
+
+    const loanInput = document.getElementById('loanInput');
+    if (loanInput) {
+        loanInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                handleTransaction('loanInput', 'loan-transaction', 'loan-total');
+                loanInput.blur();
+                e.preventDefault();
+            }
+        });
+        loanInput.addEventListener('blur', () => {
+            if (loanInput.value.trim() !== '') {
+                handleTransaction('loanInput', 'loan-transaction', 'loan-total');
+            }
+        });
+    }
     const transactionCells = document.querySelectorAll('.cash-transaction, .loan-transaction');
     transactionCells.forEach(makeCellEditable);
 
@@ -857,9 +862,5 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
     // Initial total calculation
     updateTotals();
-    // Call this function after the page loads
-    document.addEventListener('DOMContentLoaded', (event) => {
-    makeEditableCellsExitOnEnter();
-});
     // If you have a loanInput similar to cashInput, initialize it here as well.
 });
