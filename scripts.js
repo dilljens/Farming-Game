@@ -150,6 +150,32 @@ function addCashTransactionValue(amount) {
     saveQuantitiesToLocalStorage();
 }
 
+function undoLastCashTransaction() {
+    if (!data.transactions || !Array.isArray(data.transactions.cash) || data.transactions.cash.length === 0) {
+        console.log('No cash transactions to undo');
+        return;
+    }
+
+    const removed = data.transactions.cash.shift();
+    updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
+    updateTotals();
+    saveQuantitiesToLocalStorage();
+    console.log(`Undid cash transaction ${removed}`);
+}
+
+function undoLastLoanTransaction() {
+    if (!data.transactions || !Array.isArray(data.transactions.loan) || data.transactions.loan.length === 0) {
+        console.log('No loan transactions to undo');
+        return;
+    }
+
+    const removed = data.transactions.loan.shift();
+    updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
+    updateTotals();
+    saveQuantitiesToLocalStorage();
+    console.log(`Undid loan transaction ${removed}`);
+}
+
 function shiftAndInsertTransaction(inputId, transactionClass) {
     // Get the value from the input
     const inputElement = document.getElementById(inputId);
@@ -1026,6 +1052,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
     calculateNet(); // Initial calculation on page load
     //console.log(document.getElementById('cashInput'));
     makeEditableCellsExitOnEnter();
+    const cashUndoButton = document.getElementById('cashUndoButton');
+    if (cashUndoButton) {
+        cashUndoButton.addEventListener('click', undoLastCashTransaction);
+    }
+    const loanUndoButton = document.getElementById('loanUndoButton');
+    if (loanUndoButton) {
+        loanUndoButton.addEventListener('click', undoLastLoanTransaction);
+    }
     const cashInput = document.getElementById('cashInput');
     if (cashInput) {
         const quickTxButtons = document.querySelectorAll('[data-quick-transaction-value]');
@@ -1055,17 +1089,22 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     return;
                 }
 
+                // Debug logging to trace roll button clicks
+                console.log('Roll button clicked');
+
                 const text = (btn.textContent || '').trim();
                 if (!text) return;
 
                 const numericText = text.replace(/,/g, '');
                 const value = parseFloat(numericText);
-                if (!Number.isFinite(value)) return;
+                if (!Number.isFinite(value)) {
+                    console.warn('Roll button value not finite', { text, numericText });
+                    return;
+                }
 
-                const ok = window.confirm(`Add ${text} to Cash transactions?`);
-                if (!ok) return;
-
+                // Sandbox preview blocks confirm(), so just add automatically.
                 addCashTransactionValue(value);
+                console.log(`Roll payout ${text} added to cash transactions`);
             });
         }
 
