@@ -5,7 +5,8 @@ body {
 }
 
 table {
-    width: 600px;
+    width: 100%;
+    max-width: 600px;
     margin: 10px auto;
     border-collapse: collapse;
 }
@@ -53,9 +54,47 @@ input[type="number"] {
 
 .tables-container {
     display: flex;
-    flex-wrap: wrap; /* Allow tables to wrap on smaller screens */
-    justify-content: center;
-    gap: 2px;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.leaderboard-wrapper {
+    width: 100%;
+    max-width: 600px;
+    margin: 10px auto;
+    text-align: center;
+}
+
+#leaderboard {
+    width: 100%;
+    margin: 10px auto;
+    table-layout: fixed;
+}
+
+#leaderboard th,
+#leaderboard td {
+    padding: 1px 2px;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Column sizing to keep cells compact (percentages so it scales on mobile) */
+#leaderboard th:nth-child(1),
+#leaderboard td:nth-child(1) {
+    width: 28%;
+}
+
+#leaderboard th:nth-child(2),
+#leaderboard td:nth-child(2) {
+    width: 18%;
+}
+
+#leaderboard th:nth-child(n+3),
+#leaderboard td:nth-child(n+3) {
+    width: 10.8%;
 }
 
 /* .roll-table th, .roll-table td {
@@ -127,7 +166,7 @@ input[type="number"] {
         font-size: 2vw; /* Adjust font size for smaller screens */
     }
     table {
-        width: 95%;
+        width: 100%;
     }
     th, td {
         padding: 2px; /* Reduce padding for smaller screens */
@@ -151,5 +190,10 @@ input[type="number"] {
     .roll-table, .financial-table {
         margin-top: 10px; /* Remove additional margin on mobile */
         margin-bottom: 5px; /* Add some space below the tables */
+    }
+
+    .tables-container {
+        padding: 0 8px;
+        box-sizing: border-box;
     }
 }

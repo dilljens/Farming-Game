@@ -50,36 +50,28 @@
             </div>
           </div>
 
-        
-        <div class="px-4 sm:px-6 lg:px-8 mt-8">
-            <div class="flow-root">
-                <div class="inline-block min-w-full align-middle text-center">
-                    <h2 class="text-xl font-semibold leading-tight text-gray-800">Leaderboard</h2>
-                    <table class="max-w-full divide-y divide-gray-200 mt-4" id="leaderboard">
-                        <thead class="bg-gray-50">
-                            <tr>
-                              <th scope="col" class="py-2 pl-4 pr-1 text-center text-xs font-semibold text-gray-900">Username</th>
-                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Net Worth</th>
-                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Debt</th>
-                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Hay</th>
-                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Grain</th>
-                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Fruit</th>
-                              <th scope="col" class="py-2 px-2 text-center text-xs font-semibold text-gray-900">Cows</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <!-- Leaderboard rows will be added here via JavaScript -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-      
 
     <div class="tables-container">
-      <!-- Your existing financial table -->
-      
-      <!-- New Roll table based on the image provided -->
+      <div class="leaderboard-wrapper">
+        <h2 class="text-xl font-semibold leading-tight text-gray-800">Leaderboard</h2>
+        <table class="divide-y divide-gray-200 mt-4" id="leaderboard">
+            <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col">Username</th>
+                  <th scope="col">Net Worth</th>
+                  <th scope="col">Debt</th>
+                  <th scope="col">Hay</th>
+                  <th scope="col">Grain</th>
+                  <th scope="col">Fruit</th>
+                  <th scope="col">Cows</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                <!-- Leaderboard rows will be added here via JavaScript -->
+            </tbody>
+        </table>
+      </div>
+
     <table class="roll-table">
       <tr>
         <th>Roll</th>
@@ -127,7 +119,6 @@
         <td>0</td>
       </tr>
     </table>
-  </div>
 
   <table id="spreadsheet">
     <tr>
@@ -315,6 +306,8 @@
 </tr>
 
 </table>
+
+</div>
 
 <script type="module" src="scripts.js"></script>
 
