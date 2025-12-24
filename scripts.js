@@ -51,19 +51,34 @@ function calculateNet() {
     const rows = document.querySelectorAll('#spreadsheet tr');
 
     rows.forEach((row, index) => {
-        if (index > 0 && index < rows.length - 4) {
-            const qtyCell = row.cells[1];
-            const costCell = row.cells[2];
-            const netCell = row.cells[3];
+        if (index === 0) return;
+        if (row.classList.contains('highlight')) return;
 
-            const qtyValueEl = qtyCell ? qtyCell.querySelector('span.editable') : null;
+        const netValueCell = row.querySelector('.net');
+        if (!netValueCell) return;
 
-            const qty = parseFloat((qtyValueEl ? qtyValueEl.textContent : qtyCell.innerText).replace(/,/g, '')) || 0;
-            const cost = parseFloat(costCell.innerText.replace(/,/g, '')) || 0;
-            const net = qty * cost;
+        // Columns: 0 Assets, 1 Acres, 2 Qty, 3 Cost, 4 Net
+        const acresCell = row.cells[1];
+        const qtyCell = row.cells[2];
+        const costCell = row.cells[3];
+        const netCell = row.cells[4];
 
-            if (netCell) {
-                netCell.textContent = numberWithCommasAndDecimals(net);
+        if (!qtyCell || !costCell || !netCell) return;
+
+        const qtyValueEl = qtyCell.querySelector('span.editable');
+        const qtyRaw = (qtyValueEl ? qtyValueEl.textContent : qtyCell.innerText).replace(/,/g, '').trim();
+        const qty = parseFloat(qtyRaw) || 0;
+        const cost = parseFloat((costCell.innerText || '').replace(/,/g, '').trim()) || 0;
+        const net = qty * cost;
+
+        netCell.textContent = numberWithCommasAndDecimals(net);
+
+        const acresPerUnit = parseFloat(row.getAttribute('data-acres-per-unit') || '0') || 0;
+        if (acresCell) {
+            if (acresPerUnit > 0) {
+                acresCell.textContent = numberWithCommasAndDecimals(qty * acresPerUnit);
+            } else {
+                acresCell.textContent = '';
             }
         }
     });
@@ -251,13 +266,28 @@ function updateTotals() {
 }
 
 function updateTotalAcres() {
-    // Calculate total acres based on Hay (10), Grain (10), and Fruit (5)
-    const hayQty = parseInt(document.querySelector('.qty-hay').textContent) || 0;
-    const grainQty = parseInt(document.querySelector('.qty-grain').textContent) || 0;
-    const fruitQty = parseInt(document.querySelector('.qty-fruit').textContent) || 0;
-    
-    const totalAcres = (hayQty * 10) + (grainQty * 10) + (fruitQty * 5);
-    
+    const rows = document.querySelectorAll('#spreadsheet tr');
+    let totalAcres = 0;
+
+    rows.forEach((row, index) => {
+        if (index === 0) return;
+        if (row.classList.contains('highlight')) return;
+
+        const netCell = row.querySelector('.net');
+        if (!netCell) return;
+
+        const acresPerUnit = parseFloat(row.getAttribute('data-acres-per-unit') || '0') || 0;
+        if (!(acresPerUnit > 0)) return;
+
+        const qtyCell = row.cells[2];
+        if (!qtyCell) return;
+        const qtyValueEl = qtyCell.querySelector('span.editable');
+        const qtyRaw = (qtyValueEl ? qtyValueEl.textContent : qtyCell.innerText).replace(/,/g, '').trim();
+        const qty = parseFloat(qtyRaw) || 0;
+
+        totalAcres += qty * acresPerUnit;
+    });
+
     const totalAcresCell = document.querySelector('.total-acres');
     if (totalAcresCell) {
         totalAcresCell.textContent = numberWithCommasAndDecimals(totalAcres);
