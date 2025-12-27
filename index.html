@@ -72,6 +72,7 @@
         </table>
       </div>
 
+    <div class="roll-help text-gray-600 text-center">Tap the names of the asset to 1/2x, 2x, or return to normal</div>
     <table class="roll-table">
       <tr>
         <th>Roll</th>
@@ -252,7 +253,9 @@
       <td>Interest</td>
       <td></td>
       <td></td>
-      <td></td>
+      <td>
+        <button id="payInterestBtn" type="button" class="buy-btn">Pay Interest</button>
+      </td>
       <td class="interest">0</td>
     </tr>
   </table>
@@ -277,11 +280,17 @@
 <table class="financial-table" id="financialTable">
   <!-- Headers -->
   <tr>
-    <th id="cashUndoCell" class="font-semibold cursor-pointer select-none">Cash</th>
+    <th id="cashUndoCell" class="font-semibold cursor-pointer select-none">
+      Cash
+      <div class="undo-hint text-gray-400 font-normal">tap to undo last transaction</div>
+    </th>
     <td class="small-input">
       <input type="number" id="cashInput" placeholder="Enter Cash value" />
     </td>
-    <th id="loanUndoCell" class="font-semibold cursor-pointer select-none">Loan</th>
+    <th id="loanUndoCell" class="font-semibold cursor-pointer select-none">
+      Loan
+      <div class="undo-hint text-gray-400 font-normal">tap to undo last transaction</div>
+    </th>
     <td class="small-input">
       <input type="number" id="loanInput" placeholder="Enter Loan value" />
     </td>

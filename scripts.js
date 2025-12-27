@@ -285,6 +285,48 @@ function createTransactionCell(row, className, value = '', isEditable = false) {
     }
 }
 
+function getCurrentCashTotal() {
+    if (data && data.transactions && Array.isArray(data.transactions.cash)) {
+        return data.transactions.cash.reduce((sum, val) => sum + (parseFloat(String(val).replace(/,/g, '')) || 0), 0);
+    }
+    const cashTotalCell = document.querySelector('.cash-total');
+    return cashTotalCell ? (parseFloat(String(cashTotalCell.textContent).replace(/,/g, '')) || 0) : 0;
+}
+
+function getCurrentInterestValue() {
+    const interestCell = document.querySelector('.interest');
+    return interestCell ? (parseFloat(String(interestCell.textContent).replace(/,/g, '')) || 0) : 0;
+}
+
+function setButtonDisabled(button, disabled) {
+    if (!button) return;
+    button.disabled = !!disabled;
+    button.classList.toggle('is-disabled', !!disabled);
+    button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+}
+
+function updateActionButtonStates() {
+    const cashTotal = getCurrentCashTotal();
+
+    // Pay Interest
+    const payInterestBtn = document.getElementById('payInterestBtn');
+    if (payInterestBtn) {
+        const interest = getCurrentInterestValue();
+        const disabled = !(interest > 0) || cashTotal < interest;
+        setButtonDisabled(payInterestBtn, disabled);
+    }
+
+    // Buy buttons (minimum 20% down)
+    document.querySelectorAll('button.buy-btn[data-asset]').forEach((btn) => {
+        const row = btn.closest('tr');
+        const costCell = row && row.cells ? row.cells[3] : null;
+        const cost = costCell ? (parseFloat(String(costCell.textContent).replace(/,/g, '')) || 0) : 0;
+        const requiredDown = Math.round(cost * 0.2);
+        const disabled = requiredDown > 0 && cashTotal < requiredDown;
+        setButtonDisabled(btn, disabled);
+    });
+}
+
 function updateTotals() {
     // Calculate totals from global data object, not localStorage
     // This ensures all entries contribute to the total, including newly added ones
@@ -317,6 +359,9 @@ function updateTotals() {
     updateNetCash();
     updateTotalWorth(true);
     updateInterest();
+
+    // Keep UI buttons in sync with affordability
+    updateActionButtonStates();
 }
 
 function updateTotalAcres() {
@@ -1161,6 +1206,31 @@ window.addEventListener('DOMContentLoaded', (event) => {
     const transactionCells = document.querySelectorAll('.cash-transaction, .loan-transaction');
     transactionCells.forEach(makeCellEditable);
 
+    const payInterestBtn = document.getElementById('payInterestBtn');
+    if (payInterestBtn) {
+        payInterestBtn.addEventListener('click', () => {
+            // Ensure interest/cash totals are fresh
+            updateTotals();
+
+            const interest = getCurrentInterestValue();
+            if (!(interest > 0)) return;
+
+            const currentCash = getCurrentCashTotal();
+            if (currentCash < interest) {
+                alert(
+                    'Insufficient cash to pay interest. You need $' +
+                        interest.toLocaleString() +
+                        ' but only have $' +
+                        currentCash.toLocaleString() +
+                        '.'
+                );
+                return;
+            }
+
+            addCashTransactionValue(-interest);
+        });
+    }
+
     // Add event listeners for quantity +/- buttons
     document.querySelectorAll('.qty-btn').forEach(button => {
         button.addEventListener('click', function() {
@@ -1317,9 +1387,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const loanAmount = Math.round(currentTotalCost - downPayment);
 
         // Check if user has enough cash for down payment
-        const cashTotals = document.querySelectorAll('.cash-total');
-        const lastCashTotal = cashTotals[cashTotals.length - 1];
-        const currentCash = parseFloat(lastCashTotal.textContent.replace(/,/g, '')) || 0;
+        updateTotals();
+        const currentCash = getCurrentCashTotal();
         if (currentCash < downPayment) {
             alert('Insufficient cash for down payment. You need $' + downPayment.toLocaleString() + ' but only have $' + currentCash.toLocaleString() + '.');
             return;

@@ -231,6 +231,12 @@ input[type="number"] {
     background-color: #45a049;
 }
 
+.buy-btn.is-disabled {
+    opacity: 0.45;
+    filter: grayscale(1);
+    cursor: not-allowed;
+}
+
 .asset-cell {
     text-align: left;
 }
@@ -264,4 +270,16 @@ input[type="range"]::-moz-range-thumb {
 
 #ranchRidgeMenu {
     text-align: left;
+}
+
+.roll-help {
+    font-size: 10px;
+    line-height: 1.1;
+    margin: 2px auto;
+    max-width: 600px;
+}
+
+.undo-hint {
+    font-size: 10px;
+    line-height: 1.05;
 }
