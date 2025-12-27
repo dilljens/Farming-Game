@@ -105,6 +105,21 @@ input[type="number"] {
     width: 9.75%;
 }
 
+/* Buy modal slider: keep thumb directly over progress bar */
+#downPaymentSlider {
+    position: relative;
+    z-index: 2;
+    background: transparent;
+}
+
+/* The progress bar wrapper is the immediate next div after the slider input */
+#downPaymentSlider + div {
+    margin-top: -10px; /* pull bar up under the thumb */
+    pointer-events: none;
+    position: relative;
+    z-index: 1;
+}
+
 /* .roll-table th, .roll-table td {
     border: 1px solid #777777;
     text-align: center;
