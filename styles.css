@@ -23,6 +23,17 @@ th {
     background-color: #cccccc;
 }
 
+/* Spreadsheet table column widths */
+#spreadsheet th:nth-child(3),
+#spreadsheet td:nth-child(3) {
+    width: 120px; /* Qty column - wider */
+}
+
+#spreadsheet th:nth-child(4),
+#spreadsheet td:nth-child(4) {
+    width: 80px; /* Cost column - narrower */
+}
+
 td.editable {
     background-color: #b4d0fb;
 }
