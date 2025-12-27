@@ -289,21 +289,24 @@ function syncDOMToData() {
 function makeCellEditable(cell) {
     cell.contentEditable = 'true';
     
-    // Event listener for input events to update the total immediately after a change
-    cell.addEventListener('input', () => {
-        syncDOMToData(); // Sync changes back to global data
-        updateTotals();
-    });
+    // Event listener for input events - don't sync on every keystroke to avoid issues with partial input
+    // cell.addEventListener('input', () => {
+    //     syncDOMToData(); // Sync changes back to global data
+    //     updateTotals();
+    // });
 
     // Event listener for keydown events to handle the Enter key
     cell.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault(); // Prevent the default Enter key action
             cell.blur(); // Remove focus from the cell
-            syncDOMToData(); // Ensure data is synced on Enter
-            updateTotals(); // Recalculate the total when Enter is pressed
-            
         }
+    });
+
+    // Event listener for blur events to sync when editing is finished
+    cell.addEventListener('blur', () => {
+        syncDOMToData(); // Sync changes back to global data
+        updateTotals(); // Recalculate the total when editing is finished
     });
 }
 
@@ -678,8 +681,11 @@ makeEditableCellsExitOnEnter();
 function numberWithCommasAndDecimals(x) {
     //console.log('numberWithCommasAndDecimals called with:', x);
 
+    // Ensure x is a string and remove any existing commas
+    const cleanInput = String(x).replace(/,/g, '');
+    
     // Parse the input as a float and ensure two decimal places
-    const numericValue = parseFloat(x);
+    const numericValue = parseFloat(cleanInput);
     if (isNaN(numericValue)) {
         //console.error('Input is not a valid number:', x);
         return '0.00';
