@@ -646,7 +646,7 @@ function populateRollTable() {
     const rollRows = document.querySelectorAll('.roll-table tr:not(:first-child)');
   
     rollRows.forEach((row, index) => {
-      const assetType = row.cells[0].textContent; // Get the asset type (Hay, Grain, etc.)
+      const assetType = row.cells[0].textContent.split(' ')[0]; // Get the asset type (Hay, Grain, etc.) without suffix
       const quantity = quantities[assetType] || 0; // Get the quantity for this asset type
 
             let multiplier = 1;
@@ -654,10 +654,16 @@ function populateRollTable() {
                 if (quantity >= 10) multiplier = 2;
                 else if (quantity >= 5) multiplier = 1.5;
             }
+
+            // Manual multiplier from tapping
+            const state = parseInt(row.cells[0].getAttribute('data-state') || 0);
+            let manualMultiplier = 1;
+            if (state === 1) manualMultiplier = 0.5;
+            else if (state === 2 && (assetType === 'Hay' || assetType === 'Grain')) manualMultiplier = 2;
   
       // Calculate and populate the cells for each roll
       baseValues[assetType].forEach((value, rollIndex) => {
-                const profit = quantity * value * multiplier; // Calculate the profit
+                const profit = quantity * value * multiplier * manualMultiplier; // Calculate the profit
                 const payoutCell = row.cells[rollIndex + 1];
                 if (!payoutCell) return;
 
@@ -1174,6 +1180,41 @@ window.addEventListener('DOMContentLoaded', (event) => {
             }
         });
     });
+
+    // Add event listeners for roll table asset taps
+    const rollTable = document.querySelector('.roll-table');
+    const assetTds = rollTable.querySelectorAll('tr:not(:first-child) td:first-child');
+    assetTds.forEach(td => {
+        td.addEventListener('click', () => {
+            const asset = td.textContent.split(' ')[0];
+            let state = parseInt(td.getAttribute('data-state') || 0);
+            if (asset === 'Fruit' || asset === 'Cows') {
+                state = (state + 1) % 2; // Only 0 and 1
+            } else {
+                state = (state + 1) % 3; // 0, 1, 2
+            }
+            td.setAttribute('data-state', state);
+            updateAssetDisplay(td, state);
+            populateRollTable();
+        });
+    });
+
+    function updateAssetDisplay(td, state) {
+        const asset = td.textContent.split(' ')[0]; // Get base asset name
+        if (state === 0) {
+            td.textContent = asset;
+            td.style.color = '';
+            td.style.backgroundColor = '';
+        } else if (state === 1) {
+            td.textContent = asset + ' x1/2';
+            td.style.color = 'red';
+            td.style.backgroundColor = '';
+        } else if (state === 2 && (asset === 'Hay' || asset === 'Grain')) {
+            td.textContent = asset + ' x2';
+            td.style.color = 'green';
+            td.style.backgroundColor = '';
+        }
+    }
 
     // Add event listeners for buy buttons
     document.querySelectorAll('.buy-btn').forEach(button => {
