@@ -215,3 +215,53 @@ input[type="number"] {
 
     /* tables-container already pads and sizes to match all tables */
 }
+
+.buy-btn {
+    margin-right: 5px;
+    padding: 2px 6px;
+    font-size: 12px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.buy-btn:hover {
+    background-color: #45a049;
+}
+
+.asset-cell {
+    text-align: left;
+}
+
+/* Slider styles */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    background: #4CAF50;
+    cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    background: #4CAF50;
+    cursor: pointer;
+    border: none;
+}
+
+#ranchRidgeMenu {
+    text-align: left;
+}

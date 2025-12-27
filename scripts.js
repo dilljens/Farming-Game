@@ -150,6 +150,20 @@ function addCashTransactionValue(amount) {
     saveQuantitiesToLocalStorage();
 }
 
+function addLoanTransactionValue(amount) {
+    if (!data.transactions) data.transactions = { cash: [], loan: [] };
+    if (!Array.isArray(data.transactions.cash)) data.transactions.cash = [];
+    if (!Array.isArray(data.transactions.loan)) data.transactions.loan = [];
+
+    const numericValue = parseFloat(String(amount).replace(/,/g, ''));
+    if (!Number.isFinite(numericValue)) return;
+
+    data.transactions.loan.unshift(String(numericValue));
+    updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
+    updateTotals();
+    saveQuantitiesToLocalStorage();
+}
+
 function undoLastCashTransaction() {
     if (!data.transactions || !Array.isArray(data.transactions.cash) || data.transactions.cash.length === 0) {
         console.log('No cash transactions to undo');
@@ -1159,6 +1173,149 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 saveQuantitiesToLocalStorage();
             }
         });
+    });
+
+    // Add event listeners for buy buttons
+    document.querySelectorAll('.buy-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const asset = this.getAttribute('data-asset');
+            const row = this.closest('tr');
+            const qtyCell = row.cells[2]; // Qty column
+            const costCell = row.cells[3]; // Cost column
+            const qtyValueEl = qtyCell.querySelector('span.editable');
+            const costRaw = costCell.textContent.replace(/,/g, '').trim();
+            const cost = parseFloat(costRaw) || 0;
+            const totalCost = cost; // Always buy 1
+            if (totalCost <= 0) {
+                alert('Cost is invalid.');
+                return;
+            }
+
+            // Show modal
+            showBuyModal(asset, cost, totalCost);
+        });
+    });
+
+    // Modal event listeners
+    const buyModal = document.getElementById('buyModal');
+    const downPaymentSlider = document.getElementById('downPaymentSlider');
+    const confirmBuy = document.getElementById('confirmBuy');
+    const cancelBuy = document.getElementById('cancelBuy');
+
+    let currentAsset, currentCost, currentTotalCost, currentQtyValueEl, currentBaseCost;
+    let lastDownPaymentPercent = 20; // Remember last setting
+
+    function showBuyModal(asset, cost, totalCost) {
+        currentAsset = asset;
+        currentBaseCost = cost; // Base cost
+        currentCost = cost;
+        currentTotalCost = totalCost;
+
+        // Find the qty span for this asset
+        const qtySpan = document.querySelector(`.qty-${asset}`);
+        currentQtyValueEl = qtySpan;
+
+        document.getElementById('modalTitle').textContent = `Buy ${asset.charAt(0).toUpperCase() + asset.slice(1)}`;
+        document.getElementById('assetInfo').textContent = `Buying 1 ${asset} at $${cost.toLocaleString()} each.`;
+        document.getElementById('totalCost').textContent = totalCost.toLocaleString();
+        
+        // Show ridge select for Ranch Cows
+        const ridgeDiv = document.getElementById('ridgeSelectDiv');
+        const ridgeSelect = document.getElementById('ridgeSelect');
+        if (asset === 'cows') {
+            ridgeDiv.classList.remove('hidden');
+            ridgeSelect.value = 'none'; // Reset to none
+            updateRidgeCost();
+        } else {
+            ridgeDiv.classList.add('hidden');
+        }
+        
+        downPaymentSlider.value = lastDownPaymentPercent;
+        updateModalAmounts(lastDownPaymentPercent);
+        buyModal.classList.remove('hidden');
+    }
+
+    function updateRidgeCost() {
+        const ridgeSelect = document.getElementById('ridgeSelect');
+        const selectedRidge = ridgeSelect.value;
+        let bonus = 0;
+        if (selectedRidge !== 'none') {
+            const checkbox = document.querySelector(`.ranch-ridge-checkbox[data-key="${selectedRidge}"]`);
+            bonus = parseInt(checkbox.getAttribute('data-bonus')) || 0;
+        }
+        // Cost = bonus * 10000
+        const ridgeCost = bonus * 10000;
+        currentCost = ridgeCost;
+        currentTotalCost = ridgeCost;
+        document.getElementById('assetInfo').textContent = `Buying 1 ${currentAsset} at $${ridgeCost.toLocaleString()} each.`;
+        document.getElementById('totalCost').textContent = ridgeCost.toLocaleString();
+        updateModalAmounts(parseInt(downPaymentSlider.value));
+    }
+
+    // Add event listener for ridge select
+    document.getElementById('ridgeSelect').addEventListener('change', updateRidgeCost);
+
+    function updateModalAmounts(percent) {
+        const downPayment = Math.round(currentTotalCost * (percent / 100));
+        const loanAmount = Math.round(currentTotalCost - downPayment);
+        document.getElementById('downPaymentPercent').textContent = `${percent}%`;
+        document.getElementById('downPaymentAmount').textContent = downPayment.toLocaleString();
+        document.getElementById('loanAmount').textContent = loanAmount.toLocaleString();
+        document.getElementById('progressBar').style.width = `${percent}%`;
+    }
+
+    downPaymentSlider.addEventListener('input', function() {
+        const percent = parseInt(this.value);
+        updateModalAmounts(percent);
+    });
+
+    confirmBuy.addEventListener('click', function() {
+        const percent = parseInt(downPaymentSlider.value);
+        lastDownPaymentPercent = percent; // Remember for next time
+        const downPayment = Math.round(currentTotalCost * (percent / 100));
+        const loanAmount = Math.round(currentTotalCost - downPayment);
+
+        // Check if user has enough cash for down payment
+        const cashTotals = document.querySelectorAll('.cash-total');
+        const lastCashTotal = cashTotals[cashTotals.length - 1];
+        const currentCash = parseFloat(lastCashTotal.textContent.replace(/,/g, '')) || 0;
+        if (currentCash < downPayment) {
+            alert('Insufficient cash for down payment. You need $' + downPayment.toLocaleString() + ' but only have $' + currentCash.toLocaleString() + '.');
+            return;
+        }
+
+        // Add cash transaction (negative for payment)
+        addCashTransactionValue(-downPayment);
+        // Add loan transaction (positive for loan)
+        addLoanTransactionValue(loanAmount);
+
+        // Increment the quantity
+        let currentQty = parseInt(currentQtyValueEl.textContent) || 0;
+        currentQty += 1;
+        currentQtyValueEl.textContent = currentQty;
+        calculateNet();
+        populateRollTable();
+        saveQuantitiesToLocalStorage();
+
+        // For Ranch Cows, check the selected ridge
+        let ridgeMsg = '';
+        if (currentAsset === 'cows') {
+            const ridgeSelect = document.getElementById('ridgeSelect');
+            const selectedRidge = ridgeSelect.value;
+            if (selectedRidge !== 'none') {
+                const checkbox = document.querySelector(`.ranch-ridge-checkbox[data-key="${selectedRidge}"]`);
+                if (checkbox) checkbox.checked = true;
+                const ridgeName = ridgeSelect.options[ridgeSelect.selectedIndex].text;
+                ridgeMsg = ` (${ridgeName})`;
+            }
+        }
+
+        alert(`Purchased 1 ${currentAsset}${ridgeMsg} for $${currentTotalCost.toLocaleString()}. Down payment: $${downPayment.toLocaleString()}, Loan: $${loanAmount.toLocaleString()}`);
+        buyModal.classList.add('hidden');
+    });
+
+    cancelBuy.addEventListener('click', function() {
+        buyModal.classList.add('hidden');
     });
 
     const ranchRidgeButton = document.getElementById('ranchRidgeButton');

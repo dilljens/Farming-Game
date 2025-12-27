@@ -129,7 +129,7 @@
       <th>Net</th>
     </tr>
     <tr data-acres-per-unit="10">
-      <td>Hay</td>
+      <td class="asset-cell"><button class="buy-btn" data-asset="hay">Buy</button> Hay</td>
       <td class="acres">0</td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-hay">-</button>
@@ -140,7 +140,7 @@
       <td class="net">0</td>
     </tr>
     <tr data-acres-per-unit="10">
-      <td>Grain</td>
+      <td class="asset-cell"><button class="buy-btn" data-asset="grain">Buy</button> Grain</td>
       <td class="acres">0</td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-grain">-</button>
@@ -151,34 +151,34 @@
       <td class="net">0</td>
     </tr>
     <tr data-acres-per-unit="5">
-      <td>Fruit</td>
+      <td class="asset-cell"><button class="buy-btn" data-asset="fruit">Buy</button> Fruit</td>
       <td class="acres">0</td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-fruit">-</button>
         <button class="qty-btn qty-plus" data-target="qty-fruit">+</button>
-        <span contenteditable="true" class="editable qty-fruit">0</span>
+        <span contenteditable="true" class="editable qty-fruit">1</span>
       </td>
       <td>25,000</td>
       <td class="net">0</td>
     </tr>
     <tr>
-      <td>Farm Cows</td>
+      <td class="asset-cell"><button class="buy-btn" data-asset="farm">Buy</button> Farm Cows</td>
       <td class="acres"></td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-farm">-</button>
         <button class="qty-btn qty-plus" data-target="qty-farm">+</button>
-        <span contenteditable="true" class="editable qty-farm">0</span>
+        <span contenteditable="true" class="editable qty-farm">1</span>
       </td>
       <td>5,000</td>
       <td class="net">0</td>
     </tr>
     <tr>
-      <td>Ranch Cows</td>
+      <td class="asset-cell"><button class="buy-btn" data-asset="cows">Buy</button> Ranch Cows</td>
       <td class="acres"></td>
       <td class="qty-cell ranch-ridge-cell">
         <button class="qty-btn qty-minus" data-target="qty-cows">-</button>
         <button class="qty-btn qty-plus" data-target="qty-cows">+</button>
-        <span contenteditable="true" class="editable qty-cows">0</span>
+        <span contenteditable="true" class="editable qty-cows">1</span>
 
         <span class="ranch-ridge-dropdown">
           <button id="ranchRidgeButton" type="button" class="ml-1 text-xs" aria-haspopup="menu" aria-expanded="false" aria-label="Select ridges">▾</button>
@@ -206,23 +206,23 @@
       <td class="net">0</td>
     </tr>
     <tr>
-      <td>Harvester</td>
+      <td class="asset-cell"><button class="buy-btn" data-asset="harvester">Buy</button> Harvester</td>
       <td></td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-harvester">-</button>
         <button class="qty-btn qty-plus" data-target="qty-harvester">+</button>
-        <span contenteditable="true" class="editable qty-harvester">0</span>
+        <span contenteditable="true" class="editable qty-harvester">1</span>
       </td>
       <td>10,000</td>
       <td class="net">0</td>
     </tr>
     <tr>
-      <td>Tractor</td>
+      <td class="asset-cell"><button class="buy-btn" data-asset="tractor">Buy</button> Tractor</td>
       <td></td>
       <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-tractor">-</button>
         <button class="qty-btn qty-plus" data-target="qty-tractor">+</button>
-        <span contenteditable="true" class="editable qty-tractor">0</span>
+        <span contenteditable="true" class="editable qty-tractor">1</span>
       </td>
       <td>10,000</td>
       <td class="net">0</td>
@@ -307,6 +307,52 @@
 
 </table>
 
+</div>
+
+<!-- Buy Modal -->
+<div id="buyModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+  <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+    <div class="mt-3 text-center">
+      <h3 class="text-lg font-medium text-gray-900" id="modalTitle">Buy Asset</h3>
+      <div class="mt-2 px-7 py-3">
+        <p id="assetInfo"></p>
+        <div id="ridgeSelectDiv" class="mt-2 hidden">
+          <label for="ridgeSelect" class="block text-sm font-medium text-gray-700">Select Ridge:</label>
+          <select id="ridgeSelect" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+            <option value="none">No Ridge</option>
+            <option value="ahtanum">Ahtanum Ridge (+2)</option>
+            <option value="rattlesnake">Rattlesnake Ridge (+3)</option>
+            <option value="cascades">Cascades (+4)</option>
+            <option value="toppenish">Toppenish Ridge (+5)</option>
+          </select>
+        </div>
+        <div class="mt-4">
+          <label for="downPaymentSlider" class="block text-sm font-medium text-gray-700">Down Payment: <span id="downPaymentPercent">20%</span></label>
+          <input type="range" id="downPaymentSlider" min="20" max="100" value="20" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+          <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+            <div id="progressBar" class="bg-green-500 h-2 rounded-full" style="width: 20%;"></div>
+          </div>
+          <div class="flex justify-between text-xs text-gray-500 mt-1">
+            <span>20%</span>
+            <span>100%</span>
+          </div>
+        </div>
+        <div class="mt-4 text-left">
+          <p>Total Cost: $<span id="totalCost">0</span></p>
+          <p>Down Payment: $<span id="downPaymentAmount">0</span></p>
+          <p>Loan Amount: $<span id="loanAmount">0</span></p>
+        </div>
+      </div>
+      <div class="flex items-center px-4 py-3">
+        <button id="confirmBuy" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300">
+          Confirm Purchase
+        </button>
+        <button id="cancelBuy" class="ml-3 px-4 py-2 bg-gray-300 text-gray-900 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="scripts.js"></script>
