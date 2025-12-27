@@ -277,6 +277,8 @@ input[type="range"]::-webkit-slider-thumb {
     border-radius: 50%;
     background: #4CAF50;
     cursor: pointer;
+    margin-top: -12px;
+    opacity: 0.5;
 }
 
 input[type="range"]::-moz-range-thumb {
@@ -286,6 +288,8 @@ input[type="range"]::-moz-range-thumb {
     background: #4CAF50;
     cursor: pointer;
     border: none;
+    margin-top: -12px;
+    opacity: 0.5;
 }
 
 #ranchRidgeMenu {
