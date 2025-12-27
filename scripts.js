@@ -90,6 +90,20 @@ function calculateNet() {
 function handleTransaction(inputId, transactionClass, totalClass) {
     const inputElement = document.getElementById(inputId);
     if (inputElement && inputElement.value.trim() !== '') {
+        const newValue = parseFloat(inputElement.value.trim().replace(/,/g, '')) || 0;
+        
+        // Check loan limit for loan transactions
+        if (transactionClass.includes('loan') && newValue > 0) {
+            updateTotals();
+            const loanTotalCell = document.querySelector('.loan-total');
+            const currentLoanTotal = loanTotalCell ? parseFloat(loanTotalCell.textContent.replace(/,/g, '')) || 0 : 0;
+            if (currentLoanTotal + newValue > 50000) {
+                alert('Loan transaction would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + newValue.toLocaleString() + '.');
+                inputElement.value = '';
+                return;
+            }
+        }
+
         const table = document.getElementById('financialTable');
         // Check for an existing empty transaction cell
         let emptyCellFound = false;
@@ -157,6 +171,17 @@ function addLoanTransactionValue(amount) {
 
     const numericValue = parseFloat(String(amount).replace(/,/g, ''));
     if (!Number.isFinite(numericValue)) return;
+
+    // Check loan limit for positive loan amounts
+    if (numericValue > 0) {
+        updateTotals();
+        const loanTotalCell = document.querySelector('.loan-total');
+        const currentLoanTotal = loanTotalCell ? parseFloat(loanTotalCell.textContent.replace(/,/g, '')) || 0 : 0;
+        if (currentLoanTotal + numericValue > 50000) {
+            console.warn('Loan transaction would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + numericValue.toLocaleString() + '.');
+            return; // Silently fail for programmatic calls
+        }
+    }
 
     data.transactions.loan.unshift(String(numericValue));
     updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
@@ -233,19 +258,21 @@ function syncDOMToData() {
         data.transactions = { cash: [], loan: [] };
     }
     
-    // Update cash transactions from DOM - create new entries if needed
-    cashCells.forEach((cell, index) => {
+    // Rebuild cash transactions from DOM cells, filtering out empty ones
+    data.transactions.cash = [];
+    cashCells.forEach((cell) => {
         const cellValue = cell.textContent.trim();
         if (cellValue !== '') {
-            data.transactions.cash[index] = cellValue;
+            data.transactions.cash.push(cellValue);
         }
     });
     
-    // Update loan transactions from DOM - create new entries if needed
-    loanCells.forEach((cell, index) => {
+    // Rebuild loan transactions from DOM cells, filtering out empty ones
+    data.transactions.loan = [];
+    loanCells.forEach((cell) => {
         const cellValue = cell.textContent.trim();
         if (cellValue !== '') {
-            data.transactions.loan[index] = cellValue;
+            data.transactions.loan.push(cellValue);
         }
     });
     
@@ -1315,6 +1342,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
     let currentAsset, currentCost, currentTotalCost, currentQtyValueEl, currentBaseCost;
     let lastDownPaymentPercent = 20; // Remember last setting
+    let lastDownPaymentAmount = 0; // Remember last dollar amount
 
     function showBuyModal(asset, cost, totalCost) {
         currentAsset = asset;
@@ -1341,8 +1369,24 @@ window.addEventListener('DOMContentLoaded', (event) => {
             ridgeDiv.classList.add('hidden');
         }
         
-        downPaymentSlider.value = lastDownPaymentPercent;
-        updateModalAmounts(lastDownPaymentPercent);
+        // Calculate max down payment based on $50,000 debt limit
+        updateTotals(); // Update loan total
+        
+        const loanTotalCell = document.querySelector('.loan-total');
+        const currentLoanTotal = loanTotalCell ? parseFloat(loanTotalCell.textContent.replace(/,/g, '')) || 0 : 0;
+        const maxLoanIncrease = 50000 - currentLoanTotal;
+        const maxDownPayment = Math.max(0, totalCost - maxLoanIncrease);
+        
+        // Set slider range
+        downPaymentSlider.min = 0;
+        downPaymentSlider.max = maxDownPayment;
+        downPaymentSlider.value = Math.min(lastDownPaymentAmount, maxDownPayment);
+        
+        // Update display
+        document.getElementById('minDownPayment').textContent = '0';
+        document.getElementById('maxDownPayment').textContent = maxDownPayment.toLocaleString();
+        
+        updateModalAmounts(parseInt(downPaymentSlider.value));
         buyModal.classList.remove('hidden');
     }
 
@@ -1360,30 +1404,43 @@ window.addEventListener('DOMContentLoaded', (event) => {
         currentTotalCost = ridgeCost;
         document.getElementById('assetInfo').textContent = `Buying 1 ${currentAsset} at $${ridgeCost.toLocaleString()} each.`;
         document.getElementById('totalCost').textContent = ridgeCost.toLocaleString();
+        
+        // Recalculate max down payment for new cost
+        updateTotals(); // Update loan total
+        
+        const loanTotalCell = document.querySelector('.loan-total');
+        const currentLoanTotal = loanTotalCell ? parseFloat(loanTotalCell.textContent.replace(/,/g, '')) || 0 : 0;
+        const maxLoanIncrease = 50000 - currentLoanTotal;
+        const maxDownPayment = Math.max(0, ridgeCost - maxLoanIncrease);
+        
+        downPaymentSlider.max = maxDownPayment;
+        document.getElementById('maxDownPayment').textContent = maxDownPayment.toLocaleString();
+        downPaymentSlider.value = Math.min(parseInt(downPaymentSlider.value), maxDownPayment);
+        
         updateModalAmounts(parseInt(downPaymentSlider.value));
     }
 
     // Add event listener for ridge select
     document.getElementById('ridgeSelect').addEventListener('change', updateRidgeCost);
 
-    function updateModalAmounts(percent) {
-        const downPayment = Math.round(currentTotalCost * (percent / 100));
+    function updateModalAmounts(downPaymentAmount) {
+        const downPayment = downPaymentAmount;
         const loanAmount = Math.round(currentTotalCost - downPayment);
-        document.getElementById('downPaymentPercent').textContent = `${percent}%`;
         document.getElementById('downPaymentAmount').textContent = downPayment.toLocaleString();
+        document.getElementById('downPaymentSummary').textContent = downPayment.toLocaleString();
         document.getElementById('loanAmount').textContent = loanAmount.toLocaleString();
+        const percent = currentTotalCost > 0 ? Math.round((downPayment / currentTotalCost) * 100) : 0;
         document.getElementById('progressBar').style.width = `${percent}%`;
     }
 
     downPaymentSlider.addEventListener('input', function() {
-        const percent = parseInt(this.value);
-        updateModalAmounts(percent);
+        const downPaymentAmount = parseInt(this.value);
+        updateModalAmounts(downPaymentAmount);
     });
 
     confirmBuy.addEventListener('click', function() {
-        const percent = parseInt(downPaymentSlider.value);
-        lastDownPaymentPercent = percent; // Remember for next time
-        const downPayment = Math.round(currentTotalCost * (percent / 100));
+        const downPayment = parseInt(downPaymentSlider.value);
+        lastDownPaymentAmount = downPayment; // Remember for next time
         const loanAmount = Math.round(currentTotalCost - downPayment);
 
         // Check if user has enough cash for down payment
@@ -1391,6 +1448,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const currentCash = getCurrentCashTotal();
         if (currentCash < downPayment) {
             alert('Insufficient cash for down payment. You need $' + downPayment.toLocaleString() + ' but only have $' + currentCash.toLocaleString() + '.');
+            return;
+        }
+
+        // Check if loan would exceed $50,000 debt limit
+        const loanTotalCell = document.querySelector('.loan-total');
+        const currentLoanTotal = loanTotalCell ? parseFloat(loanTotalCell.textContent.replace(/,/g, '')) || 0 : 0;
+        if (currentLoanTotal + loanAmount > 50000) {
+            alert('Loan would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + loanAmount.toLocaleString() + '.');
             return;
         }
 
