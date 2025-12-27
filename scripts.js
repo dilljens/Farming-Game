@@ -307,6 +307,8 @@ function makeCellEditable(cell) {
     cell.addEventListener('blur', () => {
         syncDOMToData(); // Sync changes back to global data
         updateTotals(); // Recalculate the total when editing is finished
+        // Reformat all transaction cells with proper number formatting
+        updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
     });
 }
 
