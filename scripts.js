@@ -75,8 +75,18 @@ function calculateNet() {
 
         const acresPerUnit = parseFloat(row.getAttribute('data-acres-per-unit') || '0') || 0;
         if (acresCell) {
-            if (acresPerUnit > 0) {
-                acresCell.textContent = numberWithCommasAndDecimals(qty * acresPerUnit);
+            const assetType = row.cells[0].textContent.split(' ')[1]; // Get the asset type (Hay, Grain, etc.)
+            const tractorQty = parseInt(document.querySelector('.qty-tractor').textContent) || 0;
+            const harvesterQty = parseInt(document.querySelector('.qty-harvester').textContent) || 0;
+            if (assetType === 'Tractor') {
+                acresCell.textContent = "+" + (Math.min(tractorQty, 5) * 20) + "%";
+            } else if (assetType === 'Harvester') {
+                acresCell.textContent = "+" + (Math.min(harvesterQty, 5) * 20) + "%";
+            } else if (acresPerUnit > 0) {
+                let acresMultiplier = 1;
+                if (assetType === 'Hay') acresMultiplier += Math.min(tractorQty, 5) * 0.2;
+                else if (assetType === 'Grain') acresMultiplier += Math.min(harvesterQty, 5) * 0.2;
+                acresCell.textContent = numberWithCommasAndDecimals(qty * acresPerUnit * acresMultiplier);
             } else {
                 acresCell.textContent = '';
             }
@@ -733,7 +743,9 @@ function populateRollTable() {
       Grain: parseInt(document.querySelector('.qty-grain').textContent) || 0,
       Fruit: parseInt(document.querySelector('.qty-fruit').textContent) || 0,
       Cows: (parseInt(document.querySelector('.qty-farm').textContent) || 0) +
-        (parseInt(document.querySelector('.qty-cows').textContent) || 0)
+        (parseInt(document.querySelector('.qty-cows').textContent) || 0),
+      Tractor: parseInt(document.querySelector('.qty-tractor').textContent) || 0,
+      Harvester: parseInt(document.querySelector('.qty-harvester').textContent) || 0
     };
   
     // Get all rows in the roll table except the header row
@@ -747,6 +759,9 @@ function populateRollTable() {
             if (assetType === 'Hay') {
                 if (quantity >= 10) multiplier = 2;
                 else if (quantity >= 5) multiplier = 1.5;
+                multiplier += Math.min(quantities.Tractor, 5) * 0.2;
+            } else if (assetType === 'Grain') {
+                multiplier += Math.min(quantities.Harvester, 5) * 0.2;
             }
 
             // Manual multiplier from tapping
