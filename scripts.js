@@ -1258,11 +1258,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
     const payInterestBtn = document.getElementById('payInterestBtn');
     if (payInterestBtn) {
         payInterestBtn.addEventListener('click', () => {
-            // Ensure interest/cash totals are fresh
+            // Ensure all data is in sync
             updateTotals();
 
             const interest = getCurrentInterestValue();
-            if (!(interest > 0)) return;
+            if (!(interest > 0)) {
+                alert('No interest to pay.');
+                return;
+            }
 
             const currentCash = getCurrentCashTotal();
             if (currentCash < interest) {
@@ -1276,7 +1279,11 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 return;
             }
 
+            // Pay the interest
             addCashTransactionValue(-interest);
+            
+            // Update button states after payment
+            updateActionButtonStates();
         });
     }
 
