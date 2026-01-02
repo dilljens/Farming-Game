@@ -82,6 +82,8 @@ function calculateNet() {
                 acresCell.textContent = "+" + (Math.min(tractorQty, 5) * 20) + "%";
             } else if (assetType === 'Harvester') {
                 acresCell.textContent = "+" + (Math.min(harvesterQty, 5) * 20) + "%";
+            } else if (assetType === 'Farm' || assetType === 'Ranch') {
+                acresCell.textContent = numberWithCommasAndDecimals(qty * 10);
             } else if (acresPerUnit > 0) {
                 let acresMultiplier = 1;
                 if (assetType === 'Hay') acresMultiplier += Math.min(tractorQty, 5) * 0.2;
@@ -442,6 +444,11 @@ function updateTotalAcres() {
 
         totalAcres += qty * acresPerUnit;
     });
+
+    // Add cows acres
+    const farmQty = parseFloat(document.querySelector('.qty-farm').textContent) || 0;
+    const cowsQty = parseFloat(document.querySelector('.qty-cows').textContent) || 0;
+    totalAcres += (farmQty + cowsQty) * 10;
 
     const totalAcresCell = document.querySelector('.total-acres');
     if (totalAcresCell) {
