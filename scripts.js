@@ -1500,7 +1500,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     }
 
     // Add event listeners for buy buttons
-    document.querySelectorAll('.buy-btn').forEach(button => {
+    document.querySelectorAll('.buy-btn[data-asset]').forEach(button => {
         button.addEventListener('click', function() {
             const asset = this.getAttribute('data-asset');
             const row = this.closest('tr');
