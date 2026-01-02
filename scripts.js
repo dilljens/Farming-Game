@@ -374,6 +374,14 @@ function updateActionButtonStates() {
         setButtonDisabled(payInterestBtn, disabled);
     }
 
+    // Pay Per Acre
+    const payPerAcreBtn = document.getElementById('payPerAcreBtn');
+    if (payPerAcreBtn) {
+        const totalAcres = getTotalAcres();
+        const disabled = cashTotal <= 0 || totalAcres <= 0;
+        setButtonDisabled(payPerAcreBtn, disabled);
+    }
+
     // Buy buttons (minimum 20% down)
     document.querySelectorAll('button.buy-btn[data-asset]').forEach((btn) => {
         const row = btn.closest('tr');
@@ -1024,17 +1032,119 @@ function hideModal() {
     document.getElementById('resetModal').classList.add('hidden');
 }
 
+// Function to show the pay per acre modal
+function showPayPerAcreModal() {
+    document.getElementById('payPerAcreModal').classList.remove('hidden');
+}
+
+// Function to hide the pay per acre modal
+function hidePayPerAcreModal() {
+    document.getElementById('payPerAcreModal').classList.add('hidden');
+}
+
 // Event listener for the reset button
 document.getElementById('resetButton').addEventListener('click', showModal);
 
 // Event listener for the confirm reset button in the modal
-document.getElementById('confirmReset').addEventListener('click', function() {
+document.getElementById('confirmReset').addEventListener('click', (event) => {
+    event.preventDefault();
     performReset();
     hideModal();
 });
 
 // Event listener for the cancel button in the modal
-document.getElementById('cancelReset').addEventListener('click', hideModal);
+document.getElementById('cancelReset').addEventListener('click', (event) => {
+    event.preventDefault();
+    hideModal();
+});
+
+// Event listener for the pay per acre button
+document.getElementById('payPerAcreBtn').addEventListener('click', (event) => {
+    event.preventDefault();
+    showPayPerAcreModal();
+});
+
+// Event listener for the confirm pay per acre button
+document.getElementById('confirmPayPerAcre').addEventListener('click', (event) => {
+    event.preventDefault();
+    performPayPerAcre();
+    hidePayPerAcreModal();
+});
+
+// Event listener for the cancel pay per acre button
+document.getElementById('cancelPayPerAcre').addEventListener('click', (event) => {
+    event.preventDefault();
+    hidePayPerAcreModal();
+});
+
+function getAcresForType(type) {
+    if (type === 'total') {
+        return getTotalAcres();
+    } else if (type === 'hay') {
+        const qty = parseFloat(document.querySelector('.qty-hay').textContent) || 0;
+        return qty * 10;
+    } else if (type === 'grain') {
+        const qty = parseFloat(document.querySelector('.qty-grain').textContent) || 0;
+        return qty * 10;
+    } else if (type === 'fruit') {
+        const qty = parseFloat(document.querySelector('.qty-fruit').textContent) || 0;
+        return qty * 5;
+    } else if (type === 'cows') {
+        const farmQty = parseFloat(document.querySelector('.qty-farm').textContent) || 0;
+        const cowsQty = parseFloat(document.querySelector('.qty-cows').textContent) || 0;
+        return (farmQty + cowsQty) * 10;
+    }
+    return 0;
+}
+
+function getTotalAcres() {
+    let totalAcres = 0;
+    // Hay, grain, fruit
+    document.querySelectorAll('tr[data-acres-per-unit]').forEach(row => {
+        const acresPerUnit = parseFloat(row.getAttribute('data-acres-per-unit')) || 0;
+        const qtyCell = row.querySelector('.qty-cell span.editable');
+        if (!qtyCell) return;
+        const qtyRaw = qtyCell.textContent.replace(/,/g, '').trim();
+        const qty = parseFloat(qtyRaw) || 0;
+        totalAcres += qty * acresPerUnit;
+    });
+    // Cows
+    const farmQty = parseFloat(document.querySelector('.qty-farm').textContent) || 0;
+    const cowsQty = parseFloat(document.querySelector('.qty-cows').textContent) || 0;
+    totalAcres += (farmQty + cowsQty) * 10;
+    return totalAcres;
+}
+
+function performPayPerAcre() {
+    const payType = document.querySelector('input[name="payType"]:checked').value;
+    const perAcreValue = parseFloat(document.querySelector('input[name="perAcreValue"]:checked').value);
+    
+    const acres = getAcresForType(payType);
+    const totalPayment = acres * perAcreValue;
+    
+    if (totalPayment <= 0) {
+        alert('No acres to pay for.');
+        return;
+    }
+    
+    const currentCash = getCurrentCashTotal();
+    if (currentCash < totalPayment) {
+        alert(
+            'Insufficient cash to pay. You need $' +
+                totalPayment.toLocaleString() +
+                ' but only have $' +
+                currentCash.toLocaleString() +
+                '.'
+        );
+        return;
+    }
+    
+    // Pay the amount
+    addCashTransactionValue(-totalPayment);
+    
+    // Update button states after payment
+    updateActionButtonStates();
+}
 
 async function resetLeaderboardForAllPlayers() {
     try {
@@ -1279,7 +1389,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
     const payInterestBtn = document.getElementById('payInterestBtn');
     if (payInterestBtn) {
-        payInterestBtn.addEventListener('click', () => {
+        payInterestBtn.addEventListener('click', (event) => {
+            event.preventDefault();
             // Ensure all data is in sync
             updateTotals();
 

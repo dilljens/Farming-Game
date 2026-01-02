@@ -50,6 +50,78 @@
             </div>
           </div>
 
+          <div class="hidden relative z-10" id="payPerAcreModal" aria-labelledby="pay-per-acre-title" role="dialog" aria-modal="true">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+            <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+              <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                  <div class="mt-3 text-center sm:mt-5">
+                    <h3 class="text-lg font-semibold leading-6 text-gray-900" id="pay-per-acre-title">Pay Per Acre</h3>
+                    <div class="mt-2">
+                      <p class="text-sm text-gray-500">Select what to pay for and the amount per acre.</p>
+                    </div>
+                  </div>
+                  <div class="mt-4">
+                    <div class="mb-4">
+                      <label class="block text-sm font-medium text-gray-700 mb-2">What to pay for:</label>
+                      <div class="space-y-2">
+                        <label class="flex items-center">
+                          <input type="radio" name="payType" value="total" class="mr-2" checked>
+                          Total
+                        </label>
+                        <label class="flex items-center">
+                          <input type="radio" name="payType" value="hay" class="mr-2">
+                          Hay
+                        </label>
+                        <label class="flex items-center">
+                          <input type="radio" name="payType" value="grain" class="mr-2">
+                          Grain
+                        </label>
+                        <label class="flex items-center">
+                          <input type="radio" name="payType" value="fruit" class="mr-2">
+                          Fruit
+                        </label>
+                        <label class="flex items-center">
+                          <input type="radio" name="payType" value="cows" class="mr-2">
+                          Cows
+                        </label>
+                      </div>
+                    </div>
+                    <div class="mb-4">
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Value per acre:</label>
+                      <div class="space-y-2">
+                        <label class="flex items-center">
+                          <input type="radio" name="perAcreValue" value="100" class="mr-2" checked>
+                          $100
+                        </label>
+                        <label class="flex items-center">
+                          <input type="radio" name="perAcreValue" value="200" class="mr-2">
+                          $200
+                        </label>
+                        <label class="flex items-center">
+                          <input type="radio" name="perAcreValue" value="300" class="mr-2">
+                          $300
+                        </label>
+                        <label class="flex items-center">
+                          <input type="radio" name="perAcreValue" value="400" class="mr-2">
+                          $400
+                        </label>
+                        <label class="flex items-center">
+                          <input type="radio" name="perAcreValue" value="1000" class="mr-2">
+                          $1000
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+                    <button type="button" class="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:col-start-2" id="confirmPayPerAcre">Pay</button>
+                    <button type="button" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:col-start-1 sm:mt-0" id="cancelPayPerAcre">Cancel</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
 
     <div class="tables-container">
       <div class="leaderboard-wrapper">
@@ -252,7 +324,9 @@
     <tr class="highlight">
       <td>Interest</td>
       <td></td>
-      <td></td>
+      <td>
+        <button id="payPerAcreBtn" type="button" class="buy-btn">Pay Per Acre</button>
+      </td>
       <td>
         <button id="payInterestBtn" type="button" class="buy-btn">Pay Interest</button>
       </td>
