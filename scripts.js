@@ -453,11 +453,6 @@ function updateTotalAcres() {
         totalAcres += qty * acresPerUnit;
     });
 
-    // Add cows acres
-    const farmQty = parseFloat(document.querySelector('.qty-farm').textContent) || 0;
-    const cowsQty = parseFloat(document.querySelector('.qty-cows').textContent) || 0;
-    totalAcres += (farmQty + cowsQty) * 10;
-
     const totalAcresCell = document.querySelector('.total-acres');
     if (totalAcresCell) {
         totalAcresCell.textContent = numberWithCommasAndDecimals(totalAcres);
@@ -1132,10 +1127,6 @@ function getTotalAcres() {
         const qty = parseFloat(qtyRaw) || 0;
         totalAcres += qty * acresPerUnit;
     });
-    // Cows
-    const farmQty = parseFloat(document.querySelector('.qty-farm').textContent) || 0;
-    const cowsQty = parseFloat(document.querySelector('.qty-cows').textContent) || 0;
-    totalAcres += (farmQty + cowsQty) * 10;
     return totalAcres;
 }
 
