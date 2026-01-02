@@ -1035,6 +1035,7 @@ function hideModal() {
 // Function to show the pay per acre modal
 function showPayPerAcreModal() {
     document.getElementById('payPerAcreModal').classList.remove('hidden');
+    updatePayPerAcreDisplay();
 }
 
 // Function to hide the pay per acre modal
@@ -1075,6 +1076,29 @@ document.getElementById('confirmPayPerAcre').addEventListener('click', (event) =
 document.getElementById('cancelPayPerAcre').addEventListener('click', (event) => {
     event.preventDefault();
     hidePayPerAcreModal();
+});
+
+function updatePayPerAcreDisplay() {
+    const payType = document.querySelector('input[name="payType"]:checked').value;
+    const perAcreValue = parseFloat(document.querySelector('input[name="perAcreValue"]:checked').value);
+    
+    const acres = getAcresForType(payType);
+    const totalPayment = acres * perAcreValue;
+    
+    const acresDisplay = document.getElementById('acresDisplay');
+    const paymentDisplay = document.getElementById('paymentDisplay');
+    
+    if (acresDisplay) {
+        acresDisplay.textContent = `Acres: ${acres.toLocaleString()}`;
+    }
+    if (paymentDisplay) {
+        paymentDisplay.textContent = `Total Payment: $${totalPayment.toLocaleString()}`;
+    }
+}
+
+// Add event listeners to pay per acre radio buttons to update display
+document.querySelectorAll('input[name="payType"], input[name="perAcreValue"]').forEach(radio => {
+    radio.addEventListener('change', updatePayPerAcreDisplay);
 });
 
 function getAcresForType(type) {
