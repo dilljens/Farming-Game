@@ -621,12 +621,15 @@ function sendDataToServer(totalWorth) {
     const loanTotalCell = document.querySelector('.loan-total');
     const debt = loanTotalCell ? (parseFloat(loanTotalCell.textContent.replace(/,/g, '')) || 0) : 0;
 
+    const cash = getCurrentCashTotal();
+
     // Save to Firestore
     const userDocRef = doc(db, 'leaderboard', auth.currentUser.uid);
     setDoc(userDocRef, {
         username: username,
         networth: totalWorth,
         debt: debt,
+        cash: cash,
         hay: hayQty,
         grain: grainQty,
         fruit: fruitQty,
@@ -667,6 +670,10 @@ function updateLeaderboardTable(data) {
         debtCell.textContent = parseFloat(entry.debt ?? 0).toLocaleString('en-US');
         debtCell.className = 'text-center';
 
+        const cashCell = document.createElement('td');
+        cashCell.textContent = parseFloat(entry.cash ?? 0).toLocaleString('en-US');
+        cashCell.className = 'text-center';
+
         const hayCell = document.createElement('td');
         hayCell.textContent = (entry.hay ?? 0).toString();
         hayCell.className = 'text-center';
@@ -687,6 +694,7 @@ function updateLeaderboardTable(data) {
         row.appendChild(usernameCell);
         row.appendChild(networthCell);
         row.appendChild(debtCell);
+        row.appendChild(cashCell);
         row.appendChild(hayCell);
         row.appendChild(grainCell);
         row.appendChild(fruitCell);
