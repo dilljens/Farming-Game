@@ -153,7 +153,7 @@ function handleTransaction(inputId, transactionClass, totalClass) {
         for (let cell of transactionCells) {
             if (cell.textContent.trim() === '') {
                 // cell.textContent = inputElement.value; // Use the empty cell for the new transaction
-                cell.contentEditable = 'true'; // Make it editable
+                // Transaction cells are no longer editable
                 emptyCellFound = true;
                 break;
             }
@@ -163,14 +163,14 @@ function handleTransaction(inputId, transactionClass, totalClass) {
         if (!emptyCellFound) {
             const newRow = table.insertRow(); // Insert below the input cells
             if (inputId === 'cashInput') {
-                createTransactionCell(newRow, 'cash-transaction', '', true); // Empty, editable cell for alignment
+                createTransactionCell(newRow, 'cash-transaction', '', false); // Empty, non-editable cell for alignment
                 createTransactionCell(newRow, 'cash-total');
-                createTransactionCell(newRow, 'loan-transaction', '', true); // Empty, editable cell for alignment
-                createTransactionCell(newRow, 'loan-total', '', true); // Empty, editable cell for alignment
+                createTransactionCell(newRow, 'loan-transaction', '', false); // Empty, non-editable cell for alignment
+                createTransactionCell(newRow, 'loan-total');
             } else {
-                createTransactionCell(newRow, 'cash-transaction', '', true); // Empty, editable cell for alignment
-                createTransactionCell(newRow, 'cash-total', '', true); // Empty, editable cell for alignment
-                createTransactionCell(newRow, 'loan-transaction', '', true); // Empty, editable cell for alignment
+                createTransactionCell(newRow, 'cash-transaction', '', false); // Empty, non-editable cell for alignment
+                createTransactionCell(newRow, 'cash-total');
+                createTransactionCell(newRow, 'loan-transaction', '', false); // Empty, non-editable cell for alignment
                 createTransactionCell(newRow, 'loan-total');
             }
         }
@@ -330,7 +330,20 @@ function syncDOMToData() {
 }
 
 function makeCellEditable(cell) {
+    // Totals are derived values; never allow editing them.
+    if (cell.classList.contains('cash-total') || cell.classList.contains('loan-total')) {
+        cell.contentEditable = 'false';
+        return;
+    }
+
     cell.contentEditable = 'true';
+    
+    let originalValue = null;
+    
+    // Store original value when editing starts
+    cell.addEventListener('focus', () => {
+        originalValue = parseTransactionValue(cell.textContent);
+    });
     
     // Event listener for input events - don't sync on every keystroke to avoid issues with partial input
     // cell.addEventListener('input', () => {
@@ -348,6 +361,21 @@ function makeCellEditable(cell) {
 
     // Event listener for blur events to sync when editing is finished
     cell.addEventListener('blur', () => {
+        const newValue = parseTransactionValue(cell.textContent);
+        
+        // Validate and preserve the sign from the original transaction
+        if (Number.isFinite(originalValue) && Number.isFinite(newValue)) {
+            const originalSign = Math.sign(originalValue);
+            const newSign = Math.sign(newValue);
+            
+            if (originalSign !== 0 && newSign !== 0 && originalSign !== newSign) {
+                // Sign changed - preserve the original sign but allow magnitude change
+                const correctedValue = originalSign * Math.abs(newValue);
+                cell.textContent = numberWithCommasAndDecimals(String(correctedValue));
+                alert('Transaction sign preserved. The sign cannot be changed for existing transactions.');
+            }
+        }
+        
         syncDOMToData(); // Sync changes back to global data
         updateTotals(); // Recalculate the total when editing is finished
         // Reformat all transaction cells with proper number formatting
@@ -1044,10 +1072,10 @@ function updateTransactionLists(transactionsData) {
             let row = table.rows[index + 2];
             if (!row) {
                 row = table.insertRow();
-                createTransactionCell(row, 'cash-transaction', '', true);
+                createTransactionCell(row, 'cash-transaction', '', false);
                 createTransactionCell(row, 'cash-total');
-                createTransactionCell(row, 'loan-transaction', '', true);
-                createTransactionCell(row, 'loan-total', '', true);
+                createTransactionCell(row, 'loan-transaction', '', false);
+                createTransactionCell(row, 'loan-total', '', false);
             }
 
             // Update the cell value for the transaction
@@ -1439,8 +1467,7 @@ function clearTransactionsExceptFirst(transactionClass) {
             const cells = row.querySelectorAll(`.${transactionClass}`);
             cells.forEach(cell => {
                 cell.textContent = '';
-                // Ensure that the first cell is editable if necessary
-                cell.contentEditable = 'true';
+                // Transaction cells are no longer editable
             });
         }
     });
@@ -1479,6 +1506,11 @@ if (editableUsernameEl && editableUsernameEl.dataset.usernameHandlersBound !== '
 }
 
 window.addEventListener('DOMContentLoaded', (event) => {
+    // Ensure transaction cells are not editable
+    document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
+        cell.contentEditable = 'false';
+    });
+    
     // Attach event listeners to quantity cells
     const qtyCells = document.querySelectorAll('#spreadsheet .editable');
     qtyCells.forEach(cell => {
@@ -1579,8 +1611,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
             }
         });
     }
-    const transactionCells = document.querySelectorAll('.cash-transaction, .loan-transaction');
-    transactionCells.forEach(makeCellEditable);
+    // Transaction cells are no longer editable
+    // const transactionCells = document.querySelectorAll('.cash-transaction, .loan-transaction');
+    // transactionCells.forEach(makeCellEditable);
 
     const payInterestBtn = document.getElementById('payInterestBtn');
     if (payInterestBtn) {
