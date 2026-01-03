@@ -86,8 +86,6 @@ function calculateNet() {
                 acresCell.textContent = numberWithCommasAndDecimals(qty * 10);
             } else if (acresPerUnit > 0) {
                 let acresMultiplier = 1;
-                if (assetType === 'Hay') acresMultiplier += Math.min(tractorQty, 5) * 0.2;
-                else if (assetType === 'Grain') acresMultiplier += Math.min(harvesterQty, 5) * 0.2;
                 acresCell.textContent = numberWithCommasAndDecimals(qty * acresPerUnit * acresMultiplier);
             } else {
                 acresCell.textContent = '';
@@ -380,6 +378,22 @@ function updateActionButtonStates() {
         const totalAcres = getTotalAcres();
         const disabled = cashTotal <= 0 || totalAcres <= 0;
         setButtonDisabled(payPerAcreBtn, disabled);
+    }
+
+    // Gain Per Acre
+    const gainPerAcreBtn = document.getElementById('gainPerAcreBtn');
+    if (gainPerAcreBtn) {
+        const totalAcres = getTotalAcres();
+        const disabled = totalAcres <= 0;
+        setButtonDisabled(gainPerAcreBtn, disabled);
+    }
+
+    // Pay Off Loan
+    const payOffLoanBtn = document.getElementById('payOffLoanBtn');
+    if (payOffLoanBtn) {
+        const currentLoan = getCurrentLoanTotal();
+        const disabled = cashTotal <= 0 || currentLoan <= 0;
+        setButtonDisabled(payOffLoanBtn, disabled);
     }
 
     // Buy buttons (minimum 20% down)
@@ -1027,6 +1041,23 @@ function hideModal() {
     document.getElementById('resetModal').classList.add('hidden');
 }
 
+// Global variable to track if we're in gain or pay mode
+let isGainMode = false;
+
+// Function to update modal title and button text based on mode
+function updateModalForMode() {
+    const titleElement = document.getElementById('pay-per-acre-title');
+    const confirmButton = document.getElementById('confirmPayPerAcre');
+    
+    if (isGainMode) {
+        if (titleElement) titleElement.textContent = 'Gain Per Acre';
+        if (confirmButton) confirmButton.textContent = 'Gain';
+    } else {
+        if (titleElement) titleElement.textContent = 'Pay Per Acre';
+        if (confirmButton) confirmButton.textContent = 'Pay';
+    }
+}
+
 // Function to show the pay per acre modal
 function showPayPerAcreModal() {
     document.getElementById('payPerAcreModal').classList.remove('hidden');
@@ -1036,6 +1067,74 @@ function showPayPerAcreModal() {
 // Function to hide the pay per acre modal
 function hidePayPerAcreModal() {
     document.getElementById('payPerAcreModal').classList.add('hidden');
+}
+
+// Function to show the pay off loan modal
+function showPayOffLoanModal() {
+    const modal = document.getElementById('payOffLoanModal');
+    modal.classList.remove('hidden');
+    
+    // Update displays
+    const currentCash = getCurrentCashTotal();
+    const currentLoan = getCurrentLoanTotal();
+    const maxPayoff = Math.min(currentCash, currentLoan);
+    
+    document.getElementById('currentLoanDisplay').textContent = `Current Loan: $${currentLoan.toLocaleString()}`;
+    document.getElementById('currentCashDisplay').textContent = `Available Cash: $${currentCash.toLocaleString()}`;
+    document.getElementById('maxPayoffDisplay').textContent = `Max Payoff: $${maxPayoff.toLocaleString()}`;
+    
+    // Set slider to max payoff
+    const slider = document.getElementById('loanPayoffSlider');
+    if (slider) {
+        slider.min = 0;
+        slider.max = maxPayoff;
+        slider.value = maxPayoff;
+        updateLoanPayoffDisplay();
+        
+        // Add event listener for slider changes
+        slider.oninput = updateLoanPayoffDisplay;
+    }
+}
+
+// Function to update the loan payoff display
+function updateLoanPayoffDisplay() {
+    const slider = document.getElementById('loanPayoffSlider');
+    const display = document.getElementById('loanPayoffAmountDisplay');
+    if (slider && display) {
+        display.textContent = `$${parseFloat(slider.value).toLocaleString()}`;
+    }
+}
+
+// Function to hide the pay off loan modal
+function hidePayOffLoanModal() {
+    document.getElementById('payOffLoanModal').classList.add('hidden');
+}
+
+// Function to perform loan payoff
+function performPayOffLoan() {
+    const slider = document.getElementById('loanPayoffSlider');
+    const payoffAmount = parseFloat(slider.value) || 0;
+    
+    if (payoffAmount <= 0) {
+        alert('Please enter a valid payment amount.');
+        return;
+    }
+    
+    const currentCash = getCurrentCashTotal();
+    const currentLoan = getCurrentLoanTotal();
+    const maxPayoff = Math.min(currentCash, currentLoan);
+    
+    if (payoffAmount > maxPayoff) {
+        alert(`Maximum payoff is $${maxPayoff.toLocaleString()}. You cannot pay more than your available cash ($${currentCash.toLocaleString()}) or your current loan ($${currentLoan.toLocaleString()}).`);
+        return;
+    }
+    
+    // Subtract from both cash and loan
+    addCashTransactionValue(-payoffAmount);
+    addLoanTransactionValue(-payoffAmount);
+    
+    // Update button states
+    updateActionButtonStates();
 }
 
 // Event listener for the reset button
@@ -1057,6 +1156,16 @@ document.getElementById('cancelReset').addEventListener('click', (event) => {
 // Event listener for the pay per acre button
 document.getElementById('payPerAcreBtn').addEventListener('click', (event) => {
     event.preventDefault();
+    isGainMode = false;
+    updateModalForMode();
+    showPayPerAcreModal();
+});
+
+// Event listener for the gain per acre button
+document.getElementById('gainPerAcreBtn').addEventListener('click', (event) => {
+    event.preventDefault();
+    isGainMode = true;
+    updateModalForMode();
     showPayPerAcreModal();
 });
 
@@ -1071,6 +1180,25 @@ document.getElementById('confirmPayPerAcre').addEventListener('click', (event) =
 document.getElementById('cancelPayPerAcre').addEventListener('click', (event) => {
     event.preventDefault();
     hidePayPerAcreModal();
+});
+
+// Event listener for the pay off loan button
+document.getElementById('payOffLoanBtn').addEventListener('click', (event) => {
+    event.preventDefault();
+    showPayOffLoanModal();
+});
+
+// Event listener for the confirm pay off loan button
+document.getElementById('confirmPayOffLoan').addEventListener('click', (event) => {
+    event.preventDefault();
+    performPayOffLoan();
+    hidePayOffLoanModal();
+});
+
+// Event listener for the cancel pay off loan button
+document.getElementById('cancelPayOffLoan').addEventListener('click', (event) => {
+    event.preventDefault();
+    hidePayOffLoanModal();
 });
 
 function updatePayPerAcreDisplay() {
@@ -1138,26 +1266,32 @@ function performPayPerAcre() {
     const totalPayment = acres * perAcreValue;
     
     if (totalPayment <= 0) {
-        alert('No acres to pay for.');
+        alert('No acres to process.');
         return;
     }
     
     const currentCash = getCurrentCashTotal();
-    if (currentCash < totalPayment) {
-        alert(
-            'Insufficient cash to pay. You need $' +
-                totalPayment.toLocaleString() +
-                ' but only have $' +
-                currentCash.toLocaleString() +
-                '.'
-        );
-        return;
+    
+    if (isGainMode) {
+        // For gain mode, just add the amount
+        addCashTransactionValue(totalPayment);
+    } else {
+        // For pay mode, check if we have enough cash
+        if (currentCash < totalPayment) {
+            alert(
+                'Insufficient cash to pay. You need $' +
+                    totalPayment.toLocaleString() +
+                    ' but only have $' +
+                    currentCash.toLocaleString() +
+                    '.'
+            );
+            return;
+        }
+        // Pay the amount
+        addCashTransactionValue(-totalPayment);
     }
     
-    // Pay the amount
-    addCashTransactionValue(-totalPayment);
-    
-    // Update button states after payment
+    // Update button states after transaction
     updateActionButtonStates();
 }
 
