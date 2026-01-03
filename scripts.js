@@ -100,10 +100,40 @@ function calculateNet() {
     if (typeof updateUpgradedRidgesDisplay === 'function') updateUpgradedRidgesDisplay();
 }
 
+function parseTransactionValue(rawValue) {
+    if (rawValue === null || rawValue === undefined) return NaN;
+    let s = String(rawValue).trim();
+    if (!s) return NaN;
+
+    // Normalize common input variants.
+    s = s.replace(/\u2212/g, '-'); // Unicode minus
+    s = s.replace(/\$/g, '');
+    s = s.replace(/\s+/g, '');
+
+    // Support accounting parentheses: (1234) => -1234
+    const parenMatch = s.match(/^\((.*)\)$/);
+    if (parenMatch) s = '-' + parenMatch[1];
+
+    s = s.replace(/,/g, '');
+
+    // Support trailing sign: 1000- => -1000, 1000+ => 1000
+    const trailingSign = s.match(/^(.*?)([+-])$/);
+    if (trailingSign && trailingSign[1]) {
+        s = (trailingSign[2] === '-' ? '-' : '') + trailingSign[1];
+    }
+
+    const n = Number(s);
+    return Number.isFinite(n) ? n : NaN;
+}
+
 function handleTransaction(inputId, transactionClass, totalClass) {
     const inputElement = document.getElementById(inputId);
     if (inputElement && inputElement.value.trim() !== '') {
-        const newValue = parseFloat(inputElement.value.trim().replace(/,/g, '')) || 0;
+        const newValue = parseTransactionValue(inputElement.value);
+        if (!Number.isFinite(newValue)) {
+            inputElement.value = '';
+            return;
+        }
         
         // Check loan limit for loan transactions
         if (transactionClass.includes('loan') && newValue > 0) {
@@ -167,7 +197,7 @@ function addCashTransactionValue(amount) {
     if (!Array.isArray(data.transactions.cash)) data.transactions.cash = [];
     if (!Array.isArray(data.transactions.loan)) data.transactions.loan = [];
 
-    const numericValue = parseFloat(String(amount).replace(/,/g, ''));
+    const numericValue = parseTransactionValue(amount);
     if (!Number.isFinite(numericValue)) return;
 
     data.transactions.cash.unshift(String(numericValue));
@@ -181,7 +211,7 @@ function addLoanTransactionValue(amount) {
     if (!Array.isArray(data.transactions.cash)) data.transactions.cash = [];
     if (!Array.isArray(data.transactions.loan)) data.transactions.loan = [];
 
-    const numericValue = parseFloat(String(amount).replace(/,/g, ''));
+    const numericValue = parseTransactionValue(amount);
     if (!Number.isFinite(numericValue)) return;
 
     // Check loan limit for positive loan amounts
@@ -229,15 +259,15 @@ function undoLastLoanTransaction() {
 function shiftAndInsertTransaction(inputId, transactionClass) {
     // Get the value from the input
     const inputElement = document.getElementById(inputId);
-    const newValue = inputElement.value.trim();
+    const numericValue = parseTransactionValue(inputElement.value);
 
     // Check that the value is not empty
-    if (newValue !== '') {
+    if (Number.isFinite(numericValue)) {
         // Determine which transaction type (cash or loan)
         const transactionType = transactionClass.includes('cash') ? 'cash' : 'loan';
         
         // Add new transaction to the beginning of the global data array
-        data.transactions[transactionType].unshift(newValue);
+        data.transactions[transactionType].unshift(String(numericValue));
         
         // Select all the transaction cells for cash or loan
         const transactionCells = document.querySelectorAll(`.${transactionClass}`);
@@ -275,8 +305,8 @@ function syncDOMToData() {
         const cellValue = cell.textContent.trim();
         if (cellValue !== '') {
             // Parse the formatted value back to a raw number string
-            const numericValue = parseFloat(cellValue.replace(/,/g, ''));
-            if (!isNaN(numericValue)) {
+            const numericValue = parseTransactionValue(cellValue);
+            if (Number.isFinite(numericValue)) {
                 data.transactions.cash.push(String(numericValue));
             }
         }
@@ -288,8 +318,8 @@ function syncDOMToData() {
         const cellValue = cell.textContent.trim();
         if (cellValue !== '') {
             // Parse the formatted value back to a raw number string
-            const numericValue = parseFloat(cellValue.replace(/,/g, ''));
-            if (!isNaN(numericValue)) {
+            const numericValue = parseTransactionValue(cellValue);
+            if (Number.isFinite(numericValue)) {
                 data.transactions.loan.push(String(numericValue));
             }
         }
@@ -338,18 +368,18 @@ function createTransactionCell(row, className, value = '', isEditable = false) {
 
 function getCurrentCashTotal() {
     if (data && data.transactions && Array.isArray(data.transactions.cash)) {
-        return data.transactions.cash.reduce((sum, val) => sum + (parseFloat(String(val).replace(/,/g, '')) || 0), 0);
+        return data.transactions.cash.reduce((sum, val) => sum + (parseTransactionValue(val) || 0), 0);
     }
     const cashTotalCell = document.querySelector('.cash-total');
-    return cashTotalCell ? (parseFloat(String(cashTotalCell.textContent).replace(/,/g, '')) || 0) : 0;
+    return cashTotalCell ? (parseTransactionValue(cashTotalCell.textContent) || 0) : 0;
 }
 
 function getCurrentLoanTotal() {
     if (data && data.transactions && Array.isArray(data.transactions.loan)) {
-        return data.transactions.loan.reduce((sum, val) => sum + (parseFloat(String(val).replace(/,/g, '')) || 0), 0);
+        return data.transactions.loan.reduce((sum, val) => sum + (parseTransactionValue(val) || 0), 0);
     }
     const loanTotalCell = document.querySelector('.loan-total');
-    return loanTotalCell ? (parseFloat(String(loanTotalCell.textContent).replace(/,/g, '')) || 0) : 0;
+    return loanTotalCell ? (parseTransactionValue(loanTotalCell.textContent) || 0) : 0;
 }
 
 function getCurrentInterestValue() {
@@ -419,11 +449,11 @@ function updateTotals() {
     if (data && data.transactions) {
         // Sum all cash transactions from global data object
         cashTotal = data.transactions.cash.reduce((sum, val) => {
-            return sum + (parseFloat(val.replace(/,/g, '')) || 0);
+            return sum + (parseTransactionValue(val) || 0);
         }, 0);
         // Sum all loan transactions from global data object
         loanTotal = data.transactions.loan.reduce((sum, val) => {
-            return sum + (parseFloat(val.replace(/,/g, '')) || 0);
+            return sum + (parseTransactionValue(val) || 0);
         }, 0);
     }
 
