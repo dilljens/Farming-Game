@@ -95,6 +95,7 @@ function calculateNet() {
 
     updateTotalAcres(); // Update total acres
     updateTotalWorth(true); // Update the total worth after net values are calculated (debounced save)
+    if (typeof updateUpgradedRidgesDisplay === 'function') updateUpgradedRidgesDisplay();
 }
 
 function handleTransaction(inputId, transactionClass, totalClass) {
@@ -868,6 +869,17 @@ function getRanchRidgeBonusFromSelections(selections) {
     }, 0);
 }
 
+function updateUpgradedRidgesDisplay() {
+    const displayEl = document.getElementById('upgradedRidgesDisplay');
+    if (!displayEl) return;
+
+    const ranchCowsQty = parseInt(document.querySelector('.qty-cows')?.textContent || '0', 10) || 0;
+    const ridgeBonus = data.ranchRidgeBonus || 0;
+    const upgradedRidges = Math.max(0, ranchCowsQty - ridgeBonus);
+
+    displayEl.textContent = `Ridge Expansions: ${upgradedRidges}`;
+}
+
 function saveQuantitiesToLocalStorage() {
     // Update quantities from the page
     data.qty = {
@@ -952,6 +964,7 @@ function loadFromLocalStorage() {
         // console.log("Loaded transactions for loan:", loadedData.transactions.loan);
         updateTotals();
         calculateNet();
+        updateUpgradedRidgesDisplay();
     } else {
         // First run: seed with a default starting state.
         data = getBaseState();
@@ -1445,6 +1458,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     });
 
     calculateNet(); // Initial calculation on page load
+    updateUpgradedRidgesDisplay();
     //console.log(document.getElementById('cashInput'));
     makeEditableCellsExitOnEnter();
     const cashUndoCell = document.getElementById('cashUndoCell');
@@ -1716,7 +1730,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const ridgeSelect = document.getElementById('ridgeSelect');
         const selectedRidge = ridgeSelect.value;
         let bonus = 0;
-        if (selectedRidge !== 'none') {
+        if (selectedRidge === 'none') {
+            bonus = 1;
+        } else {
             const checkbox = document.querySelector(`.ranch-ridge-checkbox[data-key="${selectedRidge}"]`);
             bonus = parseInt(checkbox.getAttribute('data-bonus')) || 0;
         }
@@ -1796,25 +1812,53 @@ window.addEventListener('DOMContentLoaded', (event) => {
         addLoanTransactionValue(loanAmount);
 
         // Increment the quantity
-        let currentQty = parseInt(currentQtyValueEl.textContent) || 0;
-        currentQty += 1;
-        currentQtyValueEl.textContent = currentQty;
-        calculateNet();
-        populateRollTable();
-        saveQuantitiesToLocalStorage();
-
-        // For Ranch Cows, check the selected ridge
+        let qtyIncrease = 1;
         let ridgeMsg = '';
+
         if (currentAsset === 'cows') {
             const ridgeSelect = document.getElementById('ridgeSelect');
             const selectedRidge = ridgeSelect.value;
-            if (selectedRidge !== 'none') {
+
+            if (selectedRidge === 'none') {
+                // Expand Ridge (+1): only allowed after owning at least one ridge
+                const hasAnyRidge = (data.ranchRidgeBonus || 0) > 0;
+                if (!hasAnyRidge) {
+                    alert('You must buy a ridge before purchasing an expansion.');
+                    return;
+                }
+
+                qtyIncrease = 1;
+                ridgeMsg = ' (Expand Ridge (+1))';
+            } else {
                 const checkbox = document.querySelector(`.ranch-ridge-checkbox[data-key="${selectedRidge}"]`);
+                if (checkbox?.checked) {
+                    alert('You already own this ridge.');
+                    return;
+                }
+
+                const prevBonus = data.ranchRidgeBonus || 0;
+                if (!data.ranchRidgeSelections) data.ranchRidgeSelections = {};
+                data.ranchRidgeSelections[selectedRidge] = true;
+
+                const newBonus = getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
+                const delta = Math.max(0, newBonus - prevBonus);
+                data.ranchRidgeBonus = newBonus;
+
+                qtyIncrease = delta;
                 if (checkbox) checkbox.checked = true;
+
                 const ridgeName = ridgeSelect.options[ridgeSelect.selectedIndex].text;
                 ridgeMsg = ` (${ridgeName})`;
             }
         }
+
+        let currentQty = parseInt(currentQtyValueEl.textContent) || 0;
+        currentQty += qtyIncrease;
+        currentQtyValueEl.textContent = currentQty;
+
+        calculateNet();
+        populateRollTable();
+        saveQuantitiesToLocalStorage();
 
         alert(`Purchased 1 ${currentAsset}${ridgeMsg} for $${currentTotalCost.toLocaleString()}. Down payment: $${downPayment.toLocaleString()}, Loan: $${loanAmount.toLocaleString()}`);
         buyModal.classList.add('hidden');
@@ -1873,6 +1917,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 calculateNet();
                 populateRollTable();
                 saveQuantitiesToLocalStorage();
+                updateUpgradedRidgesDisplay();
             });
         });
     }
