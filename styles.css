@@ -318,6 +318,38 @@ input[type="range"]::-moz-range-thumb {
     margin-top: 2px;
 }
 
+.pay-per-acre-table th, .pay-per-acre-table td {
+    border: 1px solid #777777;
+    text-align: center;
+    padding: 4px;
+}
+
+.pay-per-acre-table th {
+    background-color: #cccccc;
+}
+
+.pay-per-acre-table button.pay-acre-button {
+    width: 100%;
+    display: block;
+    border: 0;
+    background-color: #e0e0e0;
+    cursor: pointer;
+    padding: 2px;
+    font: inherit;
+}
+
+.pay-per-acre-table button.pay-acre-button:hover {
+    background-color: #d0d0d0;
+}
+
+.pay-per-acre-table button.pay-acre-button:active {
+    background-color: #c0c0c0;
+}
+
+.pay-per-acre-table button.pay-acre-button.selected {
+    background-color: #90ee90;
+}
+
 .undo-hint {
     font-size: 10px;
     line-height: 1.05;

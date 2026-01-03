@@ -63,62 +63,63 @@
                   </div>
                   <div class="mt-4">
                     <div class="mb-4">
-                      <label class="block text-sm font-medium text-gray-700 mb-2">What to pay for:</label>
-                      <div class="space-y-2">
-                        <label class="flex items-center">
-                          <input type="radio" name="payType" value="total" class="mr-2" checked>
-                          Total
-                        </label>
-                        <label class="flex items-center">
-                          <input type="radio" name="payType" value="hay" class="mr-2">
-                          Hay
-                        </label>
-                        <label class="flex items-center">
-                          <input type="radio" name="payType" value="grain" class="mr-2">
-                          Grain
-                        </label>
-                        <label class="flex items-center">
-                          <input type="radio" name="payType" value="fruit" class="mr-2">
-                          Fruit
-                        </label>
-                        <label class="flex items-center">
-                          <input type="radio" name="payType" value="cows" class="mr-2">
-                          Cows
-                        </label>
-                      </div>
-                    </div>
-                    <div class="mb-4">
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Value per acre:</label>
-                      <div class="space-y-2">
-                        <label class="flex items-center">
-                          <input type="radio" name="perAcreValue" value="50" class="mr-2">
-                          $50
-                        </label>
-                        <label class="flex items-center">
-                          <input type="radio" name="perAcreValue" value="100" class="mr-2" checked>
-                          $100
-                        </label>
-                        <label class="flex items-center">
-                          <input type="radio" name="perAcreValue" value="200" class="mr-2">
-                          $200
-                        </label>
-                        <label class="flex items-center">
-                          <input type="radio" name="perAcreValue" value="300" class="mr-2">
-                          $300
-                        </label>
-                        <label class="flex items-center">
-                          <input type="radio" name="perAcreValue" value="400" class="mr-2">
-                          $400
-                        </label>
-                        <label class="flex items-center">
-                          <input type="radio" name="perAcreValue" value="500" class="mr-2">
-                          $500
-                        </label>
-                        <label class="flex items-center">
-                          <input type="radio" name="perAcreValue" value="1000" class="mr-2">
-                          $1000
-                        </label>
-                      </div>
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Select payment option:</label>
+                      <table class="pay-per-acre-table">
+                        <thead>
+                          <tr>
+                            <th></th>
+                            <th>$50</th>
+                            <th>$100</th>
+                            <th>$200</th>
+                            <th>$300</th>
+                            <th>$400</th>
+                            <th>$500</th>
+                            <th>$1000</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>Total</td>
+                            <td><button class="pay-acre-button" data-pay-type="total" data-per-acre="50">$50</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="total" data-per-acre="100">$100</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="total" data-per-acre="200">$200</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="total" data-per-acre="300">$300</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="total" data-per-acre="400">$400</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="total" data-per-acre="500">$500</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="total" data-per-acre="1000">$1000</button></td>
+                          </tr>
+                          <tr>
+                            <td>Hay</td>
+                            <td><button class="pay-acre-button" data-pay-type="hay" data-per-acre="50">$50</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="hay" data-per-acre="100">$100</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="hay" data-per-acre="200">$200</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="hay" data-per-acre="300">$300</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="hay" data-per-acre="400">$400</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="hay" data-per-acre="500">$500</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="hay" data-per-acre="1000">$1000</button></td>
+                          </tr>
+                          <tr>
+                            <td>Grain</td>
+                            <td><button class="pay-acre-button" data-pay-type="grain" data-per-acre="50">$50</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="grain" data-per-acre="100">$100</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="grain" data-per-acre="200">$200</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="grain" data-per-acre="300">$300</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="grain" data-per-acre="400">$400</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="grain" data-per-acre="500">$500</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="grain" data-per-acre="1000">$1000</button></td>
+                          </tr>
+                          <tr>
+                            <td>Fruit</td>
+                            <td><button class="pay-acre-button" data-pay-type="fruit" data-per-acre="50">$50</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="fruit" data-per-acre="100">$100</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="fruit" data-per-acre="200">$200</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="fruit" data-per-acre="300">$300</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="fruit" data-per-acre="400">$400</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="fruit" data-per-acre="500">$500</button></td>
+                            <td><button class="pay-acre-button" data-pay-type="fruit" data-per-acre="1000">$1000</button></td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                     <div class="mb-4 p-3 bg-gray-50 rounded-md">
                       <div class="text-sm text-gray-700">

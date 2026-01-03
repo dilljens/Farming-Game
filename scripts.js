@@ -1125,6 +1125,10 @@ function hideModal() {
 // Global variable to track if we're in gain or pay mode
 let isGainMode = false;
 
+// Store selected options separately for pay and gain modes
+let payModeSelection = { payType: 'total', perAcre: '100' };
+let gainModeSelection = { payType: 'total', perAcre: '100' };
+
 // Function to update modal title and button text based on mode
 function updateModalForMode() {
     const titleElement = document.getElementById('pay-per-acre-title');
@@ -1142,6 +1146,19 @@ function updateModalForMode() {
 // Function to show the pay per acre modal
 function showPayPerAcreModal() {
     document.getElementById('payPerAcreModal').classList.remove('hidden');
+    
+    // Restore the selection based on current mode
+    const selection = isGainMode ? gainModeSelection : payModeSelection;
+    
+    // Remove selected class from all buttons
+    document.querySelectorAll('.pay-acre-button').forEach(btn => btn.classList.remove('selected'));
+    
+    // Find and select the appropriate button
+    const buttonToSelect = document.querySelector(`.pay-acre-button[data-pay-type="${selection.payType}"][data-per-acre="${selection.perAcre}"]`);
+    if (buttonToSelect) {
+        buttonToSelect.classList.add('selected');
+    }
+    
     updatePayPerAcreDisplay();
 }
 
@@ -1283,8 +1300,17 @@ document.getElementById('cancelPayOffLoan').addEventListener('click', (event) =>
 });
 
 function updatePayPerAcreDisplay() {
-    const payType = document.querySelector('input[name="payType"]:checked').value;
-    const perAcreValue = parseFloat(document.querySelector('input[name="perAcreValue"]:checked').value);
+    const selectedButton = document.querySelector('.pay-acre-button.selected');
+    if (!selectedButton) {
+        const acresDisplay = document.getElementById('acresDisplay');
+        const paymentDisplay = document.getElementById('paymentDisplay');
+        if (acresDisplay) acresDisplay.textContent = 'Acres: 0';
+        if (paymentDisplay) paymentDisplay.textContent = 'Total Payment: $0';
+        return;
+    }
+    
+    const payType = selectedButton.getAttribute('data-pay-type');
+    const perAcreValue = parseFloat(selectedButton.getAttribute('data-per-acre'));
     
     const acres = getAcresForType(payType);
     const totalPayment = acres * perAcreValue;
@@ -1300,9 +1326,26 @@ function updatePayPerAcreDisplay() {
     }
 }
 
-// Add event listeners to pay per acre radio buttons to update display
-document.querySelectorAll('input[name="payType"], input[name="perAcreValue"]').forEach(radio => {
-    radio.addEventListener('change', updatePayPerAcreDisplay);
+// Add event listeners to pay per acre buttons
+document.querySelectorAll('.pay-acre-button').forEach(button => {
+    button.addEventListener('click', function() {
+        // Remove selected class from all buttons
+        document.querySelectorAll('.pay-acre-button').forEach(btn => btn.classList.remove('selected'));
+        // Add selected class to clicked button
+        this.classList.add('selected');
+        
+        // Store the selection based on current mode
+        const payType = this.getAttribute('data-pay-type');
+        const perAcre = this.getAttribute('data-per-acre');
+        if (isGainMode) {
+            gainModeSelection = { payType, perAcre };
+        } else {
+            payModeSelection = { payType, perAcre };
+        }
+        
+        // Update display
+        updatePayPerAcreDisplay();
+    });
 });
 
 function getAcresForType(type) {
@@ -1317,10 +1360,6 @@ function getAcresForType(type) {
     } else if (type === 'fruit') {
         const qty = parseFloat(document.querySelector('.qty-fruit').textContent) || 0;
         return qty * 5;
-    } else if (type === 'cows') {
-        const farmQty = parseFloat(document.querySelector('.qty-farm').textContent) || 0;
-        const cowsQty = parseFloat(document.querySelector('.qty-cows').textContent) || 0;
-        return (farmQty + cowsQty) * 10;
     }
     return 0;
 }
@@ -1340,8 +1379,14 @@ function getTotalAcres() {
 }
 
 function performPayPerAcre() {
-    const payType = document.querySelector('input[name="payType"]:checked').value;
-    const perAcreValue = parseFloat(document.querySelector('input[name="perAcreValue"]:checked').value);
+    const selectedButton = document.querySelector('.pay-acre-button.selected');
+    if (!selectedButton) {
+        alert('Please select a payment option.');
+        return;
+    }
+    
+    const payType = selectedButton.getAttribute('data-pay-type');
+    const perAcreValue = parseFloat(selectedButton.getAttribute('data-per-acre'));
     
     const acres = getAcresForType(payType);
     const totalPayment = acres * perAcreValue;
