@@ -622,7 +622,7 @@ function sendDataToServer(totalWorth) {
     const debt = loanTotalCell ? (parseFloat(loanTotalCell.textContent.replace(/,/g, '')) || 0) : 0;
 
     // Save to Firestore
-    const userDocRef = doc(db, 'leaderboard', username);
+    const userDocRef = doc(db, 'leaderboard', auth.currentUser.uid);
     setDoc(userDocRef, {
         username: username,
         networth: totalWorth,
