@@ -38,6 +38,8 @@ signInAnonymously(auth)
     console.error('Anonymous sign-in failed:', error);
   });
 
+let isDoublePurchase = false;
+
 let leaderboardSaveTimer = null;
 function scheduleLeaderboardSave(totalWorth) {
         if (leaderboardSaveTimer) clearTimeout(leaderboardSaveTimer);
@@ -1669,7 +1671,6 @@ window.addEventListener('DOMContentLoaded', (event) => {
     let lastDownPaymentPercent = 20; // Remember last setting
     let lastDownPaymentAmount = 0; // Remember last dollar amount
     let minValidDownPayment = 0;
-    let isDoublePurchase = false;
 
     function showBuyModal(asset, cost, totalCost) {
         currentAsset = asset;
@@ -1686,49 +1687,24 @@ window.addEventListener('DOMContentLoaded', (event) => {
         // Show ridge select for Ranch Cows
         const ridgeDiv = document.getElementById('ridgeSelectDiv');
         const ridgeSelect = document.getElementById('ridgeSelect');
-        isDoublePurchase = false;
-        document.getElementById('doublePurchaseCheckbox').checked = false;
+        document.getElementById('doublePurchaseCheckbox').checked = isDoublePurchase;
         if (asset === 'cows') {
             ridgeDiv.classList.remove('hidden');
             ridgeSelect.value = 'none'; // Reset to none
-            updateRidgeCost(1);
+            updateRidgeCost(isDoublePurchase ? 2 : 1);
             updateDoublePurchaseCheckbox();
         } else {
             ridgeDiv.classList.add('hidden');
-            currentTotalCost = cost;
-            document.getElementById('assetInfo').textContent = `Buying 1 ${asset} at $${cost.toLocaleString()} each.`;
-            document.getElementById('totalCost').textContent = totalCost.toLocaleString();
             updateModalCosts();
         }
         
-        // Debt cap: total debt can't exceed $50,000
-        updateTotals();
-        const currentLoanTotal = getCurrentLoanTotal();
-        const maxLoanIncrease = 50000 - currentLoanTotal;
-
-        // Minimum down payment: max of 20% of cost or amount needed to keep loan <= $50,000
-        const minFromLoanLimit = Math.max(0, totalCost - maxLoanIncrease);
-        const minFromPercentage = totalCost * 0.2;
-        minValidDownPayment = Math.max(minFromLoanLimit, minFromPercentage);
-        // Snap to $100 increments
-        minValidDownPayment = Math.ceil(minValidDownPayment / 100) * 100;
-
-        downPaymentSlider.step = 100;
-        downPaymentSlider.min = Math.min(minValidDownPayment, totalCost);
-        downPaymentSlider.max = totalCost;
-
-        const minVal = parseInt(downPaymentSlider.min);
-        const maxVal = parseInt(downPaymentSlider.max);
-        const desired = Number.isFinite(lastDownPaymentAmount) ? lastDownPaymentAmount : minVal;
-        let chosen = Math.min(Math.max(desired, minVal), maxVal);
-        chosen = Math.round(chosen / 100) * 100;
-        downPaymentSlider.value = chosen;
-
-        // Update display
-        document.getElementById('minDownPayment').textContent = Number(downPaymentSlider.min).toLocaleString();
-        document.getElementById('maxDownPayment').textContent = Number(downPaymentSlider.max).toLocaleString();
-        
-        updateModalAmounts(parseInt(downPaymentSlider.value));
+        // Check if double purchase is affordable
+        const currentCash = getCurrentCashTotal();
+        if (isDoublePurchase && minValidDownPayment > currentCash) {
+            isDoublePurchase = false;
+            document.getElementById('doublePurchaseCheckbox').checked = false;
+            updateModalCosts();
+        }
         buyModal.classList.remove('hidden');
     }
 
@@ -1769,7 +1745,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
         const minVal = parseInt(downPaymentSlider.min);
         const maxVal = parseInt(downPaymentSlider.max);
-        let chosen = Math.min(Math.max(parseInt(downPaymentSlider.value), minVal), maxVal);
+        const desired = Number.isFinite(lastDownPaymentAmount) ? lastDownPaymentAmount : minVal;
+        let chosen = Math.min(Math.max(desired, minVal), maxVal);
         chosen = Math.round(chosen / 100) * 100;
         downPaymentSlider.value = chosen;
         
@@ -1783,21 +1760,30 @@ window.addEventListener('DOMContentLoaded', (event) => {
         if (currentAsset === 'cows' && selectedRidge !== 'none') {
             checkbox.disabled = true;
             checkbox.checked = false;
+            isDoublePurchase = false;
         } else {
             checkbox.disabled = false;
+            checkbox.checked = isDoublePurchase;
         }
     }
 
     // Add event listener for ridge select
     document.getElementById('ridgeSelect').addEventListener('change', () => {
-        updateRidgeCost(isDoublePurchase ? 2 : 1);
         updateDoublePurchaseCheckbox();
+        updateRidgeCost(isDoublePurchase ? 2 : 1);
     });
 
     // Add event listener for double purchase checkbox
     document.getElementById('doublePurchaseCheckbox').addEventListener('change', function() {
         isDoublePurchase = this.checked;
         updateModalCosts();
+        const currentCash = getCurrentCashTotal();
+        if (isDoublePurchase && minValidDownPayment > currentCash) {
+            isDoublePurchase = false;
+            this.checked = false;
+            alert("Insufficient cash for the required down payment on double purchase.");
+            updateModalCosts();
+        }
     });
 
     function updateModalCosts() {
@@ -1806,7 +1792,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
             updateRidgeCost(multiplier);
         } else {
             currentTotalCost = currentBaseCost * multiplier;
-            document.getElementById('assetInfo').textContent = `Buying ${multiplier} ${currentAsset} at $${(currentBaseCost * multiplier).toLocaleString()} each.`;
+            document.getElementById('assetInfo').textContent = `Buying ${multiplier} ${currentAsset} at $${currentBaseCost.toLocaleString()} each.`;
             document.getElementById('totalCost').textContent = currentTotalCost.toLocaleString();
             
             // Recalculate slider range for debt cap
@@ -1826,7 +1812,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
             const minVal = parseInt(downPaymentSlider.min);
             const maxVal = parseInt(downPaymentSlider.max);
-            let chosen = Math.min(Math.max(parseInt(downPaymentSlider.value), minVal), maxVal);
+            const desired = Number.isFinite(lastDownPaymentAmount) ? lastDownPaymentAmount : minVal;
+            let chosen = Math.min(Math.max(desired, minVal), maxVal);
             chosen = Math.round(chosen / 100) * 100;
             downPaymentSlider.value = chosen;
 
