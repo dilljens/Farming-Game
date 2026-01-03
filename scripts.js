@@ -693,8 +693,8 @@ function updateLeaderboardTable(data) {
         // Append cells to the row
         row.appendChild(usernameCell);
         row.appendChild(networthCell);
-        row.appendChild(debtCell);
         row.appendChild(cashCell);
+        row.appendChild(debtCell);
         row.appendChild(hayCell);
         row.appendChild(grainCell);
         row.appendChild(fruitCell);
@@ -1122,6 +1122,16 @@ function hideModal() {
     document.getElementById('resetModal').classList.add('hidden');
 }
 
+// Function to show the extra rules modal
+function showExtraRulesModal() {
+    document.getElementById('extraRulesModal').classList.remove('hidden');
+}
+
+// Function to hide the extra rules modal
+function hideExtraRulesModal() {
+    document.getElementById('extraRulesModal').classList.add('hidden');
+}
+
 // Global variable to track if we're in gain or pay mode
 let isGainMode = false;
 
@@ -1238,6 +1248,9 @@ function performPayOffLoan() {
 // Event listener for the reset button
 document.getElementById('resetButton').addEventListener('click', showModal);
 
+// Event listener for the extra rules button
+document.getElementById('extraRulesButton').addEventListener('click', showExtraRulesModal);
+
 // Event listener for the confirm reset button in the modal
 document.getElementById('confirmReset').addEventListener('click', (event) => {
     event.preventDefault();
@@ -1249,6 +1262,12 @@ document.getElementById('confirmReset').addEventListener('click', (event) => {
 document.getElementById('cancelReset').addEventListener('click', (event) => {
     event.preventDefault();
     hideModal();
+});
+
+// Event listener for the close extra rules button
+document.getElementById('closeExtraRules').addEventListener('click', (event) => {
+    event.preventDefault();
+    hideExtraRulesModal();
 });
 
 // Event listener for the pay per acre button
