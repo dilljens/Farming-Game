@@ -140,7 +140,7 @@ function handleTransaction(inputId, transactionClass, totalClass) {
             updateTotals();
             const currentLoanTotal = getCurrentLoanTotal();
             if (currentLoanTotal + newValue > 50000) {
-                alert('Loan transaction would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + newValue.toLocaleString() + '.');
+                // alert('Loan transaction would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + newValue.toLocaleString() + '.');
                 inputElement.value = '';
                 return;
             }
@@ -372,7 +372,7 @@ function makeCellEditable(cell) {
                 // Sign changed - preserve the original sign but allow magnitude change
                 const correctedValue = originalSign * Math.abs(newValue);
                 cell.textContent = numberWithCommasAndDecimals(String(correctedValue));
-                alert('Transaction sign preserved. The sign cannot be changed for existing transactions.');
+                // alert('Transaction sign preserved. The sign cannot be changed for existing transactions.');
             }
         }
         
@@ -1214,7 +1214,7 @@ function performPayOffLoan() {
     const payoffAmount = parseFloat(slider.value) || 0;
     
     if (payoffAmount <= 0) {
-        alert('Please enter a valid payment amount.');
+        // alert('Please enter a valid payment amount.');
         return;
     }
     
@@ -1223,7 +1223,7 @@ function performPayOffLoan() {
     const maxPayoff = Math.min(currentCash, currentLoan);
     
     if (payoffAmount > maxPayoff) {
-        alert(`Maximum payoff is $${maxPayoff.toLocaleString()}. You cannot pay more than your available cash ($${currentCash.toLocaleString()}) or your current loan ($${currentLoan.toLocaleString()}).`);
+        // alert(`Maximum payoff is $${maxPayoff.toLocaleString()}. You cannot pay more than your available cash ($${currentCash.toLocaleString()}) or your current loan ($${currentLoan.toLocaleString()}).`);
         return;
     }
     
@@ -1381,7 +1381,7 @@ function getTotalAcres() {
 function performPayPerAcre() {
     const selectedButton = document.querySelector('.pay-acre-button.selected');
     if (!selectedButton) {
-        alert('Please select a payment option.');
+        // alert('Please select a payment option.');
         return;
     }
     
@@ -1392,7 +1392,7 @@ function performPayPerAcre() {
     const totalPayment = acres * perAcreValue;
     
     if (totalPayment <= 0) {
-        alert('No acres to process.');
+        // alert('No acres to process.');
         return;
     }
     
@@ -1404,13 +1404,13 @@ function performPayPerAcre() {
     } else {
         // For pay mode, check if we have enough cash
         if (currentCash < totalPayment) {
-            alert(
-                'Insufficient cash to pay. You need $' +
-                    totalPayment.toLocaleString() +
-                    ' but only have $' +
-                    currentCash.toLocaleString() +
-                    '.'
-            );
+            // alert(
+            //     'Insufficient cash to pay. You need $' +
+            //         totalPayment.toLocaleString() +
+            //         ' but only have $' +
+            //         currentCash.toLocaleString() +
+            //         '.'
+            // );
             return;
         }
         // Pay the amount
@@ -1677,19 +1677,19 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
             const interest = getCurrentInterestValue();
             if (!(interest > 0)) {
-                alert('No interest to pay.');
+                // alert('No interest to pay.');
                 return;
             }
 
             const currentCash = getCurrentCashTotal();
             if (currentCash < interest) {
-                alert(
-                    'Insufficient cash to pay interest. You need $' +
-                        interest.toLocaleString() +
-                        ' but only have $' +
-                        currentCash.toLocaleString() +
-                        '.'
-                );
+                // alert(
+                //     'Insufficient cash to pay interest. You need $' +
+                //         interest.toLocaleString() +
+                //         ' but only have $' +
+                //         currentCash.toLocaleString() +
+                //         '.'
+                // );
                 return;
             }
 
@@ -1768,7 +1768,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
             const cost = parseFloat(costRaw) || 0;
             const totalCost = cost; // Always buy 1
             if (totalCost <= 0) {
-                alert('Cost is invalid.');
+                // alert('Cost is invalid.');
                 return;
             }
 
@@ -1897,7 +1897,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         if (isDoublePurchase && minValidDownPayment > currentCash) {
             isDoublePurchase = false;
             this.checked = false;
-            alert("Insufficient cash for the required down payment on double purchase.");
+            // alert("Insufficient cash for the required down payment on double purchase.");
             updateModalCosts();
         }
     });
@@ -1971,14 +1971,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
         updateTotals();
         const currentCash = getCurrentCashTotal();
         if (currentCash < downPayment) {
-            alert('Insufficient cash for down payment. You need $' + downPayment.toLocaleString() + ' but only have $' + currentCash.toLocaleString() + '.');
+            // alert('Insufficient cash for down payment. You need $' + downPayment.toLocaleString() + ' but only have $' + currentCash.toLocaleString() + '.');
             return;
         }
 
         // Check if loan would exceed $50,000 debt limit
         const currentLoanTotal = getCurrentLoanTotal();
         if (currentLoanTotal + loanAmount > 50000) {
-            alert('Loan would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + loanAmount.toLocaleString() + '.');
+            // alert('Loan would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + loanAmount.toLocaleString() + '.');
             return;
         }
 
@@ -1999,7 +1999,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 // Expand Ridge (+1): only allowed after owning at least one ridge
                 const hasAnyRidge = (data.ranchRidgeBonus || 0) > 0;
                 if (!hasAnyRidge) {
-                    alert('You must buy a ridge before purchasing an expansion.');
+                    // alert('You must buy a ridge before purchasing an expansion.');
                     return;
                 }
 
@@ -2008,7 +2008,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
             } else {
                 const checkbox = document.querySelector(`.ranch-ridge-checkbox[data-key="${selectedRidge}"]`);
                 if (checkbox?.checked) {
-                    alert('You already own this ridge.');
+                    // alert('You already own this ridge.');
                     return;
                 }
 
@@ -2038,7 +2038,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         populateRollTable();
         saveQuantitiesToLocalStorage();
 
-        alert(`Purchased ${qtyIncrease} ${currentAsset}${ridgeMsg} for $${currentTotalCost.toLocaleString()}. Down payment: $${downPayment.toLocaleString()}, Loan: $${loanAmount.toLocaleString()}`);
+        // alert(`Purchased ${qtyIncrease} ${currentAsset}${ridgeMsg} for $${currentTotalCost.toLocaleString()}. Down payment: $${downPayment.toLocaleString()}, Loan: $${loanAmount.toLocaleString()}`);
         buyModal.classList.add('hidden');
     });
 
