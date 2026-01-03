@@ -1669,6 +1669,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     let lastDownPaymentPercent = 20; // Remember last setting
     let lastDownPaymentAmount = 0; // Remember last dollar amount
     let minValidDownPayment = 0;
+    let isDoublePurchase = false;
 
     function showBuyModal(asset, cost, totalCost) {
         currentAsset = asset;
@@ -1681,18 +1682,23 @@ window.addEventListener('DOMContentLoaded', (event) => {
         currentQtyValueEl = qtySpan;
 
         document.getElementById('modalTitle').textContent = `Buy ${asset.charAt(0).toUpperCase() + asset.slice(1)}`;
-        document.getElementById('assetInfo').textContent = `Buying 1 ${asset} at $${cost.toLocaleString()} each.`;
-        document.getElementById('totalCost').textContent = totalCost.toLocaleString();
         
         // Show ridge select for Ranch Cows
         const ridgeDiv = document.getElementById('ridgeSelectDiv');
         const ridgeSelect = document.getElementById('ridgeSelect');
+        isDoublePurchase = false;
+        document.getElementById('doublePurchaseCheckbox').checked = false;
         if (asset === 'cows') {
             ridgeDiv.classList.remove('hidden');
             ridgeSelect.value = 'none'; // Reset to none
-            updateRidgeCost();
+            updateRidgeCost(1);
+            updateDoublePurchaseCheckbox();
         } else {
             ridgeDiv.classList.add('hidden');
+            currentTotalCost = cost;
+            document.getElementById('assetInfo').textContent = `Buying 1 ${asset} at $${cost.toLocaleString()} each.`;
+            document.getElementById('totalCost').textContent = totalCost.toLocaleString();
+            updateModalCosts();
         }
         
         // Debt cap: total debt can't exceed $50,000
@@ -1726,7 +1732,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         buyModal.classList.remove('hidden');
     }
 
-    function updateRidgeCost() {
+    function updateRidgeCost(multiplier = 1) {
         const ridgeSelect = document.getElementById('ridgeSelect');
         const selectedRidge = ridgeSelect.value;
         let bonus = 0;
@@ -1736,11 +1742,11 @@ window.addEventListener('DOMContentLoaded', (event) => {
             const checkbox = document.querySelector(`.ranch-ridge-checkbox[data-key="${selectedRidge}"]`);
             bonus = parseInt(checkbox.getAttribute('data-bonus')) || 0;
         }
-        // Cost = bonus * 10000
-        const ridgeCost = bonus * 10000;
+        // Cost = bonus * 10000 * multiplier
+        const ridgeCost = bonus * 10000 * multiplier;
         currentCost = ridgeCost;
         currentTotalCost = ridgeCost;
-        document.getElementById('assetInfo').textContent = `Buying 1 ${currentAsset} at $${ridgeCost.toLocaleString()} each.`;
+        document.getElementById('assetInfo').textContent = `Buying ${multiplier} ${currentAsset} at $${ridgeCost.toLocaleString()} each.`;
         document.getElementById('totalCost').textContent = ridgeCost.toLocaleString();
         
         // Recalculate slider range for debt cap
@@ -1770,8 +1776,66 @@ window.addEventListener('DOMContentLoaded', (event) => {
         updateModalAmounts(parseInt(downPaymentSlider.value));
     }
 
+    function updateDoublePurchaseCheckbox() {
+        const checkbox = document.getElementById('doublePurchaseCheckbox');
+        const ridgeSelect = document.getElementById('ridgeSelect');
+        const selectedRidge = ridgeSelect.value;
+        if (currentAsset === 'cows' && selectedRidge !== 'none') {
+            checkbox.disabled = true;
+            checkbox.checked = false;
+        } else {
+            checkbox.disabled = false;
+        }
+    }
+
     // Add event listener for ridge select
-    document.getElementById('ridgeSelect').addEventListener('change', updateRidgeCost);
+    document.getElementById('ridgeSelect').addEventListener('change', () => {
+        updateRidgeCost(isDoublePurchase ? 2 : 1);
+        updateDoublePurchaseCheckbox();
+    });
+
+    // Add event listener for double purchase checkbox
+    document.getElementById('doublePurchaseCheckbox').addEventListener('change', function() {
+        isDoublePurchase = this.checked;
+        updateModalCosts();
+    });
+
+    function updateModalCosts() {
+        const multiplier = isDoublePurchase ? 2 : 1;
+        if (currentAsset === 'cows') {
+            updateRidgeCost(multiplier);
+        } else {
+            currentTotalCost = currentBaseCost * multiplier;
+            document.getElementById('assetInfo').textContent = `Buying ${multiplier} ${currentAsset} at $${(currentBaseCost * multiplier).toLocaleString()} each.`;
+            document.getElementById('totalCost').textContent = currentTotalCost.toLocaleString();
+            
+            // Recalculate slider range for debt cap
+            updateTotals();
+            const currentLoanTotal = getCurrentLoanTotal();
+            const maxLoanIncrease = 50000 - currentLoanTotal;
+
+            // Minimum down payment: max of 20% of cost or amount needed to keep loan <= $50,000
+            const minFromLoanLimit = Math.max(0, currentTotalCost - maxLoanIncrease);
+            const minFromPercentage = currentTotalCost * 0.2;
+            minValidDownPayment = Math.max(minFromLoanLimit, minFromPercentage);
+            minValidDownPayment = Math.ceil(minValidDownPayment / 100) * 100;
+
+            downPaymentSlider.step = 100;
+            downPaymentSlider.min = Math.min(minValidDownPayment, currentTotalCost);
+            downPaymentSlider.max = currentTotalCost;
+
+            const minVal = parseInt(downPaymentSlider.min);
+            const maxVal = parseInt(downPaymentSlider.max);
+            let chosen = Math.min(Math.max(parseInt(downPaymentSlider.value), minVal), maxVal);
+            chosen = Math.round(chosen / 100) * 100;
+            downPaymentSlider.value = chosen;
+
+            document.getElementById('minDownPayment').textContent = Number(downPaymentSlider.min).toLocaleString();
+            document.getElementById('maxDownPayment').textContent = Number(downPaymentSlider.max).toLocaleString();
+
+            updateModalAmounts(parseInt(downPaymentSlider.value));
+        }
+    }
 
     function updateModalAmounts(downPaymentAmount) {
         const downPayment = downPaymentAmount;
@@ -1779,6 +1843,15 @@ window.addEventListener('DOMContentLoaded', (event) => {
         document.getElementById('downPaymentAmount').textContent = downPayment.toLocaleString();
         document.getElementById('downPaymentSummary').textContent = downPayment.toLocaleString();
         document.getElementById('loanAmount').textContent = loanAmount.toLocaleString();
+
+        // Calculate after purchase
+        updateTotals();
+        const currentCash = getCurrentCashTotal();
+        const currentLoan = getCurrentLoanTotal();
+        const cashAfter = currentCash - downPayment;
+        const loanAfter = currentLoan + loanAmount;
+        document.getElementById('cashAfter').textContent = cashAfter.toLocaleString();
+        document.getElementById('loanAfter').textContent = loanAfter.toLocaleString();
     }
 
     downPaymentSlider.addEventListener('input', function() {
@@ -1852,6 +1925,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
             }
         }
 
+        qtyIncrease *= (isDoublePurchase ? 2 : 1);
+
         let currentQty = parseInt(currentQtyValueEl.textContent) || 0;
         currentQty += qtyIncrease;
         currentQtyValueEl.textContent = currentQty;
@@ -1860,7 +1935,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         populateRollTable();
         saveQuantitiesToLocalStorage();
 
-        alert(`Purchased 1 ${currentAsset}${ridgeMsg} for $${currentTotalCost.toLocaleString()}. Down payment: $${downPayment.toLocaleString()}, Loan: $${loanAmount.toLocaleString()}`);
+        alert(`Purchased ${qtyIncrease} ${currentAsset}${ridgeMsg} for $${currentTotalCost.toLocaleString()}. Down payment: $${downPayment.toLocaleString()}, Loan: $${loanAmount.toLocaleString()}`);
         buyModal.classList.add('hidden');
     });
 
