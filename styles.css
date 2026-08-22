@@ -268,6 +268,14 @@ input[type="number"] {
     cursor: not-allowed;
 }
 
+/* Buy modal confirm button when purchase isn't affordable */
+#confirmBuy:disabled,
+#confirmBuy.is-disabled {
+    opacity: 0.45;
+    filter: grayscale(1);
+    cursor: not-allowed;
+}
+
 .asset-cell {
     text-align: left;
 }
@@ -353,4 +361,41 @@ input[type="range"]::-moz-range-thumb {
 .undo-hint {
     font-size: 10px;
     line-height: 1.05;
+}
+
+/* Leaderboard header: title + table/chart toggle */
+.leaderboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.lb-view-toggle {
+    display: inline-flex;
+    border: 1px solid #d1d5db;
+    border-radius: 9999px;
+    overflow: hidden;
+}
+
+.lb-toggle-btn {
+    padding: 2px 12px;
+    font-size: 12px;
+    line-height: 1.4;
+    background-color: #f9fafb;
+    color: #374151;
+    border: 0;
+    cursor: pointer;
+}
+
+.lb-toggle-btn.active {
+    background-color: #16a34a;
+    color: #ffffff;
+}
+
+/* Chart view: fixed-height box so Chart.js can size the canvas */
+#leaderboardChartWrap {
+    position: relative;
+    height: 260px;
+    margin-top: 8px;
 }

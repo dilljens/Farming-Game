@@ -8,6 +8,7 @@
     <title>Farming Game</title>
     <link rel="stylesheet" href="./styles.css">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   </head>
   
@@ -216,8 +217,15 @@
 
     <div class="tables-container">
       <div class="leaderboard-wrapper">
-        <h2 class="text-xl font-semibold leading-tight text-gray-800">Leaderboard</h2>
-        <table class="divide-y divide-gray-200 mt-4" id="leaderboard">
+        <div class="leaderboard-header">
+          <h2 class="text-xl font-semibold leading-tight text-gray-800">Leaderboard</h2>
+          <div class="lb-view-toggle" role="tablist" aria-label="Leaderboard view">
+            <button type="button" id="showTableBtn" class="lb-toggle-btn active" aria-pressed="true">Table</button>
+            <button type="button" id="showChartBtn" class="lb-toggle-btn" aria-pressed="false">Chart</button>
+          </div>
+        </div>
+        <div id="leaderboardTableWrap">
+          <table class="divide-y divide-gray-200 mt-4" id="leaderboard">
             <thead class="bg-gray-50">
                 <tr>
                   <th scope="col">Username</th>
@@ -233,7 +241,12 @@
             <tbody class="bg-white divide-y divide-gray-200">
                 <!-- Leaderboard rows will be added here via JavaScript -->
             </tbody>
-        </table>
+          </table>
+        </div>
+        <div id="leaderboardChartWrap" class="hidden">
+          <!-- Net worth over time — one colored line per player -->
+          <canvas id="progressChart"></canvas>
+        </div>
       </div>
 
     <div class="roll-help text-gray-600 text-center">Tap the names of the asset to 1/2x, 2x, or return to normal</div>
@@ -521,6 +534,7 @@
             <span>$<span id="minDownPayment">0</span></span>
             <span>$<span id="maxDownPayment">0</span></span>
           </div>
+          <p id="buyCashHint" class="text-sm text-red-600 mt-1 hidden"></p>
         </div>
         <div class="mt-4 text-left">
           <p>Total Cost: $<span id="totalCost">0</span></p>

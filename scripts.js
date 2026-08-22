@@ -1,7 +1,7 @@
 // Firebase imports (CDN ESM modules)
 // Note: Browsers can't resolve bare imports like "firebase/app" without a bundler.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
 // Your web app's Firebase configuration
@@ -134,7 +134,14 @@ function handleTransaction(inputId, transactionClass, totalClass) {
             inputElement.value = '';
             return;
         }
-        
+
+        // Cash floor: reject negative cash entries that would go below $0
+        if (transactionClass.includes('cash') && wouldGoNegativeCash(newValue)) {
+            inputElement.value = '';
+            showCashFloorWarning(newValue);
+            return;
+        }
+
         // Check loan limit for loan transactions
         if (transactionClass.includes('loan') && newValue > 0) {
             updateTotals();
@@ -192,6 +199,27 @@ function handleTransaction(inputId, transactionClass, totalClass) {
     }
 }
 
+let cashWarnTimer = null;
+function showCashFloorWarning(attemptedAmount) {
+    let toast = document.getElementById('cashFloorToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'cashFloorToast';
+        toast.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#dc2626;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;z-index:60;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:opacity .3s;opacity:0;pointer-events:none;';
+        document.body.appendChild(toast);
+    }
+    const needed = (attemptedAmount != null && Number.isFinite(attemptedAmount)) ? ` ($${Math.abs(attemptedAmount).toLocaleString()} needed)` : '';
+    toast.textContent = `Not enough cash${needed} — balance can't go below $0`;
+    toast.style.opacity = '1';
+    clearTimeout(cashWarnTimer);
+    cashWarnTimer = setTimeout(() => { toast.style.opacity = '0'; }, 2200);
+}
+
+// Cash can never go below zero via spending. Epsilon absorbs float noise.
+function wouldGoNegativeCash(numericValue) {
+    return numericValue < 0 && (getCurrentCashTotal() + numericValue) < -0.005;
+}
+
 function addCashTransactionValue(amount) {
     if (!data.transactions) data.transactions = { cash: [], loan: [] };
     if (!Array.isArray(data.transactions.cash)) data.transactions.cash = [];
@@ -199,6 +227,12 @@ function addCashTransactionValue(amount) {
 
     const numericValue = parseTransactionValue(amount);
     if (!Number.isFinite(numericValue)) return;
+
+    // Cash floor: reject any spend that would take the balance below $0
+    if (wouldGoNegativeCash(numericValue)) {
+        showCashFloorWarning(numericValue);
+        return;
+    }
 
     data.transactions.cash.unshift(String(numericValue));
     updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
@@ -457,13 +491,17 @@ function updateActionButtonStates() {
         setButtonDisabled(payOffLoanBtn, disabled);
     }
 
-    // Buy buttons (minimum 20% down)
+    // Buy buttons: disabled unless the player can afford the true minimum
+    // down payment (20% of cost, or more when near the $50k debt cap),
+    // including the double-purchase multiplier.
     document.querySelectorAll('button.buy-btn[data-asset]').forEach((btn) => {
         const row = btn.closest('tr');
         const costCell = row && row.cells ? row.cells[3] : null;
-        const cost = costCell ? (parseFloat(String(costCell.textContent).replace(/,/g, '')) || 0) : 0;
-        const requiredDown = Math.round(cost * 0.2);
-        const disabled = requiredDown > 0 && cashTotal < requiredDown;
+        const unitCost = costCell ? (parseFloat(String(costCell.textContent).replace(/,/g, '')) || 0) : 0;
+        const totalCost = unitCost * (isDoublePurchase ? 2 : 1);
+        const debtHeadroom = 50000 - getCurrentLoanTotal();
+        const minValid = Math.ceil(Math.max(totalCost * 0.2, Math.max(0, totalCost - debtHeadroom)) / 100) * 100;
+        const disabled = totalCost <= 0 || getCurrentCashTotal() < minValid;
         setButtonDisabled(btn, disabled);
     });
 }
@@ -594,10 +632,10 @@ function updateTotalWorth(sendData) {
 }
 
 function sendDataToServer(totalWorth) {
-    
+
     const usernameCell = document.getElementById('editableUsername');
     const username = usernameCell.innerText.trim();
-    
+
     // console.log('Sending data to server:', { username: username, networth: totalWorth });
     // Check if username is valid
     if (username === '' || username === 'Enter name') {
@@ -611,6 +649,19 @@ function sendDataToServer(totalWorth) {
         return;
     }
 
+    // Wait for stored history to be read before writing: setDoc replaces the
+    // whole doc, so saving before seeding would wipe existing history points.
+    ensureHistorySeeded().then(() => {
+        if (historySeedFailed) {
+            console.log('Skipping leaderboard save: net worth history state unknown (will retry)');
+            return;
+        }
+        sendDataToServerAfterSeed(totalWorth, username);
+    }).catch((err) => console.error('History seed wait failed:', err));
+}
+
+function sendDataToServerAfterSeed(totalWorth, username) {
+
     const hayQty = parseInt(document.querySelector('.qty-hay')?.textContent || '0', 10) || 0;
     const grainQty = parseInt(document.querySelector('.qty-grain')?.textContent || '0', 10) || 0;
     const fruitQty = parseInt(document.querySelector('.qty-fruit')?.textContent || '0', 10) || 0;
@@ -623,6 +674,8 @@ function sendDataToServer(totalWorth) {
 
     const cash = getCurrentCashTotal();
 
+    recordHistoryPoint(totalWorth);
+
     // Save to Firestore
     const userDocRef = doc(db, 'leaderboard', auth.currentUser.uid);
     setDoc(userDocRef, {
@@ -634,6 +687,7 @@ function sendDataToServer(totalWorth) {
         grain: grainQty,
         fruit: fruitQty,
         cows: cowsQty,
+        history: Array.isArray(myHistoryCache) ? myHistoryCache : [],
         updatedAt: new Date()
     })
     .then(() => {
@@ -642,7 +696,61 @@ function sendDataToServer(totalWorth) {
     .catch((error) => {
         console.error('Error saving to Firestore:', error);
     });
-      
+
+}
+
+// --- Net worth history (feeds the leaderboard progress chart) ---
+// Stored inside each player's leaderboard doc as history: [{t, v}, ...]
+const MAX_HISTORY_POINTS = 100;
+const HISTORY_MIN_INTERVAL_MS = 60000; // one point per minute max
+let myHistoryCache = null;      // seeded from Firestore once auth is ready
+let historySeedPromise = null;  // in-flight/complete seeding (retryable)
+let historySeedFailed = false;  // true => don't write history (would wipe stored points)
+
+function ensureHistorySeeded() {
+    if (!historySeedPromise) {
+        historySeedPromise = seedHistoryCache();
+    }
+    return historySeedPromise;
+}
+
+async function seedHistoryCache() {
+    if (!auth.currentUser) return;
+    try {
+        const snap = await getDoc(doc(db, 'leaderboard', auth.currentUser.uid));
+        const stored = snap.data()?.history;
+        const storedPoints = Array.isArray(stored)
+            ? stored.filter(p => p && Number.isFinite(p.t) && Number.isFinite(p.v)).slice(-MAX_HISTORY_POINTS)
+            : [];
+        // Merge instead of clobber: a debounced save may have recorded a
+        // point before this read returned.
+        if (Array.isArray(myHistoryCache) && myHistoryCache.length > 0) {
+            const storedTs = new Set(storedPoints.map(p => p.t));
+            const localOnly = myHistoryCache.filter(p => !storedTs.has(p.t));
+            myHistoryCache = storedPoints.concat(localOnly).slice(-MAX_HISTORY_POINTS);
+        } else {
+            myHistoryCache = storedPoints;
+        }
+        historySeedFailed = false;
+    } catch (err) {
+        console.error('Error loading net worth history:', err);
+        // Unknown stored state: block history writes until a later retry
+        // succeeds, otherwise the next save would wipe stored points.
+        historySeedFailed = true;
+        historySeedPromise = null; // allow retry on the next save attempt
+    }
+}
+
+function recordHistoryPoint(totalWorth) {
+    if (!Array.isArray(myHistoryCache)) myHistoryCache = [];
+    const now = Date.now();
+    const last = myHistoryCache[myHistoryCache.length - 1];
+    if (last && now - last.t < HISTORY_MIN_INTERVAL_MS) return; // throttled
+    if (last && last.v === totalWorth) return;                  // unchanged
+    myHistoryCache.push({ t: now, v: totalWorth });
+    if (myHistoryCache.length > MAX_HISTORY_POINTS) {
+        myHistoryCache = myHistoryCache.slice(-MAX_HISTORY_POINTS);
+    }
 }
 
   
@@ -705,6 +813,118 @@ function updateLeaderboardTable(data) {
     });
 }
 
+// --- Leaderboard progress chart (net worth over time, one line per player) ---
+
+let progressChart = null;
+let latestLeaderboardData = [];
+
+// Deterministic per-player color: same name => same color on every client
+function colorForPlayer(name) {
+    let h = 0;
+    const s = String(name || '?');
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    const hue = (h * 137.508) % 360; // golden angle for well-spaced hues
+    return `hsl(${hue.toFixed(1)}, 70%, 45%)`;
+}
+
+function buildChartDatasets(data) {
+    return (data || [])
+        .filter(entry => Array.isArray(entry.history) && entry.history.length > 0)
+        .map(entry => ({
+            label: entry.username,
+            data: entry.history.map(p => ({ x: p.t, y: p.v })),
+            borderColor: colorForPlayer(entry.username),
+            backgroundColor: colorForPlayer(entry.username),
+            tension: 0.25,
+            pointRadius: 0,
+            borderWidth: 2,
+            fill: false
+        }));
+}
+
+// Called on every leaderboard snapshot. Data is cached so the chart can be
+// created lazily when the Chart view is first shown (a canvas created while
+// hidden gets zeroed dimensions).
+function updateProgressChart(data) {
+    latestLeaderboardData = data;
+    if (!progressChart || typeof Chart === 'undefined') return;
+    progressChart.data.datasets = buildChartDatasets(data);
+    progressChart.update('none');
+}
+
+function createProgressChart() {
+    if (progressChart || typeof Chart === 'undefined') return;
+    const canvas = document.getElementById('progressChart');
+    if (!canvas) return;
+    progressChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { datasets: buildChartDatasets(latestLeaderboardData) },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 12, boxHeight: 12, font: { size: 11 } }
+                },
+                tooltip: {
+                    callbacks: {
+                        title: (items) => items.length
+                            ? new Date(items[0].parsed.x).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                            : ''
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'linear',
+                    ticks: {
+                        maxTicksLimit: 6,
+                        font: { size: 10 },
+                        callback: (v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    },
+                    grid: { display: false }
+                },
+                y: {
+                    ticks: {
+                        font: { size: 10 },
+                        callback: (v) => Number(v).toLocaleString('en-US')
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Show exactly one of the two leaderboard views at a time.
+function showLeaderboardView(view) {
+    const tableWrap = document.getElementById('leaderboardTableWrap');
+    const chartWrap = document.getElementById('leaderboardChartWrap');
+    const tableBtn = document.getElementById('showTableBtn');
+    const chartBtn = document.getElementById('showChartBtn');
+    if (!tableWrap || !chartWrap || !tableBtn || !chartBtn) return;
+
+    const isChart = view === 'chart';
+    tableWrap.classList.toggle('hidden', isChart);
+    chartWrap.classList.toggle('hidden', !isChart);
+    tableBtn.classList.toggle('active', !isChart);
+    chartBtn.classList.toggle('active', isChart);
+    tableBtn.setAttribute('aria-pressed', String(!isChart));
+    chartBtn.setAttribute('aria-pressed', String(isChart));
+
+    if (isChart) {
+        createProgressChart(); // lazy: first switch to Chart view
+        if (progressChart) {
+            progressChart.resize();
+            progressChart.update('none');
+        }
+    }
+}
+
+document.getElementById('showTableBtn')?.addEventListener('click', () => showLeaderboardView('table'));
+document.getElementById('showChartBtn')?.addEventListener('click', () => showLeaderboardView('chart'));
+
 // Function to start Firestore real-time listener
 function startFirestoreListener() {
     // Listen for real-time updates to the leaderboard
@@ -715,17 +935,21 @@ function startFirestoreListener() {
         querySnapshot.forEach((doc) => {
             leaderboardData.push(doc.data());
         });
-        
+
         // Update your leaderboard UI
         updateLeaderboardTable(leaderboardData);
+        updateProgressChart(leaderboardData);
     }, (error) => {
         console.error('Firestore listener error:', error);
     });
 }
 
-// Start the Firestore listener when auth is ready
+// Start the Firestore listener and seed net-worth history once auth is ready
 authReady
-    .then(() => startFirestoreListener())
+    .then(() => {
+        ensureHistorySeeded();
+        startFirestoreListener();
+    })
     .catch((err) => console.error('Auth wait failed:', err));
 
 
@@ -1807,6 +2031,64 @@ window.addEventListener('DOMContentLoaded', (event) => {
     let lastDownPaymentAmount = 0; // Remember last dollar amount
     let minValidDownPayment = 0;
 
+    // Recompute slider bounds from the CURRENT total cost, clamping the
+    // selectable down payment to available cash so the "Cash After Purchase"
+    // preview can never go negative. Disables Confirm when even the minimum
+    // down payment (or the loan limit) makes the purchase impossible.
+    function refreshDownPaymentSlider() {
+        updateTotals();
+        const currentCash = getCurrentCashTotal();
+        const currentLoanTotal = getCurrentLoanTotal();
+        const maxLoanIncrease = 50000 - currentLoanTotal;
+
+        // Minimum down payment: max of 20% of cost or amount needed to keep loan <= $50,000
+        const minFromLoanLimit = Math.max(0, currentTotalCost - maxLoanIncrease);
+        const minFromPercentage = currentTotalCost * 0.2;
+        minValidDownPayment = Math.max(minFromLoanLimit, minFromPercentage);
+        minValidDownPayment = Math.ceil(minValidDownPayment / 100) * 100;
+
+        const affordableMax = Math.max(0, Math.floor(currentCash / 100) * 100);
+
+        downPaymentSlider.step = 100;
+        downPaymentSlider.min = Math.min(minValidDownPayment, currentTotalCost);
+        // Never allow selecting more cash than the player actually has
+        downPaymentSlider.max = Math.min(currentTotalCost, affordableMax);
+        if (downPaymentSlider.max < downPaymentSlider.min) {
+            // Unreachable minimum: collapse the range; Confirm stays disabled below
+            downPaymentSlider.min = downPaymentSlider.max;
+        }
+
+        document.getElementById('minDownPayment').textContent = Number(downPaymentSlider.min).toLocaleString();
+        document.getElementById('maxDownPayment').textContent = Number(downPaymentSlider.max).toLocaleString();
+
+        const minVal = parseInt(downPaymentSlider.min);
+        const maxVal = parseInt(downPaymentSlider.max);
+        const desired = Number.isFinite(lastDownPaymentAmount) ? lastDownPaymentAmount : minVal;
+        let chosen = Math.min(Math.max(desired, minVal), maxVal);
+        chosen = Math.round(chosen / 100) * 100;
+        chosen = Math.min(chosen, maxVal); // re-clamp: rounding can overshoot a non-round max
+        downPaymentSlider.value = chosen;
+
+        const cashOk = currentCash >= minValidDownPayment;
+        const loanOk = currentLoanTotal + Math.round(currentTotalCost - chosen) <= 50000;
+        setButtonDisabled(confirmBuy, !(cashOk && loanOk));
+
+        const hint = document.getElementById('buyCashHint');
+        if (hint) {
+            if (cashOk && loanOk) {
+                hint.classList.add('hidden');
+            } else if (!cashOk) {
+                hint.textContent = `Need $${minValidDownPayment.toLocaleString()} cash for the minimum down payment`;
+                hint.classList.remove('hidden');
+            } else {
+                hint.textContent = 'Loan would exceed the $50,000 debt limit';
+                hint.classList.remove('hidden');
+            }
+        }
+
+        updateModalAmounts(parseInt(downPaymentSlider.value));
+    }
+
     function showBuyModal(asset, cost, totalCost) {
         currentAsset = asset;
         currentBaseCost = cost; // Base cost
@@ -1859,33 +2141,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
         currentTotalCost = ridgeCost;
         document.getElementById('assetInfo').textContent = `Buying ${multiplier} ${currentAsset} at $${ridgeCost.toLocaleString()} each.`;
         document.getElementById('totalCost').textContent = ridgeCost.toLocaleString();
-        
-        // Recalculate slider range for debt cap
-        updateTotals();
-        const currentLoanTotal = getCurrentLoanTotal();
-        const maxLoanIncrease = 50000 - currentLoanTotal;
 
-        // Minimum down payment: max of 20% of cost or amount needed to keep loan <= $50,000
-        const minFromLoanLimit = Math.max(0, ridgeCost - maxLoanIncrease);
-        const minFromPercentage = ridgeCost * 0.2;
-        minValidDownPayment = Math.max(minFromLoanLimit, minFromPercentage);
-        minValidDownPayment = Math.ceil(minValidDownPayment / 100) * 100;
-
-        downPaymentSlider.step = 100;
-        downPaymentSlider.min = Math.min(minValidDownPayment, ridgeCost);
-        downPaymentSlider.max = ridgeCost;
-
-        document.getElementById('minDownPayment').textContent = Number(downPaymentSlider.min).toLocaleString();
-        document.getElementById('maxDownPayment').textContent = Number(downPaymentSlider.max).toLocaleString();
-
-        const minVal = parseInt(downPaymentSlider.min);
-        const maxVal = parseInt(downPaymentSlider.max);
-        const desired = Number.isFinite(lastDownPaymentAmount) ? lastDownPaymentAmount : minVal;
-        let chosen = Math.min(Math.max(desired, minVal), maxVal);
-        chosen = Math.round(chosen / 100) * 100;
-        downPaymentSlider.value = chosen;
-        
-        updateModalAmounts(parseInt(downPaymentSlider.value));
+        refreshDownPaymentSlider();
     }
 
     function updateDoublePurchaseCheckbox() {
@@ -1929,33 +2186,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
             currentTotalCost = currentBaseCost * multiplier;
             document.getElementById('assetInfo').textContent = `Buying ${multiplier} ${currentAsset} at $${currentBaseCost.toLocaleString()} each.`;
             document.getElementById('totalCost').textContent = currentTotalCost.toLocaleString();
-            
-            // Recalculate slider range for debt cap
-            updateTotals();
-            const currentLoanTotal = getCurrentLoanTotal();
-            const maxLoanIncrease = 50000 - currentLoanTotal;
 
-            // Minimum down payment: max of 20% of cost or amount needed to keep loan <= $50,000
-            const minFromLoanLimit = Math.max(0, currentTotalCost - maxLoanIncrease);
-            const minFromPercentage = currentTotalCost * 0.2;
-            minValidDownPayment = Math.max(minFromLoanLimit, minFromPercentage);
-            minValidDownPayment = Math.ceil(minValidDownPayment / 100) * 100;
-
-            downPaymentSlider.step = 100;
-            downPaymentSlider.min = Math.min(minValidDownPayment, currentTotalCost);
-            downPaymentSlider.max = currentTotalCost;
-
-            const minVal = parseInt(downPaymentSlider.min);
-            const maxVal = parseInt(downPaymentSlider.max);
-            const desired = Number.isFinite(lastDownPaymentAmount) ? lastDownPaymentAmount : minVal;
-            let chosen = Math.min(Math.max(desired, minVal), maxVal);
-            chosen = Math.round(chosen / 100) * 100;
-            downPaymentSlider.value = chosen;
-
-            document.getElementById('minDownPayment').textContent = Number(downPaymentSlider.min).toLocaleString();
-            document.getElementById('maxDownPayment').textContent = Number(downPaymentSlider.max).toLocaleString();
-
-            updateModalAmounts(parseInt(downPaymentSlider.value));
+            refreshDownPaymentSlider();
         }
     }
 
@@ -1990,7 +2222,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         updateTotals();
         const currentCash = getCurrentCashTotal();
         if (currentCash < downPayment) {
-            // alert('Insufficient cash for down payment. You need $' + downPayment.toLocaleString() + ' but only have $' + currentCash.toLocaleString() + '.');
+            showCashFloorWarning(downPayment);
             return;
         }
 
@@ -2001,14 +2233,12 @@ window.addEventListener('DOMContentLoaded', (event) => {
             return;
         }
 
-        // Add cash transaction (negative for payment)
-        addCashTransactionValue(-downPayment);
-        // Add loan transaction (positive for loan)
-        addLoanTransactionValue(loanAmount);
-
-        // Increment the quantity
+        // Validate cows/ridge selection BEFORE moving any money so a failed
+        // check can never deduct cash/loan without a purchase.
         let qtyIncrease = 1;
         let ridgeMsg = '';
+        let pendingRidgeSelection = null;
+        let pendingRidgeBonus = null;
 
         if (currentAsset === 'cows') {
             const ridgeSelect = document.getElementById('ridgeSelect');
@@ -2031,23 +2261,36 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     return;
                 }
 
+                // Compute the new bonus without mutating state yet
+                const trialSelections = { ...(data.ranchRidgeSelections || {}) };
+                trialSelections[selectedRidge] = true;
+                const newBonus = getRanchRidgeBonusFromSelections(trialSelections);
                 const prevBonus = data.ranchRidgeBonus || 0;
-                if (!data.ranchRidgeSelections) data.ranchRidgeSelections = {};
-                data.ranchRidgeSelections[selectedRidge] = true;
-
-                const newBonus = getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
                 const delta = Math.max(0, newBonus - prevBonus);
-                data.ranchRidgeBonus = newBonus;
 
                 qtyIncrease = delta;
-                if (checkbox) checkbox.checked = true;
-
-                const ridgeName = ridgeSelect.options[ridgeSelect.selectedIndex].text;
-                ridgeMsg = ` (${ridgeName})`;
+                ridgeMsg = ` (${ridgeSelect.options[ridgeSelect.selectedIndex].text})`;
+                pendingRidgeSelection = selectedRidge;
+                pendingRidgeBonus = newBonus;
             }
         }
 
         qtyIncrease *= (isDoublePurchase ? 2 : 1);
+
+        // All checks passed — now move the money and apply the purchase.
+        // Add cash transaction (negative for payment)
+        addCashTransactionValue(-downPayment);
+        // Add loan transaction (positive for loan)
+        addLoanTransactionValue(loanAmount);
+
+        if (pendingRidgeSelection !== null) {
+            if (!data.ranchRidgeSelections) data.ranchRidgeSelections = {};
+            data.ranchRidgeSelections[pendingRidgeSelection] = true;
+            data.ranchRidgeBonus = pendingRidgeBonus;
+
+            const checkbox = document.querySelector(`.ranch-ridge-checkbox[data-key="${pendingRidgeSelection}"]`);
+            if (checkbox) checkbox.checked = true;
+        }
 
         let currentQty = parseInt(currentQtyValueEl.textContent) || 0;
         currentQty += qtyIncrease;
