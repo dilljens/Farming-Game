@@ -1,6 +1,10 @@
 {
+  "scripts": {
+    "test": "node --test game-time.test.mjs"
+  },
   "dependencies": {
     "firebase": "^12.7.0",
+    "qrcode": "^1.5.4",
     "ws": "^8.16.0"
   }
 }

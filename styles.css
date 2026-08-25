@@ -213,38 +213,143 @@ input[type="number"] {
     top: 2px;
 }
 
+/* Thumb actions + prevent double-tap zoom/selection while spamming */
+button, .qty-btn, .buy-btn, .pay-acre-button, .roll-cell-button, .lb-toggle-btn {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+}
+input, .editable {
+    touch-action: manipulation;
+}
+
+/* Scrollable table wrappers — prevents 8-col leaderboard from squishing */
+.table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+}
+.table-wrap table {
+    min-width: 520px; /* allow horizontal scroll instead of crushing columns */
+}
+
+/* Bottom thumb bar for primary actions (mobile) */
+#thumbBar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-top: 1px solid #e5e7eb;
+    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+    z-index: 45;
+}
+#thumbBar:empty { display: none; }
+@media (min-width: 601px) {
+    #thumbBar { display: none !important; }
+    body { padding-bottom: 0 !important; }
+}
+
 @media screen and (max-width: 600px) {
+    html { -webkit-text-size-adjust: 100%; }
     body {
-        font-size: 2vw; /* Adjust font size for smaller screens */
+        font-size: clamp(11px, 2.8vw, 14px);
+        padding-bottom: calc(72px + env(safe-area-inset-bottom));
+        overscroll-behavior-y: contain;
     }
     table {
         width: 100%;
     }
     th, td {
-        padding: 2px; /* Reduce padding for smaller screens */
+        padding: 6px 4px;
     }
     .roll-table th, .roll-table td {
         border: 1px solid #777777;
         text-align: center;
-        padding: 2px;
+        padding: 6px 4px;
     }
     
     .roll-table th {
         background-color: #f2f2f2;
     }
 
-
     .input-cell input, .small-input input {
-        padding: 1px; /* Reduce padding for input fields */
+        padding: 8px 6px;
+        font-size: 16px;
     }
     
-    /* Additional styles for mobile */
     .roll-table, .financial-table {
-        margin-top: 10px; /* Remove additional margin on mobile */
-        margin-bottom: 5px; /* Add some space below the tables */
+        margin-top: 10px;
+        margin-bottom: 5px;
     }
 
-    /* tables-container already pads and sizes to match all tables */
+    /* 44px minimum tap targets — qty/borrow/spend */
+    .qty-btn {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 6px 8px;
+        font-size: 16px;
+        line-height: 1;
+    }
+    .buy-btn {
+        min-height: 44px;
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+    .pay-acre-button, .roll-cell-button {
+        min-height: 44px;
+        padding: 8px 4px;
+    }
+    .lb-toggle-btn {
+        min-height: 36px;
+        padding: 6px 12px;
+    }
+
+    /* Modals: fit small screens + safe-area + scroll */
+    #buyModal > div, #customBuyModal > div, #payPerAcreModal > div, #payOffLoanModal > div, #resetModal > div, #extraRulesModal > div {
+        width: min(92vw, 32rem) !important;
+        max-height: 90dvh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        margin: 0 auto;
+    }
+    #buyModal, #customBuyModal, #payPerAcreModal, #payOffLoanModal, #resetModal, #extraRulesModal {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    .tables-container {
+        padding-left: max(8px, env(safe-area-inset-left));
+        padding-right: max(8px, env(safe-area-inset-right));
+    }
+    /* Sticky first col for spreadsheet so Assets stays visible while scrolling */
+    #spreadsheet th:first-child, #spreadsheet td:first-child {
+        position: sticky;
+        left: 0;
+        background: #f0efef;
+        z-index: 1;
+        border-right: 2px solid #d1d5db;
+    }
+    #spreadsheet tr.highlight td:first-child {
+        background: #5fd7a9;
+    }
+    /* Quick cash buttons: 6 cols overflow on 320px — reflow to 3 cols */
+    #quickTransactionButtons .grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        width: 100%;
+    }
+    #quickTransactionButtons button {
+        width: auto !important;
+    }
+    /* Pay-per-acre modal table also scrollable on mobile */
+    .pay-per-acre-table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        white-space: nowrap;
+    }
 }
 
 .buy-btn {
@@ -260,6 +365,14 @@ input[type="number"] {
 
 .buy-btn:hover {
     background-color: #45a049;
+}
+
+/* Pay buttons — red (user request) */
+#payPerAcreBtn, #payInterestBtn, #payOffLoanBtn {
+    background-color: #dc2626;
+}
+#payPerAcreBtn:hover, #payInterestBtn:hover, #payOffLoanBtn:hover {
+    background-color: #b91c1c;
 }
 
 .buy-btn.is-disabled {

@@ -3,12 +3,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#5fd7a9">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Farming Game">
+    <meta name="description" content="Farming Game — room-based net worth race with live leaderboard, first-change window and compressed breaks">
     
     <title>Farming Game</title>
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" href="./icon-192.svg">
+    <link rel="apple-touch-icon" href="./icon-192.svg">
     <link rel="stylesheet" href="./styles.css">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 
   </head>
   
@@ -216,6 +227,33 @@
 
 
     <div class="tables-container">
+      <!-- Room lobby — mirrors imposterirl/src/app/lobby/[room_code]/page.tsx + RoomCodeDisplay.tsx -->
+      <div id="roomLobby" class="w-full text-center">
+        <div id="roomCodeDisplay" class="text-center mb-6 mt-2 hidden" data-testid="lobby-room-code">
+          <p class="text-gray-400 text-sm uppercase tracking-widest mb-1">Room Code <span id="hostBadge" class="hidden ml-2 px-2 py-0.5 bg-amber-400 text-black text-xs rounded-full align-middle">HOST</span></p>
+          <h1 id="roomCodeBig" class="text-6xl font-extrabold tracking-widest text-gray-900">--</h1>
+        </div>
+        <div id="roomControls" class="flex flex-wrap items-center justify-center gap-2 mb-2">
+          <input id="roomCodeInput" type="text" maxlength="4" placeholder="AB" class="w-24 p-2 rounded bg-white border border-zinc-300 text-2xl tracking-widest text-center uppercase focus:outline-none focus:border-blue-500" data-testid="join-room-input" />
+          <button id="joinRoomBtn" type="button" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold" data-testid="join-submit">JOIN ROOM</button>
+          <button id="createRoomBtn" type="button" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold">CREATE ROOM</button>
+          <button id="leaveRoomBtn" type="button" class="hidden px-3 py-2 bg-zinc-200 hover:bg-zinc-300 rounded-lg text-sm">LEAVE</button>
+        </div>
+        <div class="flex items-center justify-center gap-2 mb-2">
+          <button id="roomQrBtn" type="button" class="hidden text-xs px-3 py-1.5 rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition border border-zinc-700" data-testid="lobby-qr-button">📱 JOIN QR</button>
+        </div>
+        <div id="roomQrWrap" class="hidden flex-col items-center gap-2 mb-3 p-4 bg-white border border-zinc-300 rounded-lg max-w-sm mx-auto">
+          <img id="roomQrImg" alt="QR to join room" class="w-40 h-40 bg-white p-1 rounded" />
+          <p class="text-xs text-zinc-500">Scan to join room <span id="roomQrCodeText" class="text-gray-900 font-bold"></span></p>
+          <p id="roomJoinUrl" class="text-[10px] text-zinc-400 break-all"></p>
+        </div>
+        <p id="roomStatus" class="text-xs text-zinc-500 min-h-[16px]"></p>
+        <div id="hostControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
+          <button id="hostResetRoomBtn" type="button" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-bold">Reset Room (host)</button>
+          <button id="hostResetGameBtn" type="button" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs">Reset My Game</button>
+        </div>
+      </div>
+      <div id="tradeInbox" class="hidden w-full max-w-lg mx-auto my-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-left text-sm"></div>
       <div class="leaderboard-wrapper">
         <div class="leaderboard-header">
           <h2 class="text-xl font-semibold leading-tight text-gray-800">Leaderboard</h2>
@@ -223,8 +261,9 @@
             <button type="button" id="showTableBtn" class="lb-toggle-btn active" aria-pressed="true">Table</button>
             <button type="button" id="showChartBtn" class="lb-toggle-btn" aria-pressed="false">Chart</button>
           </div>
+          <div id="gameTimeDisplay" class="text-xs text-gray-500" aria-live="polite">Game time: 0:00 / 3:00:00</div>
         </div>
-        <div id="leaderboardTableWrap">
+        <div id="leaderboardTableWrap" class="table-wrap">
           <table class="divide-y divide-gray-200 mt-4" id="leaderboard">
             <thead class="bg-gray-50">
                 <tr>
@@ -245,12 +284,27 @@
         </div>
         <div id="leaderboardChartWrap" class="hidden">
           <!-- Net worth over time — one colored line per player -->
+          <div class="leaderboard-header">
+            <button type="button" id="zoomOutBtn" class="lb-toggle-btn" aria-label="Zoom out">&minus;</button>
+            <button type="button" id="resetZoomBtn" class="lb-toggle-btn">Reset zoom</button>
+            <button type="button" id="zoomInBtn" class="lb-toggle-btn" aria-label="Zoom in">+</button>
+          </div>
+          <!-- Scroll to zoom, drag to pan, pinch on touch devices -->
           <canvas id="progressChart"></canvas>
         </div>
       </div>
 
     <div class="roll-help text-gray-600 text-center">Tap the names of the asset to 1/2x, 2x, or return to normal</div>
-    <table class="roll-table">
+    <div id="diceToggleWrap" class="text-center my-2">
+      <button id="toggleDiceBtn" type="button" class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs">🎲 Show Dice</button>
+    </div>
+    <div id="diceComponent" class="hidden max-w-lg mx-auto p-3 bg-white border border-zinc-300 rounded-lg text-center mb-2">
+      <div id="diceDisplay" class="text-5xl font-bold my-1 select-none">-</div>
+      <button id="rollDiceBtn" type="button" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold text-sm">Roll 1-6</button>
+      <div id="diceHistory" class="text-xs text-zinc-500 mt-2 min-h-[14px]"></div>
+      <button id="hideDiceBtn" type="button" class="mt-2 text-xs text-zinc-400 hover:text-zinc-600">Hide Dice</button>
+    </div>
+    <div class="table-wrap"><table class="roll-table">
       <tr>
         <th>Roll</th>
         <th>1</th>
@@ -296,9 +350,9 @@
         <td>0</td>
         <td>0</td>
       </tr>
-    </table>
+    </table></div>
 
-  <table id="spreadsheet">
+  <div class="table-wrap"><table id="spreadsheet">
     <tr>
       <th>Assets</th>
       <th>Acres</th>
@@ -442,7 +496,7 @@
       </td>
       <td class="interest">0</td>
     </tr>
-  </table>
+  </table></div>
 
 <div id="quickTransactionButtons" class="mt-1 mb-1 flex flex-col items-center gap-2">
   <div class="grid grid-cols-6 gap-2">
@@ -463,7 +517,7 @@
   </div>
 </div>
 
-<table class="financial-table" id="financialTable">
+<div class="table-wrap"><table class="financial-table" id="financialTable">
   <!-- Headers -->
   <tr>
     <th id="cashUndoCell" class="font-semibold cursor-pointer select-none">
@@ -471,14 +525,14 @@
       <div class="undo-hint text-gray-400 font-normal">tap to undo last transaction</div>
     </th>
     <td class="small-input">
-      <input type="number" id="cashInput" placeholder="Enter Cash value" />
+      <input type="number" id="cashInput" placeholder="Enter Cash value" inputmode="numeric" pattern="[0-9]*" />
     </td>
     <th id="loanUndoCell" class="font-semibold cursor-pointer select-none">
       Loan
       <div class="undo-hint text-gray-400 font-normal">tap to undo last transaction</div>
     </th>
     <td class="small-input">
-      <input type="number" id="loanInput" placeholder="Enter Loan value" />
+      <input type="number" id="loanInput" placeholder="Enter Loan value" inputmode="numeric" pattern="[0-9]*" />
     </td>
   </tr>
 
@@ -500,7 +554,7 @@
     <!-- other cells -->
 </tr>
 
-</table>
+</table></div>
 
 </div>
 
@@ -556,7 +610,81 @@
   </div>
 </div>
 
+<div class="text-center my-3">
+  <button id="customBuyBtn" type="button" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm">Custom Buy — from another player</button>
+</div>
+
+<!-- Custom Buy Modal — buy property from another player at custom price -->
+<div id="customBuyModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+  <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+    <div class="mt-3 text-center">
+      <h3 class="text-lg font-medium text-gray-900">Custom Buy</h3>
+      <p class="text-xs text-gray-500 mt-1">Buy property from another player in this room at a price you set.</p>
+      <div class="mt-4 space-y-3 text-left">
+        <label class="block text-sm font-medium text-gray-700">Seller
+          <select id="customBuySeller" class="mt-1 w-full p-2 border border-gray-300 rounded text-sm"></select>
+        </label>
+        <label class="block text-sm font-medium text-gray-700">Asset
+          <select id="customBuyAsset" class="mt-1 w-full p-2 border border-gray-300 rounded text-sm">
+            <option value="Hay">Hay</option>
+            <option value="Grain">Grain</option>
+            <option value="Fruit">Fruit</option>
+            <option value="Farm">Farm Cows</option>
+            <option value="Cows">Ranch Cows</option>
+            <option value="Harvester">Harvester</option>
+            <option value="Tractor">Tractor</option>
+          </select>
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block text-sm font-medium text-gray-700">Quantity
+            <input id="customBuyQty" type="number" min="1" value="1" inputmode="numeric" pattern="[0-9]*" class="mt-1 w-full p-2 border border-gray-300 rounded text-sm" />
+          </label>
+          <label class="block text-sm font-medium text-gray-700">Price (cash)
+            <input id="customBuyPrice" type="number" min="0" step="100" value="1000" inputmode="numeric" pattern="[0-9]*" class="mt-1 w-full p-2 border border-gray-300 rounded text-sm" />
+          </label>
+        </div>
+        <div id="customBuyPreview" class="text-xs bg-gray-50 p-2 rounded border min-h-[48px]"></div>
+        <p id="customBuyHint" class="text-sm text-red-600 hidden"></p>
+      </div>
+      <div class="flex items-center px-4 py-3 mt-2">
+        <button id="confirmCustomBuy" class="px-4 py-2 bg-purple-600 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-purple-700">Confirm</button>
+        <button id="cancelCustomBuy" class="ml-3 px-4 py-2 bg-gray-300 text-gray-900 text-base font-medium rounded-md w-full">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="thumbBar" class="hidden"></div>
+
 <script type="module" src="scripts.js"></script>
+<script>
+// Populate thumb bar on mobile — primary actions within thumb reach
+(function(){
+  const bar = document.getElementById('thumbBar');
+  if (!bar) return;
+  function build(){
+    if (window.innerWidth > 600) { bar.innerHTML=''; bar.classList.add('hidden'); return; }
+    bar.innerHTML = `
+      <button onclick="document.getElementById('toggleDiceBtn')?.click(); try{navigator.vibrate(10)}catch{}; document.getElementById('diceComponent')?.scrollIntoView({behavior:'smooth',block:'center'})" class="flex-1 flex flex-col items-center justify-center py-2.5 bg-zinc-900 text-white rounded-xl text-xs font-bold leading-none shadow-sm min-h-[52px]">
+        <span class="text-base leading-none">🎲</span><span class="mt-0.5">Dice</span>
+      </button>
+      <button onclick="document.getElementById('customBuyBtn')?.click(); try{navigator.vibrate(10)}catch{}" class="flex-1 flex flex-col items-center justify-center py-2.5 bg-purple-600 text-white rounded-xl text-xs font-bold leading-none shadow-sm min-h-[52px]">
+        <span class="text-base leading-none">🤝</span><span class="mt-0.5">Trade</span>
+      </button>
+      <button onclick="document.getElementById('roomQrBtn')?.click(); try{navigator.vibrate(10)}catch{}; if(document.getElementById('roomQrWrap')?.classList.contains('hidden')===false) document.getElementById('roomQrWrap')?.scrollIntoView({behavior:'smooth',block:'center'})" class="flex-1 flex flex-col items-center justify-center py-2.5 bg-[#16a34a] text-white rounded-xl text-xs font-bold leading-none shadow-sm min-h-[52px]">
+        <span class="text-base leading-none">📱</span><span class="mt-0.5">Invite</span>
+      </button>
+      <button onclick="window.scrollTo({top:0,behavior:'smooth'}); try{navigator.vibrate(10)}catch{}" class="px-4 py-2.5 bg-white border border-zinc-200 text-zinc-700 rounded-xl text-xs font-bold shadow-sm min-h-[52px]" aria-label="Back to top">↑</button>
+    `;
+    bar.classList.remove('hidden');
+  }
+  build();
+  window.addEventListener('resize', build);
+})();
+if ('serviceWorker' in navigator) {
+  // optional offline — no SW file yet, will 404 quietly
+}
+</script>
 
 </body>
 </html>

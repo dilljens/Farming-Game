@@ -1,8 +1,19 @@
 // Firebase imports (CDN ESM modules)
 // Note: Browsers can't resolve bare imports like "firebase/app" without a bundler.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getFirestore, collection, query, where, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+import {
+    asTimestamp,
+    buildElapsedHistory,
+    clampGameDuration,
+    createGame,
+    formatGameTime,
+    getTimeWindow,
+    MIN_TIME_WINDOW_MS,
+    normalizeGame,
+    normalizeHistoryPoints
+} from './game-time.mjs';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -38,13 +49,252 @@ signInAnonymously(auth)
     console.error('Anonymous sign-in failed:', error);
   });
 
+// --- Room lobby — mirrors imposterirl/src/lib/games.ts + src/app/lobby/[room_code]/page.tsx + RoomCodeDisplay.tsx ---
+const STORAGE_KEY_ROOM_CODE = 'farmingGameRoomCode';
+let currentRoomCode = (() => {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const fromUrl = params.get('room')?.toUpperCase().trim();
+        if (fromUrl) return fromUrl;
+        return localStorage.getItem(STORAGE_KEY_ROOM_CODE)?.toUpperCase() || null;
+    } catch { return null; }
+})();
+let roomListenerUnsub = null;
+let roomDocUnsub = null;
+let roomQrVisible = false;
+let currentRoomHostUid = null;
+let isHost = false;
+
+function getRoomJoinUrl(roomCode) {
+    // GitHub Pages safe: https://dilljens.github.io/Farming-Game/?room=AB
+    const basePath = window.location.pathname.replace(/index\.html$/, '');
+    const base = basePath.endsWith('/') ? basePath : basePath + '/';
+    return `${window.location.origin}${base}?room=${roomCode}`;
+}
+
+async function getRoomByCode(roomCode) {
+    if (!roomCode) return null;
+    const snap = await getDoc(doc(db, 'rooms', roomCode.toUpperCase()));
+    return snap.exists() ? snap.data() : null;
+}
+
+// Exact copy of imposterirl/src/lib/games.ts:generateRoomCode — tries 2-char → 3-char → 4-char, A-Z, 50 attempts each
+async function generateRoomCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const random = (len) => {
+        let r = '';
+        for (let i = 0; i < len; i++) r += chars.charAt(Math.floor(Math.random() * chars.length));
+        return r;
+    };
+    for (const len of [2, 3, 4]) {
+        const seen = new Set();
+        for (let attempt = 0; attempt < 50; attempt++) {
+            const code = random(len);
+            if (seen.has(code)) continue;
+            seen.add(code);
+            const existing = await getRoomByCode(code);
+            if (!existing) return code;
+        }
+    }
+    return random(4);
+}
+
+async function createRoom() {
+    const code = await generateRoomCode();
+    try { await authReady; } catch {}
+    const hostUid = auth.currentUser?.uid || null;
+    const hostName = document.getElementById('editableUsername')?.innerText.trim() || 'Host';
+    await setDoc(doc(db, 'rooms', code), {
+        room_code: code,
+        createdAt: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
+        status: 'Lobby',
+        hostUid,
+        hostName,
+    });
+    return code;
+}
+
+function persistRoomCode(code) {
+    currentRoomCode = code ? code.toUpperCase() : null;
+    try {
+        if (currentRoomCode) localStorage.setItem(STORAGE_KEY_ROOM_CODE, currentRoomCode);
+        else localStorage.removeItem(STORAGE_KEY_ROOM_CODE);
+    } catch {}
+}
+
+function updateRoomUi() {
+    const display = document.getElementById('roomCodeDisplay');
+    const big = document.getElementById('roomCodeBig');
+    const qrBtn = document.getElementById('roomQrBtn');
+    const input = document.getElementById('roomCodeInput');
+    const leaveBtn = document.getElementById('leaveRoomBtn');
+    const status = document.getElementById('roomStatus');
+    const joinUrlEl = document.getElementById('roomJoinUrl');
+    const qrCodeText = document.getElementById('roomQrCodeText');
+    const hostBadge = document.getElementById('hostBadge');
+    const hostControls = document.getElementById('hostControls');
+    if (big) big.textContent = currentRoomCode || '--';
+    if (display) display.classList.toggle('hidden', !currentRoomCode);
+    if (qrBtn) qrBtn.classList.toggle('hidden', !currentRoomCode);
+    if (leaveBtn) leaveBtn.classList.toggle('hidden', !currentRoomCode);
+    if (input && currentRoomCode) input.value = currentRoomCode;
+    if (status) {
+        if (!currentRoomCode) status.textContent = 'No room — leaderboard is global. Create or join a 2-letter room.';
+        else if (isHost) status.textContent = `In room ${currentRoomCode} — you are HOST — leaderboard is room-scoped`;
+        else status.textContent = `In room ${currentRoomCode} — leaderboard is room-scoped`;
+    }
+    if (hostBadge) hostBadge.classList.toggle('hidden', !isHost || !currentRoomCode);
+    if (hostControls) hostControls.classList.toggle('hidden', !isHost || !currentRoomCode);
+    if (qrCodeText) qrCodeText.textContent = currentRoomCode || '';
+    if (joinUrlEl) joinUrlEl.textContent = currentRoomCode ? getRoomJoinUrl(currentRoomCode) : '';
+    // QR wrap visibility is controlled by toggle, but hide when leaving
+    if (!currentRoomCode && roomQrVisible) {
+        roomQrVisible = false;
+        const wrap = document.getElementById('roomQrWrap');
+        if (wrap) { wrap.classList.add('hidden'); wrap.classList.remove('flex'); }
+    }
+    // also toggle global reset button host hint
+    const resetBtn = document.getElementById('resetButton');
+    if (resetBtn) {
+        if (currentRoomCode && !isHost) resetBtn.title = 'Only host can reset the room';
+        else if (currentRoomCode && isHost) resetBtn.title = 'Reset this room (host only)';
+        else resetBtn.title = 'Reset game';
+    }
+}
+
+async function updateRoomQr(roomCode) {
+    const wrap = document.getElementById('roomQrWrap');
+    const img = document.getElementById('roomQrImg');
+    if (!roomCode || !wrap || !img) return;
+    const url = getRoomJoinUrl(roomCode);
+    const joinUrlEl = document.getElementById('roomJoinUrl');
+    if (joinUrlEl) joinUrlEl.textContent = url;
+    try {
+        const QR = globalThis.QRCode;
+        if (QR && QR.toDataURL) {
+            const dataUrl = await QR.toDataURL(url, { width: 256, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+            img.src = dataUrl;
+        } else {
+            img.src = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`;
+        }
+    } catch (e) {
+        console.error('QR gen failed', e);
+        img.src = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`;
+    }
+}
+
+async function joinRoom(code) {
+    const upper = code.toUpperCase().trim();
+    if (!upper) throw new Error('Enter a room code');
+    const room = await getRoomByCode(upper);
+    if (!room) throw new Error('Room not found');
+    persistRoomCode(upper);
+    const url = getRoomJoinUrl(upper);
+    try { history.replaceState({}, '', url); } catch {}
+    updateRoomUi();
+    await updateRoomQr(upper);
+    // touch activity
+    try { await setDoc(doc(db, 'rooms', upper), { last_activity_at: new Date().toISOString() }, { merge: true }); } catch {}
+    restartRoomListener();
+    return room;
+}
+
+async function leaveRoom() {
+    const leavingCode = currentRoomCode;
+    const leavingWasHost = isHost;
+    // host handoff — mirror imposterirl useLobby DELETE handling
+    if (leavingCode && leavingWasHost && auth.currentUser) {
+        try {
+            const snap = await getDocs(query(collection(db, 'leaderboard'), where('roomCode', '==', leavingCode)));
+            const candidates = [];
+            snap.forEach(d => {
+                if (d.id !== auth.currentUser.uid) {
+                    const data = d.data();
+                    candidates.push({ id: d.id, updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : new Date(data.updatedAt||0).getTime(), createdAt: data.createdAt||0 });
+                }
+            });
+            if (candidates.length > 0) {
+                candidates.sort((a,b)=> (a.updatedAt||0)-(b.updatedAt||0));
+                const next = candidates[0];
+                await setDoc(doc(db, 'rooms', leavingCode), { hostUid: next.id, last_activity_at: new Date().toISOString() }, { merge: true });
+            }
+        } catch (e) { console.warn('host handoff failed', e); }
+    }
+    persistRoomCode(null);
+    isHost = false;
+    currentRoomHostUid = null;
+    try {
+        const clean = window.location.pathname.replace(/index\.html$/, '');
+        const base = clean.endsWith('/') ? clean : clean + '/';
+        history.replaceState({}, '', `${window.location.origin}${base}`);
+    } catch {}
+    updateRoomUi();
+    const wrap = document.getElementById('roomQrWrap');
+    if (wrap) { wrap.classList.add('hidden'); wrap.classList.remove('flex'); }
+    roomQrVisible = false;
+    restartRoomListener();
+}
+
+function startRoomDocListener() {
+    if (roomDocUnsub) { try { roomDocUnsub(); } catch {} roomDocUnsub = null; }
+    if (!currentRoomCode) { isHost = false; currentRoomHostUid = null; updateRoomUi(); return; }
+    const ref = doc(db, 'rooms', currentRoomCode);
+    roomDocUnsub = onSnapshot(ref, (snap)=>{
+        if (!snap.exists()) { isHost = false; currentRoomHostUid = null; updateRoomUi(); return; }
+        const data = snap.data();
+        currentRoomHostUid = data.hostUid || null;
+        const myUid = auth.currentUser?.uid || null;
+        // claim host if room has none (like imposterirl first player is_host=true)
+        if (!currentRoomHostUid && myUid && currentRoomCode) {
+            setDoc(ref, { hostUid: myUid, hostName: document.getElementById('editableUsername')?.innerText.trim() || 'Host' }, { merge: true }).catch(()=>{});
+            currentRoomHostUid = myUid;
+        }
+        isHost = !!myUid && myUid === currentRoomHostUid;
+        updateRoomUi();
+        // host reset signal — mirror imposterirl resetGameForNewRound via room doc
+        const resetAt = data.lastHostResetAt;
+        if (resetAt && !isHost) {
+            try {
+                const key = 'lastSeenHostResetAt_'+currentRoomCode;
+                const seen = localStorage.getItem(key);
+                if (seen !== resetAt) {
+                    localStorage.setItem(key, resetAt);
+                    // auto-reset local game for non-host players (like imposterirl players reset to Lobby)
+                    performReset({ keepRoom: true });
+                    const s = document.getElementById('roomStatus');
+                    if (s) s.textContent = `Host reset room ${currentRoomCode}`;
+                }
+            } catch {}
+        }
+    }, (e)=> console.error('room doc listener', e));
+}
+function restartRoomListener() {
+    if (roomListenerUnsub) { try { roomListenerUnsub(); } catch {} roomListenerUnsub = null; }
+    if (tradeListenerUnsub) { try { tradeListenerUnsub(); } catch {} tradeListenerUnsub = null; }
+    if (roomDocUnsub) { try { roomDocUnsub(); } catch {} roomDocUnsub = null; }
+    if (authReady) authReady.then(() => { startFirestoreListener(); startTradeListener(); startRoomDocListener(); }).catch(()=>{});
+    else { startRoomDocListener(); }
+}
+
 let isDoublePurchase = false;
+let gameClockTimer = null;
 
 let leaderboardSaveTimer = null;
+let leaderboardSaveGeneration = 0;
+let leaderboardWriteQueue = Promise.resolve();
+
+function invalidatePendingLeaderboardSaves() {
+        leaderboardSaveGeneration += 1;
+        if (leaderboardSaveTimer) clearTimeout(leaderboardSaveTimer);
+        leaderboardSaveTimer = null;
+}
+
 function scheduleLeaderboardSave(totalWorth) {
         if (leaderboardSaveTimer) clearTimeout(leaderboardSaveTimer);
         leaderboardSaveTimer = setTimeout(() => {
-                sendDataToServer(totalWorth);
+                leaderboardSaveTimer = null;
+                sendDataToServer(totalWorth, leaderboardSaveGeneration);
         }, 500);
 }
 
@@ -625,13 +875,16 @@ function updateTotalWorth(sendData) {
 
     // Update the total worth cell
     const totalWorthCell = document.querySelector('.total-worth');
-    // if (totalWorthCell) totalWorthCell.textContent = totalWorth.toFixed(2); // Format to 2 decimal places
     if (totalWorthCell) totalWorthCell.textContent = numberWithCommasAndDecimals(totalWorth);
+    // Record every distinct networth change immediately for accurate chart (first-change window + inactivity buffer)
+    recordHistoryPoint(totalWorth);
     // Send the username and total worth to the server
     if (sendData) scheduleLeaderboardSave(totalWorth);
 }
 
-function sendDataToServer(totalWorth) {
+function sendDataToServer(totalWorth, generation = leaderboardSaveGeneration) {
+
+    if (generation !== leaderboardSaveGeneration) return;
 
     const usernameCell = document.getElementById('editableUsername');
     const username = usernameCell.innerText.trim();
@@ -652,15 +905,16 @@ function sendDataToServer(totalWorth) {
     // Wait for stored history to be read before writing: setDoc replaces the
     // whole doc, so saving before seeding would wipe existing history points.
     ensureHistorySeeded().then(() => {
-        if (historySeedFailed) {
+        if (generation !== leaderboardSaveGeneration || historySeedFailed) {
             console.log('Skipping leaderboard save: net worth history state unknown (will retry)');
             return;
         }
-        sendDataToServerAfterSeed(totalWorth, username);
+        sendDataToServerAfterSeed(totalWorth, username, generation);
     }).catch((err) => console.error('History seed wait failed:', err));
 }
 
-function sendDataToServerAfterSeed(totalWorth, username) {
+function sendDataToServerAfterSeed(totalWorth, username, generation) {
+    if (generation !== leaderboardSaveGeneration || !auth.currentUser) return;
 
     const hayQty = parseInt(document.querySelector('.qty-hay')?.textContent || '0', 10) || 0;
     const grainQty = parseInt(document.querySelector('.qty-grain')?.textContent || '0', 10) || 0;
@@ -676,9 +930,7 @@ function sendDataToServerAfterSeed(totalWorth, username) {
 
     recordHistoryPoint(totalWorth);
 
-    // Save to Firestore
-    const userDocRef = doc(db, 'leaderboard', auth.currentUser.uid);
-    setDoc(userDocRef, {
+    const payload = {
         username: username,
         networth: totalWorth,
         debt: debt,
@@ -688,51 +940,80 @@ function sendDataToServerAfterSeed(totalWorth, username) {
         fruit: fruitQty,
         cows: cowsQty,
         history: Array.isArray(myHistoryCache) ? myHistoryCache : [],
+        gameId: data.game.id,
+        gameCreatedAt: data.game.createdAt,
+        gameDurationMs: data.game.durationMs,
+        roomCode: currentRoomCode || null,
         updatedAt: new Date()
-    })
-    .then(() => {
-        console.log('Data saved to Firestore');
-    })
-    .catch((error) => {
-        console.error('Error saving to Firestore:', error);
-    });
+    };
+
+    // Serialize whole-document writes so an older save cannot finish after a
+    // newer one. Reset increments the generation and makes queued old writes
+    // no-ops before they can restore the previous game state.
+    const userDocRef = doc(db, 'leaderboard', auth.currentUser.uid);
+    leaderboardWriteQueue = leaderboardWriteQueue
+        .then(() => {
+            if (generation !== leaderboardSaveGeneration) return;
+            return setDoc(userDocRef, payload);
+        })
+        .then(() => {
+            if (generation === leaderboardSaveGeneration) console.log('Data saved to Firestore');
+        })
+        .catch((error) => {
+            console.error('Error saving to Firestore:', error);
+        });
 
 }
 
 // --- Net worth history (feeds the leaderboard progress chart) ---
 // Stored inside each player's leaderboard doc as history: [{t, v}, ...]
 const MAX_HISTORY_POINTS = 100;
-const HISTORY_MIN_INTERVAL_MS = 60000; // one point per minute max
+const HISTORY_MIN_INTERVAL_MS = 0; // track every distinct networth change accurately (no time throttle)
 let myHistoryCache = null;      // seeded from Firestore once auth is ready
 let historySeedPromise = null;  // in-flight/complete seeding (retryable)
 let historySeedFailed = false;  // true => don't write history (would wipe stored points)
+let historySeedGeneration = 0;
+
+function resetHistoryCacheForNewGame() {
+    historySeedGeneration += 1;
+    myHistoryCache = [];
+    historySeedPromise = Promise.resolve();
+    historySeedFailed = false;
+}
 
 function ensureHistorySeeded() {
     if (!historySeedPromise) {
-        historySeedPromise = seedHistoryCache();
+        historySeedPromise = seedHistoryCache(historySeedGeneration);
     }
     return historySeedPromise;
 }
 
-async function seedHistoryCache() {
+async function seedHistoryCache(generation) {
     if (!auth.currentUser) return;
     try {
         const snap = await getDoc(doc(db, 'leaderboard', auth.currentUser.uid));
-        const stored = snap.data()?.history;
-        const storedPoints = Array.isArray(stored)
-            ? stored.filter(p => p && Number.isFinite(p.t) && Number.isFinite(p.v)).slice(-MAX_HISTORY_POINTS)
-            : [];
+        if (generation !== historySeedGeneration) return;
+        const storedData = snap.data() || {};
+        const storedGameId = storedData.gameId;
+        const storedCreatedAt = asTimestamp(storedData.gameCreatedAt);
+        const hasGameMetadata = Boolean(storedGameId) || Number.isFinite(storedCreatedAt);
+        const isDifferentGame = !hasGameMetadata
+            || (storedGameId && data.game?.id && storedGameId !== data.game.id)
+            || (Number.isFinite(storedCreatedAt) && storedCreatedAt !== data.game?.createdAt);
+        const stored = isDifferentGame ? [] : storedData.history;
+        const storedPoints = normalizeHistoryPoints(stored).slice(-MAX_HISTORY_POINTS);
         // Merge instead of clobber: a debounced save may have recorded a
         // point before this read returned.
         if (Array.isArray(myHistoryCache) && myHistoryCache.length > 0) {
             const storedTs = new Set(storedPoints.map(p => p.t));
             const localOnly = myHistoryCache.filter(p => !storedTs.has(p.t));
-            myHistoryCache = storedPoints.concat(localOnly).slice(-MAX_HISTORY_POINTS);
+            myHistoryCache = normalizeHistoryPoints(storedPoints.concat(localOnly)).slice(-MAX_HISTORY_POINTS);
         } else {
             myHistoryCache = storedPoints;
         }
         historySeedFailed = false;
     } catch (err) {
+        if (generation !== historySeedGeneration) return;
         console.error('Error loading net worth history:', err);
         // Unknown stored state: block history writes until a later retry
         // succeeds, otherwise the next save would wipe stored points.
@@ -743,10 +1024,11 @@ async function seedHistoryCache() {
 
 function recordHistoryPoint(totalWorth) {
     if (!Array.isArray(myHistoryCache)) myHistoryCache = [];
-    const now = Date.now();
+    let now = Date.now();
     const last = myHistoryCache[myHistoryCache.length - 1];
-    if (last && now - last.t < HISTORY_MIN_INTERVAL_MS) return; // throttled
-    if (last && last.v === totalWorth) return;                  // unchanged
+    // Ensure monotonic timestamp if two changes land in same ms
+    if (last && now <= last.t) now = last.t + 1;
+    if (last && last.v === totalWorth) return;                  // unchanged value — no new point
     myHistoryCache.push({ t: now, v: totalWorth });
     if (myHistoryCache.length > MAX_HISTORY_POINTS) {
         myHistoryCache = myHistoryCache.slice(-MAX_HISTORY_POINTS);
@@ -829,17 +1111,29 @@ function colorForPlayer(name) {
 
 function buildChartDatasets(data) {
     return (data || [])
-        .filter(entry => Array.isArray(entry.history) && entry.history.length > 0)
-        .map(entry => ({
-            label: entry.username,
-            data: entry.history.map(p => ({ x: p.t, y: p.v })),
-            borderColor: colorForPlayer(entry.username),
-            backgroundColor: colorForPlayer(entry.username),
-            tension: 0.25,
-            pointRadius: 0,
-            borderWidth: 2,
-            fill: false
-        }));
+        // A creation timestamp is required to put a player's history on the
+        // shared game-time axis. Legacy documents are re-seeded on the next
+        // save instead of being plotted against an invented start time.
+        .filter(entry => Array.isArray(entry.history)
+            && entry.history.length > 0
+            && Number.isFinite(asTimestamp(entry.gameCreatedAt)))
+        .map(entry => {
+            const elapsedHistory = buildElapsedHistory(entry.history, entry.gameCreatedAt);
+            return {
+                label: entry.username,
+                data: elapsedHistory.map(point => ({ x: point.x, y: point.v })),
+                borderColor: colorForPlayer(entry.username),
+                backgroundColor: colorForPlayer(entry.username),
+                tension: 0.25,
+                pointRadius: 0,
+                borderWidth: 2,
+                fill: false
+            };
+        });
+}
+
+function getChartWindowForDatasets(datasets) {
+    return getTimeWindow((datasets || []).flatMap(dataset => dataset.data || []));
 }
 
 // Called on every leaderboard snapshot. Data is cached so the chart can be
@@ -848,7 +1142,19 @@ function buildChartDatasets(data) {
 function updateProgressChart(data) {
     latestLeaderboardData = data;
     if (!progressChart || typeof Chart === 'undefined') return;
-    progressChart.data.datasets = buildChartDatasets(data);
+    const datasets = buildChartDatasets(data);
+    progressChart.data.datasets = datasets;
+    // Follow the live window unless the user has zoomed or panned; the Reset
+    // button hands control back.
+    const win = getChartWindowForDatasets(datasets);
+    progressChart.$defaultWindow = win;
+    const userZoomed = typeof progressChart.isZoomedOrPanned === 'function'
+        ? progressChart.isZoomedOrPanned()
+        : false;
+    if (!userZoomed) {
+        progressChart.options.scales.x.min = win.min;
+        progressChart.options.scales.x.max = win.max;
+    }
     progressChart.update('none');
 }
 
@@ -856,9 +1162,14 @@ function createProgressChart() {
     if (progressChart || typeof Chart === 'undefined') return;
     const canvas = document.getElementById('progressChart');
     if (!canvas) return;
+    // chartjs-plugin-zoom (UMD) exposes itself as ChartZoom; register it so
+    // wheel/pinch zoom and drag pan are available on the progress chart.
+    if (typeof ChartZoom !== 'undefined') Chart.register(ChartZoom);
+    const datasets = buildChartDatasets(latestLeaderboardData);
+    const initialWindow = getChartWindowForDatasets(datasets);
     progressChart = new Chart(canvas.getContext('2d'), {
         type: 'line',
-        data: { datasets: buildChartDatasets(latestLeaderboardData) },
+        data: { datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -871,18 +1182,36 @@ function createProgressChart() {
                 tooltip: {
                     callbacks: {
                         title: (items) => items.length
-                            ? new Date(items[0].parsed.x).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                            ? `Game time ${formatGameTime(items[0].parsed.x)}`
                             : ''
+                    }
+                },
+                zoom: {
+                    pan: { enabled: true, mode: 'x' },
+                    zoom: {
+                        wheel: { enabled: true },
+                        pinch: { enabled: true },
+                        mode: 'x'
+                    },
+                    limits: {
+                        x: {
+                            min: 'original',
+                            max: 'original',
+                            minRange: MIN_TIME_WINDOW_MS
+                        }
                     }
                 }
             },
             scales: {
                 x: {
                     type: 'linear',
+                    min: initialWindow.min,
+                    max: initialWindow.max,
+                    title: { display: true, text: 'Game time since first change (breaks >5 min compressed)' },
                     ticks: {
                         maxTicksLimit: 6,
                         font: { size: 10 },
-                        callback: (v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        callback: (v) => formatGameTime(v)
                     },
                     grid: { display: false }
                 },
@@ -895,6 +1224,7 @@ function createProgressChart() {
             }
         }
     });
+    progressChart.$defaultWindow = initialWindow;
 }
 
 // Show exactly one of the two leaderboard views at a time.
@@ -925,23 +1255,416 @@ function showLeaderboardView(view) {
 document.getElementById('showTableBtn')?.addEventListener('click', () => showLeaderboardView('table'));
 document.getElementById('showChartBtn')?.addEventListener('click', () => showLeaderboardView('chart'));
 
-// Function to start Firestore real-time listener
-function startFirestoreListener() {
-    // Listen for real-time updates to the leaderboard
-    const q = query(collection(db, 'leaderboard'), orderBy('networth', 'desc'), limit(10));
-    
-    onSnapshot(q, (querySnapshot) => {
-        const leaderboardData = [];
-        querySnapshot.forEach((doc) => {
-            leaderboardData.push(doc.data());
-        });
+// --- Chart zoom controls (chartjs-plugin-zoom) ---
+function withZoomableChart(fn) {
+    if (progressChart && typeof progressChart.zoom === 'function') fn(progressChart);
+}
 
-        // Update your leaderboard UI
+function resetChartZoom() {
+    if (!progressChart || typeof progressChart.resetZoom !== 'function') return;
+    progressChart.resetZoom();
+    // Resume following the live window after a manual reset.
+    const win = progressChart.$defaultWindow;
+    if (win) {
+        progressChart.options.scales.x.min = win.min;
+        progressChart.options.scales.x.max = win.max;
+    }
+    progressChart.update('none');
+}
+
+document.getElementById('zoomInBtn')?.addEventListener('click', () => withZoomableChart(c => c.zoom(1.25)));
+document.getElementById('zoomOutBtn')?.addEventListener('click', () => withZoomableChart(c => c.zoom(0.8)));
+document.getElementById('resetZoomBtn')?.addEventListener('click', resetChartZoom);
+
+// --- Room wiring — mirrors imposterirl lobby create/join + QR ---
+async function initRoomFromUrl() {
+    updateRoomUi();
+    if (!currentRoomCode) return;
+    try {
+        const room = await getRoomByCode(currentRoomCode);
+        if (!room) {
+            document.getElementById('roomStatus').textContent = `Room ${currentRoomCode} not found`;
+            persistRoomCode(null);
+            updateRoomUi();
+            return;
+        }
+        await updateRoomQr(currentRoomCode);
+        document.getElementById('roomStatus').textContent = `Joined room ${currentRoomCode}`;
+    } catch (e) { console.error('initRoom', e); }
+}
+
+document.getElementById('createRoomBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('createRoomBtn');
+    const status = document.getElementById('roomStatus');
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Creating room…';
+    try {
+        const code = await createRoom();
+        persistRoomCode(code);
+        try { history.replaceState({}, '', getRoomJoinUrl(code)); } catch {}
+        updateRoomUi();
+        await updateRoomQr(code);
+        if (status) status.textContent = `Created room ${code} — share the code or QR`;
+        restartRoomListener();
+    } catch (e) {
+        console.error(e);
+        if (status) status.textContent = e instanceof Error ? e.message : String(e);
+    } finally { if (btn) btn.disabled = false; }
+});
+
+document.getElementById('joinRoomBtn')?.addEventListener('click', async () => {
+    const input = document.getElementById('roomCodeInput');
+    const status = document.getElementById('roomStatus');
+    const raw = (input?.value || '').toUpperCase().trim();
+    if (!raw) { if (status) status.textContent = 'Enter a room code'; return; }
+    if (status) status.textContent = 'Joining…';
+    try {
+        await joinRoom(raw);
+        if (status) status.textContent = `Joined room ${raw}`;
+    } catch (e) {
+        console.error(e);
+        if (status) status.textContent = e instanceof Error ? e.message : String(e);
+    }
+});
+
+document.getElementById('leaveRoomBtn')?.addEventListener('click', async () => {
+    await leaveRoom();
+    document.getElementById('roomStatus').textContent = 'Left room — back to global leaderboard';
+});
+
+document.getElementById('roomQrBtn')?.addEventListener('click', async () => {
+    roomQrVisible = !roomQrVisible;
+    const wrap = document.getElementById('roomQrWrap');
+    const btn = document.getElementById('roomQrBtn');
+    if (!currentRoomCode) return;
+    if (roomQrVisible) {
+        await updateRoomQr(currentRoomCode);
+        if (wrap) { wrap.classList.remove('hidden'); wrap.classList.add('flex'); }
+        if (btn) btn.textContent = 'HIDE QR';
+    } else {
+        if (wrap) { wrap.classList.add('hidden'); wrap.classList.remove('flex'); }
+        if (btn) btn.textContent = '📱 JOIN QR';
+    }
+});
+
+document.getElementById('roomCodeInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('joinRoomBtn')?.click(); }
+});
+document.getElementById('roomCodeInput')?.addEventListener('input', (e) => {
+    e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0,4);
+});
+
+// boot room UI
+initRoomFromUrl();
+
+// custom buy wiring
+document.getElementById('customBuyBtn')?.addEventListener('click', showCustomBuyModal);
+document.getElementById('cancelCustomBuy')?.addEventListener('click', hideCustomBuyModal);
+document.getElementById('confirmCustomBuy')?.addEventListener('click', performCustomBuy);
+document.getElementById('customBuyAsset')?.addEventListener('change', refreshCustomBuySellers);
+document.getElementById('customBuyQty')?.addEventListener('input', updateCustomBuyPreview);
+document.getElementById('customBuyPrice')?.addEventListener('input', updateCustomBuyPreview);
+document.getElementById('customBuySeller')?.addEventListener('change', updateCustomBuyPreview);
+document.getElementById('customBuyModal')?.addEventListener('click', (e) => { if (e.target.id === 'customBuyModal') hideCustomBuyModal(); });
+
+// host controls — only host sees Reset Room (imposterirl: host controls game start/settings)
+document.getElementById('hostResetRoomBtn')?.addEventListener('click', async () => { await resetRoomForHost(); });
+document.getElementById('hostResetGameBtn')?.addEventListener('click', async () => { await performReset({ keepRoom: true }); });
+
+// --- Digital dice — hidden by default, for tables without physical dice ---
+let diceHistory = [];
+function setDiceDisplay(value) {
+    const el = document.getElementById('diceDisplay');
+    if (el) el.textContent = String(value);
+}
+function pushDiceHistory(text) {
+    diceHistory.unshift(text);
+    if (diceHistory.length > 20) diceHistory = diceHistory.slice(0, 20);
+    const h = document.getElementById('diceHistory');
+    if (h) h.textContent = diceHistory.join(' • ');
+}
+function rollDice() {
+    const roll = Math.floor(Math.random() * 6) + 1; // 1-6 only
+    setDiceDisplay(`🎲 ${roll}`);
+    pushDiceHistory(String(roll));
+    try { navigator.vibrate && navigator.vibrate(10); } catch {}
+    return roll;
+}
+function setDiceVisible(visible) {
+    const comp = document.getElementById('diceComponent');
+    const toggle = document.getElementById('toggleDiceBtn');
+    if (comp) comp.classList.toggle('hidden', !visible);
+    if (toggle) toggle.classList.toggle('hidden', visible);
+}
+document.getElementById('toggleDiceBtn')?.addEventListener('click', () => setDiceVisible(true));
+document.getElementById('hideDiceBtn')?.addEventListener('click', () => setDiceVisible(false));
+document.getElementById('rollDiceBtn')?.addEventListener('click', () => rollDice());
+// haptics for thumb actions (dice/buy/qty/roll)
+document.addEventListener('click', (e) => {
+    if (e.target.closest('.buy-btn, .qty-btn, .roll-cell-button, #rollDiceBtn, #confirmBuy, #confirmCustomBuy, #payPerAcreBtn, #payInterestBtn, #gainPerAcreBtn, #payOffLoanBtn')) {
+        try { navigator.vibrate && navigator.vibrate(10); } catch {}
+    }
+});
+
+// --- Custom Buy — buy property from another player at custom price ---
+function refreshCustomBuySellers() {
+    const sel = document.getElementById('customBuySeller');
+    if (!sel) return;
+    const myUsername = document.getElementById('editableUsername')?.innerText.trim() || '';
+    const prev = sel.value;
+    sel.innerHTML = '';
+    const others = (latestLeaderboardData || []).filter(p => (p.username || '').trim() !== myUsername && p.username !== 'Enter name');
+    if (others.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = currentRoomCode ? 'No other players in this room yet' : 'Join a room to see sellers';
+        sel.appendChild(opt);
+    } else {
+        others.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p._id || p.username;
+            // store uid in dataset for Firestore update, display name + qty preview
+            opt.dataset.uid = p._id || '';
+            opt.dataset.username = p.username;
+            const qtyKey = (document.getElementById('customBuyAsset')?.value || 'Hay').toLowerCase();
+            let qty = p[qtyKey] ?? p[qtyKey.toLowerCase()] ?? 0;
+            if (qtyKey === 'cows') qty = p.cows ?? 0;
+            if (qtyKey === 'farm') qty = p.farm ?? p.cows ?? 0;
+            opt.textContent = `${p.username} — ${document.getElementById('customBuyAsset')?.value || 'Hay'}: ${qty} (net $${(p.networth||0).toLocaleString()})`;
+            sel.appendChild(opt);
+        });
+    }
+    if (prev) {
+        const hasPrev = [...sel.options].some(o => o.value === prev);
+        if (hasPrev) sel.value = prev;
+    }
+    updateCustomBuyPreview();
+}
+function getAssetQtyKey(asset) {
+    const map = { Hay: 'Hay', Grain: 'Grain', Fruit: 'Fruit', Farm: 'Farm', Cows: 'Cows', Harvester: 'Harvester', Tractor: 'Tractor' };
+    return map[asset] || asset;
+}
+function getSellerQty(sellerData, asset) {
+    if (!sellerData) return 0;
+    const key = asset.toLowerCase();
+    if (key === 'cows' || key === 'ranch cows') return Number(sellerData.cows || 0);
+    if (key === 'farm' || key === 'farm cows') return Number(sellerData.farm ?? sellerData.cows ?? 0);
+    return Number(sellerData[key] ?? sellerData[key.toLowerCase()] ?? 0);
+}
+function updateCustomBuyPreview() {
+    const preview = document.getElementById('customBuyPreview');
+    const hint = document.getElementById('customBuyHint');
+    if (!preview) return;
+    const sellerSel = document.getElementById('customBuySeller');
+    const asset = document.getElementById('customBuyAsset')?.value || 'Hay';
+    const qty = parseInt(document.getElementById('customBuyQty')?.value || '1', 10);
+    const price = parseFloat(String(document.getElementById('customBuyPrice')?.value || '0').replace(/,/g, '')) || 0;
+    const opt = sellerSel?.selectedOptions?.[0];
+    const sellerName = opt?.dataset?.username || opt?.textContent?.split(' —')[0] || 'seller';
+    const sellerData = (latestLeaderboardData || []).find(p => (p._id && p._id === opt?.dataset?.uid) || p.username === sellerName);
+    const sellerQty = getSellerQty(sellerData, asset);
+    const myCash = getCurrentCashTotal();
+    preview.innerHTML = `You: cash $${myCash.toLocaleString()} → $${(myCash - price).toLocaleString()} after pay<br>Seller ${sellerName}: ${asset} ${sellerQty} → ${sellerQty - qty} after sale<br>Price: $${price.toLocaleString()} for ${qty} × ${asset}`;
+    let err = '';
+    if (!sellerSel || !sellerSel.value) err = 'Pick a seller in this room.';
+    else if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
+    else if (!Number.isFinite(price) || price < 0) err = 'Price must be ≥0.';
+    else if (sellerQty < qty) err = `Seller only has ${sellerQty} ${asset}.`;
+    else if (myCash < price) err = `You need $${price.toLocaleString()} cash (have $${myCash.toLocaleString()}).`;
+    if (hint) { hint.textContent = err; hint.classList.toggle('hidden', !err); }
+    const confirm = document.getElementById('confirmCustomBuy');
+    if (confirm) confirm.disabled = !!err;
+}
+function showCustomBuyModal() {
+    refreshCustomBuySellers();
+    document.getElementById('customBuyModal')?.classList.remove('hidden');
+}
+function hideCustomBuyModal() {
+    document.getElementById('customBuyModal')?.classList.add('hidden');
+}
+let tradeListenerUnsub = null;
+let seenTradeIds = new Set();
+
+function applyLocalTrade(trade, role) {
+    const qty = Number(trade.qty || 0);
+    const price = Number(trade.price || 0);
+    const asset = trade.asset || 'Hay';
+    const qtyKey = getAssetQtyKey(asset);
+    const classMap = { Hay:'qty-hay', Grain:'qty-grain', Fruit:'qty-fruit', Farm:'qty-farm', Cows:'qty-cows', Harvester:'qty-harvester', Tractor:'qty-tractor' };
+    const targetClass = classMap[qtyKey] || 'qty-hay';
+    const cell = document.querySelector(`.${targetClass}`);
+    if (!cell) return false;
+    let cur = parseInt(cell.textContent || '0', 10) || 0;
+    if (role === 'buyer') {
+        if (price !== 0 && wouldGoNegativeCash(-price)) return false;
+        if (price !== 0) addCashTransactionValue(-price);
+        cell.textContent = String(cur + qty);
+    } else {
+        // seller: ensure enough qty locally, otherwise clamp
+        if (cur < qty) return false;
+        cell.textContent = String(cur - qty);
+        if (price !== 0) addCashTransactionValue(price);
+    }
+    calculateNet();
+    populateRollTable();
+    saveQuantitiesToLocalStorage();
+    return true;
+}
+
+function renderTradeInbox(trades) {
+    const box = document.getElementById('tradeInbox');
+    if (!box) return;
+    const myUid = auth.currentUser?.uid || '';
+    // pending where I am seller -> incoming, where I am buyer -> outgoing pending
+    const incoming = trades.filter(t => t.status === 'pending' && t.sellerUid === myUid);
+    const outgoing = trades.filter(t => t.status === 'pending' && t.buyerUid === myUid);
+    const acceptedForMe = trades.filter(t => t.status === 'accepted' && (t.buyerUid === myUid || t.sellerUid === myUid) && !seenTradeIds.has('applied-'+t.id));
+    // apply accepted trades that I haven't applied locally yet (buyer side applies on accept, seller already applied on accept)
+    // This handles buyer applying after seller accepts
+    acceptedForMe.forEach(t => {
+        if (t.buyerUid === myUid && !seenTradeIds.has('applied-'+t.id)) {
+            // buyer applies now if not already
+            const ok = applyLocalTrade(t, 'buyer');
+            if (ok) seenTradeIds.add('applied-'+t.id);
+        }
+    });
+    let html = '';
+    if (incoming.length) {
+        html += `<div class="font-bold mb-1">Incoming trade offers — you are seller</div>`;
+        incoming.forEach(t => {
+            html += `<div class="flex items-center justify-between gap-2 py-1 border-b border-amber-100">
+                <span>${t.buyerName} wants ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()}</span>
+                <span class="flex gap-1">
+                  <button data-accept="${t.id}" class="px-2 py-1 bg-green-600 text-white rounded text-xs">Accept</button>
+                  <button data-reject="${t.id}" class="px-2 py-1 bg-zinc-300 rounded text-xs">Reject</button>
+                </span>
+            </div>`;
+        });
+    }
+    if (outgoing.length) {
+        html += `<div class="font-bold mt-2 mb-1">Outgoing — waiting for seller</div>`;
+        outgoing.forEach(t => {
+            html += `<div class="py-1 border-b border-amber-100">${t.qty} ${t.asset} from ${t.sellerName} for $${Number(t.price).toLocaleString()} — pending</div>`;
+        });
+    }
+    const justAccepted = trades.filter(t => t.status === 'accepted' && (Date.now() - new Date(t.updatedAt||t.createdAt).getTime() < 15000) && (t.buyerUid===myUid || t.sellerUid===myUid));
+    justAccepted.forEach(t => {
+        const role = t.sellerUid===myUid ? 'sold' : 'bought';
+        html += `<div class="text-xs text-green-700 mt-1">✓ ${role} ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()} ${t.sellerUid===myUid?'to '+t.buyerName:'from '+t.sellerName}</div>`;
+    });
+    if (!html) { box.classList.add('hidden'); box.innerHTML=''; return; }
+    box.innerHTML = html;
+    box.classList.remove('hidden');
+    box.querySelectorAll('[data-accept]').forEach(b=> b.addEventListener('click', ()=> acceptTrade(b.dataset.accept)));
+    box.querySelectorAll('[data-reject]').forEach(b=> b.addEventListener('click', ()=> rejectTrade(b.dataset.reject)));
+}
+
+async function acceptTrade(tradeId) {
+    if (!currentRoomCode || !tradeId) return;
+    const ref = doc(db, 'rooms', currentRoomCode, 'trades', tradeId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+    const t = { id: snap.id, ...snap.data() };
+    if (t.status !== 'pending') return;
+    if (t.sellerUid !== auth.currentUser?.uid) return;
+    // validate seller has qty locally
+    const qtyKey = getAssetQtyKey(t.asset);
+    const classMap = { Hay:'qty-hay', Grain:'qty-grain', Fruit:'qty-fruit', Farm:'qty-farm', Cows:'qty-cows', Harvester:'qty-harvester', Tractor:'qty-tractor' };
+    const cell = document.querySelector(`.${classMap[qtyKey]||'qty-hay'}`);
+    const cur = parseInt(cell?.textContent||'0',10)||0;
+    if (cur < Number(t.qty||0)) { alert(`You only have ${cur} ${t.asset}, need ${t.qty}`); return; }
+    // apply seller side locally (remove qty, add cash) — accurate networth point via updateTotalWorth
+    const ok = applyLocalTrade(t, 'seller');
+    if (!ok) return;
+    await setDoc(ref, { status: 'accepted', updatedAt: new Date().toISOString() }, { merge: true });
+    try { navigator.vibrate && navigator.vibrate([10,30,10]); } catch {}
+}
+async function rejectTrade(tradeId) {
+    if (!currentRoomCode || !tradeId) return;
+    const ref = doc(db, 'rooms', currentRoomCode, 'trades', tradeId);
+    await setDoc(ref, { status: 'rejected', updatedAt: new Date().toISOString() }, { merge: true });
+}
+function startTradeListener() {
+    if (tradeListenerUnsub) { try{tradeListenerUnsub();}catch{} tradeListenerUnsub=null; }
+    if (!currentRoomCode) { const b=document.getElementById('tradeInbox'); if(b){b.classList.add('hidden'); b.innerHTML='';} return; }
+    const q = query(collection(db, 'rooms', currentRoomCode, 'trades'));
+    tradeListenerUnsub = onSnapshot(q, (snap)=>{
+        const trades = [];
+        snap.forEach(d=> trades.push({ id:d.id, ...d.data()}));
+        // sort recent first
+        trades.sort((a,b)=> new Date(b.createdAt||0)-new Date(a.createdAt||0));
+        renderTradeInbox(trades);
+    }, (e)=> console.error('trade listener', e));
+}
+
+async function performCustomBuy() {
+    const sellerSel = document.getElementById('customBuySeller');
+    const asset = document.getElementById('customBuyAsset')?.value || 'Hay';
+    const qty = parseInt(document.getElementById('customBuyQty')?.value || '1', 10);
+    const price = parseFloat(String(document.getElementById('customBuyPrice')?.value || '0').replace(/,/g, '')) || 0;
+    const hint = document.getElementById('customBuyHint');
+    const opt = sellerSel?.selectedOptions?.[0];
+    const sellerUid = opt?.dataset?.uid || '';
+    const sellerName = opt?.dataset?.username || '';
+    if (!currentRoomCode) { if (hint){hint.textContent='Join a room first.'; hint.classList.remove('hidden');} return; }
+    // re-validate
+    updateCustomBuyPreview();
+    if (document.getElementById('confirmCustomBuy')?.disabled) return;
+    if (!sellerUid) { if (hint){hint.textContent='Seller not found (no UID).'; hint.classList.remove('hidden');} return; }
+    if (sellerUid === auth.currentUser?.uid) { if (hint){hint.textContent='Cannot buy from yourself.'; hint.classList.remove('hidden');} return; }
+    if (price !== 0 && wouldGoNegativeCash(-price)) { if (hint){hint.textContent='Not enough cash.'; hint.classList.remove('hidden');} return; }
+    // create pending trade — seller must accept before property/money moves (accurate for both)
+    const qtyKey = getAssetQtyKey(asset);
+    try {
+        const tradeId = `${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+        await setDoc(doc(db, 'rooms', currentRoomCode, 'trades', tradeId), {
+            buyerUid: auth.currentUser.uid,
+            buyerName: document.getElementById('editableUsername')?.innerText.trim() || 'buyer',
+            sellerUid, sellerName, asset: qtyKey, qty, price,
+            roomCode: currentRoomCode,
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+        hideCustomBuyModal();
+        const status = document.getElementById('roomStatus');
+        if (status) status.textContent = `Offer sent to ${sellerName}: ${qty} ${asset} for $${price.toLocaleString()} — waiting for accept`;
+    } catch (e) {
+        console.error('trade create failed', e);
+        if (hint){hint.textContent = 'Offer failed: ' + (e instanceof Error ? e.message : String(e)); hint.classList.remove('hidden');}
+        return;
+    }
+}
+
+// Function to start Firestore real-time listener — room-scoped like imposterirl players by game_id
+function startFirestoreListener() {
+    if (roomListenerUnsub) { try { roomListenerUnsub(); } catch {} roomListenerUnsub = null; }
+    // Room-scoped leaderboard: where(roomCode==current) then client-sort. Avoids composite index need.
+    let q;
+    if (currentRoomCode) {
+        q = query(collection(db, 'leaderboard'), where('roomCode', '==', currentRoomCode));
+    } else {
+        q = query(collection(db, 'leaderboard'), orderBy('networth', 'desc'), limit(10));
+    }
+    roomListenerUnsub = onSnapshot(q, (querySnapshot) => {
+        let leaderboardData = [];
+        querySnapshot.forEach((docSnap) => {
+            const d = docSnap.data();
+            d._id = docSnap.id;
+            leaderboardData.push(d);
+        });
+        if (currentRoomCode) {
+            leaderboardData.sort((a, b) => (Number(b.networth) || 0) - (Number(a.networth) || 0));
+            leaderboardData = leaderboardData.slice(0, 10);
+        }
         updateLeaderboardTable(leaderboardData);
         updateProgressChart(leaderboardData);
+        // keep custom-buy seller list fresh
+        if (typeof refreshCustomBuySellers === 'function') refreshCustomBuySellers();
     }, (error) => {
         console.error('Firestore listener error:', error);
     });
+    return roomListenerUnsub;
 }
 
 // Start the Firestore listener and seed net-worth history once auth is ready
@@ -949,6 +1672,14 @@ authReady
     .then(() => {
         ensureHistorySeeded();
         startFirestoreListener();
+        startTradeListener();
+        // The initial calculation can run before anonymous auth finishes. Try
+        // the current state once more so a cold start is not silently lost.
+        const username = document.getElementById('editableUsername')?.innerText.trim();
+        const totalWorth = getCurrentTotalWorthFromDOM();
+        if (username && username !== 'Enter name' && totalWorth !== null) {
+            scheduleLeaderboardSave(totalWorth);
+        }
     })
     .catch((err) => console.error('Auth wait failed:', err));
 
@@ -1122,6 +1853,7 @@ populateRollTable();
 
 function getBaseState() {
     return {
+        game: createGame(),
         qty: {
             Hay: 1,
             Grain: 1,
@@ -1147,6 +1879,44 @@ function getBaseState() {
 }
 
 let data = getBaseState();
+
+function normalizeSavedState(savedData) {
+    const baseState = getBaseState();
+    const saved = savedData && typeof savedData === 'object' ? savedData : {};
+    return {
+        ...baseState,
+        ...saved,
+        game: normalizeGame(saved.game, baseState.game.createdAt),
+        qty: { ...baseState.qty, ...(saved.qty || {}) },
+        transactions: {
+            cash: Array.isArray(saved.transactions?.cash)
+                ? saved.transactions.cash
+                : baseState.transactions.cash,
+            loan: Array.isArray(saved.transactions?.loan)
+                ? saved.transactions.loan
+                : baseState.transactions.loan
+        },
+        ranchRidgeSelections: {
+            ...baseState.ranchRidgeSelections,
+            ...(saved.ranchRidgeSelections || {})
+        }
+    };
+}
+
+function updateGameClockDisplay() {
+    const display = document.getElementById('gameTimeDisplay');
+    if (!display || !data?.game) return;
+    const elapsed = Math.max(0, Date.now() - data.game.createdAt);
+    const duration = clampGameDuration(data.game.durationMs);
+    display.textContent = `Game time: ${formatGameTime(Math.min(elapsed, duration))} / ${formatGameTime(duration)}`;
+    display.title = `Started ${new Date(data.game.createdAt).toLocaleString()}`;
+}
+
+function startGameClock() {
+    if (gameClockTimer) clearInterval(gameClockTimer);
+    updateGameClockDisplay();
+    gameClockTimer = setInterval(updateGameClockDisplay, 1000);
+}
 
 function getRanchRidgeBonusFromSelections(selections) {
     if (!selections) return 0;
@@ -1221,7 +1991,10 @@ function loadFromLocalStorage() {
     if (savedData) {
         const loadedData = JSON.parse(savedData);
         // Update the global data object
-        data = loadedData;
+        data = normalizeSavedState(loadedData);
+        // Persist the normalized game metadata so legacy saves keep one stable
+        // creation time and game id across both load paths and future reloads.
+        localStorage.setItem('farmingGameData', JSON.stringify(data));
         // Apply quantity data to the page
         document.querySelector('.qty-hay').textContent = data.qty.Hay.toString();
         document.querySelector('.qty-grain').textContent = data.qty.Grain.toString();
@@ -1233,8 +2006,6 @@ function loadFromLocalStorage() {
         document.querySelector('.qty-tractor').textContent = data.qty.Tractor.toString();
 
         // Restore ranch ridge selection (do not re-apply bonus; qty already includes it)
-        if (!data.ranchRidgeSelections) data.ranchRidgeSelections = getBaseState().ranchRidgeSelections;
-        if (loadedData.ranchRidgeSelections) data.ranchRidgeSelections = loadedData.ranchRidgeSelections;
         data.ranchRidgeBonus = typeof loadedData.ranchRidgeBonus === 'number'
             ? loadedData.ranchRidgeBonus
             : getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
@@ -1250,13 +2021,14 @@ function loadFromLocalStorage() {
         updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
         populateRollTable();
         const usernameCell = document.getElementById('editableUsername');
-        usernameCell.innerText = loadedData.username || 'Enter name';
+        usernameCell.innerText = data.username || 'Enter name';
         // Debugging: Log out loaded transaction data
         // console.log("Loaded transactions for cash:", loadedData.transactions.cash);
         // console.log("Loaded transactions for loan:", loadedData.transactions.loan);
         updateTotals();
         calculateNet();
         updateUpgradedRidgesDisplay();
+        recordHistoryPoint(getCurrentTotalWorthFromDOM() || 0);
     } else {
         // First run: seed with a default starting state.
         data = getBaseState();
@@ -1281,7 +2053,9 @@ function loadFromLocalStorage() {
         populateRollTable();
         updateTotals();
         calculateNet();
+        recordHistoryPoint(getCurrentTotalWorthFromDOM() || 0);
     }
+    startGameClock();
 }
 
 function updateTransactionLists(transactionsData) {
@@ -1469,16 +2243,31 @@ function performPayOffLoan() {
     updateActionButtonStates();
 }
 
-// Event listener for the reset button
-document.getElementById('resetButton').addEventListener('click', showModal);
+// Event listener for the reset button — host-aware (imposterirl style: host controls reset)
+document.getElementById('resetButton').addEventListener('click', (e) => {
+    const title = document.getElementById('modal-title');
+    const desc = document.querySelector('#resetModal .text-sm.text-gray-500');
+    if (currentRoomCode && isHost) {
+        if (title) title.textContent = `Reset Room ${currentRoomCode}?`;
+        if (desc) desc.textContent = 'Host will clear this room\'s leaderboard, trades, and start a fresh game for everyone in the room.';
+    } else if (currentRoomCode && !isHost) {
+        if (title) title.textContent = 'Reset My Game?';
+        if (desc) desc.textContent = 'You are not host — this will only reset your own farm.';
+    } else {
+        if (title) title.textContent = 'Reset Game';
+        if (desc) desc.textContent = "It's pretty obvious what this button does. You don't really need to read about it.";
+    }
+    showModal();
+});
 
 // Event listener for the extra rules button
 document.getElementById('extraRulesButton').addEventListener('click', showExtraRulesModal);
 
-// Event listener for the confirm reset button in the modal
-document.getElementById('confirmReset').addEventListener('click', (event) => {
+// Event listener for the confirm reset button in the modal — host resets room, others reset self (imposterirl style)
+document.getElementById('confirmReset').addEventListener('click', async (event) => {
     event.preventDefault();
-    performReset();
+    if (currentRoomCode && isHost) await resetRoomForHost();
+    else await performReset();
     hideModal();
 });
 
@@ -1664,16 +2453,77 @@ function performPayPerAcre() {
     updateActionButtonStates();
 }
 
+async function resetRoomForHost() {
+    if (!currentRoomCode || !isHost) {
+        document.getElementById('roomStatus').textContent = 'Only host can reset the room';
+        return;
+    }
+    try {
+        await authReady;
+        invalidatePendingLeaderboardSaves();
+        const resetWrite = leaderboardWriteQueue.then(async () => {
+            // delete only this room's leaderboard entries + trades subcollection
+            const qSnap = await getDocs(query(collection(db, 'leaderboard'), where('roomCode', '==', currentRoomCode)));
+            const dels = [];
+            qSnap.forEach(d => dels.push(deleteDoc(d.ref)));
+            await Promise.all(dels);
+            try {
+                const tradesSnap = await getDocs(collection(db, 'rooms', currentRoomCode, 'trades'));
+                const tDels = [];
+                tradesSnap.forEach(d => tDels.push(deleteDoc(d.ref)));
+                await Promise.all(tDels);
+            } catch {}
+        });
+        leaderboardWriteQueue = resetWrite.catch((err)=>{ console.error('Error resetting room',err); return undefined; });
+        await resetWrite;
+        invalidatePendingLeaderboardSaves();
+        // signal other clients to reset their local game too — mirror imposterirl resetGameForNewRound via room doc
+        const resetAt = new Date().toISOString();
+        await setDoc(doc(db, 'rooms', currentRoomCode), { lastHostResetAt: resetAt, last_activity_at: resetAt }, { merge: true });
+        try { localStorage.setItem('lastSeenHostResetAt_'+currentRoomCode, resetAt); } catch {}
+        // local host reset too
+        await performReset({ keepRoom: true });
+        document.getElementById('roomStatus').textContent = `Room ${currentRoomCode} reset by host`;
+        hideModal();
+    } catch (err) { console.error('Error resetting room', err); }
+}
+
 async function resetLeaderboardForAllPlayers() {
     try {
         await authReady;
+        invalidatePendingLeaderboardSaves();
 
-        const querySnapshot = await getDocs(collection(db, 'leaderboard'));
-        const deletePromises = [];
-        querySnapshot.forEach((leaderboardDoc) => {
-            deletePromises.push(deleteDoc(leaderboardDoc.ref));
+        // Put the delete behind the same queue as leaderboard writes. This
+        // prevents a save from recreating a document while the reset is still
+        // deleting it, and makes later saves run after the reset completes.
+        const resetWrite = leaderboardWriteQueue.then(async () => {
+            const querySnapshot = await getDocs(collection(db, 'leaderboard'));
+            const deletePromises = [];
+            querySnapshot.forEach((leaderboardDoc) => {
+                deletePromises.push(deleteDoc(leaderboardDoc.ref));
+            });
+            await Promise.all(deletePromises);
         });
-        await Promise.all(deletePromises);
+        leaderboardWriteQueue = resetWrite.catch((err) => {
+            console.error('Error resetting leaderboard: ', err);
+            return undefined;
+        });
+        await resetWrite;
+        // Discard saves assembled while the delete was in flight. They carry
+        // the old game's metadata and must not recreate the just-cleared data.
+        invalidatePendingLeaderboardSaves();
+        // A successful global reset starts a fresh local game clock as well.
+        // Keep the player's current board values, but do not carry history or
+        // the previous game's elapsed-time origin into the new leaderboard.
+        data.game = createGame();
+        resetHistoryCacheForNewGame();
+        saveQuantitiesToLocalStorage();
+        startGameClock();
+        const username = document.getElementById('editableUsername')?.innerText.trim();
+        const totalWorth = getCurrentTotalWorthFromDOM();
+        if (username && username !== 'Enter name' && totalWorth !== null) {
+            scheduleLeaderboardSave(totalWorth);
+        }
         console.log('Leaderboard reset for all players');
         hideModal();
     } catch (err) {
@@ -1693,13 +2543,19 @@ if (resetModalTitle) {
     });
 }
 
-async function performReset() {
+async function performReset(opts = {}) {
     hideModal();
+    invalidatePendingLeaderboardSaves();
     
     const baseState = getBaseState();
+    // keep room association if host reset signaled (imposterirl style: resetGameForNewRound keeps room_code)
+    if (opts.keepRoom && currentRoomCode) {
+        // host room code stays, game id will be fresh via createGame()
+    }
 
     // Update the data object
     data = baseState;
+    resetHistoryCacheForNewGame();
 
     // Reset quantity fields to the base state
     document.querySelector('.qty-hay').textContent = '1';
@@ -1746,6 +2602,8 @@ async function performReset() {
     // updateNetCash();
     // Repopulate the roll table
     populateRollTable();
+    recordHistoryPoint(getCurrentTotalWorthFromDOM() || 0);
+    startGameClock();
 }
 
 
