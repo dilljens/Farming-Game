@@ -1,1 +1,11 @@
 node_modules/
+
+# Local-only indexes, secrets, and caches
+.codegraph/
+.codebase-memory/
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+/dist/
