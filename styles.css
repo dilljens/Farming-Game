@@ -57,6 +57,40 @@ input[type="number"] {
     min-height: 44px; /* Minimum touch target size */
 }
 
+/* Cash/loan transaction inputs are text (not number) so mobile keyboards
+   can enter a minus sign; inputmode="decimal" keeps the numeric keypad. */
+.small-input {
+    white-space: nowrap;
+}
+#cashInput, #loanInput {
+    width: calc(100% - 58px);
+    padding: 8px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+    background-color: #b4d0fb;
+    font-size: 16px; /* Prevents zoom on iOS */
+    min-height: 44px;
+    vertical-align: middle;
+}
+/* +/- sign toggle: phone keypads have no minus key */
+.sign-toggle {
+    width: 50px;
+    padding: 8px 4px;
+    margin-left: 4px;
+    min-height: 44px;
+    border: 1px solid #777;
+    border-radius: 4px;
+    box-sizing: border-box;
+    background-color: #e0e0e0;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.sign-toggle:active {
+    background-color: #c0c0c0;
+}
+
 .input-cell {
     padding: 0;
 }

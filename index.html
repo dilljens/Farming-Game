@@ -528,14 +528,16 @@
       <div class="undo-hint text-gray-400 font-normal">tap to undo last transaction</div>
     </th>
     <td class="small-input">
-      <input type="number" id="cashInput" placeholder="Enter Cash value" inputmode="numeric" pattern="[0-9]*" />
+      <input type="text" id="cashInput" placeholder="Enter Cash value" inputmode="decimal" autocomplete="off" />
+      <button type="button" class="sign-toggle" data-target="cashInput" aria-label="Toggle negative" title="Toggle +/-">+/-</button>
     </td>
     <th id="loanUndoCell" class="font-semibold cursor-pointer select-none">
       Loan
       <div class="undo-hint text-gray-400 font-normal">tap to undo last transaction</div>
     </th>
     <td class="small-input">
-      <input type="number" id="loanInput" placeholder="Enter Loan value" inputmode="numeric" pattern="[0-9]*" />
+      <input type="text" id="loanInput" placeholder="Enter Loan value" inputmode="decimal" autocomplete="off" />
+      <button type="button" class="sign-toggle" data-target="loanInput" aria-label="Toggle negative" title="Toggle +/-">+/-</button>
     </td>
   </tr>
 

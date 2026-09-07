@@ -380,7 +380,7 @@ function parseTransactionValue(rawValue) {
     if (!s) return NaN;
 
     // Normalize common input variants.
-    s = s.replace(/\u2212/g, '-'); // Unicode minus
+    s = s.replace(/[‐‑–—−－]/g, '-'); // dashes mobile keyboards produce (U+2010/2011/2013/2014/2212/FF0D)
     s = s.replace(/\$/g, '');
     s = s.replace(/\s+/g, '');
 
@@ -2840,6 +2840,17 @@ window.addEventListener('DOMContentLoaded', (event) => {
             }
         });
     }
+    // Phone keypads have no minus key: the +/- buttons flip the sign of the
+    // cash/loan inputs so negative transactions can be entered on mobile.
+    document.querySelectorAll('.sign-toggle').forEach((toggle) => {
+        toggle.addEventListener('click', () => {
+            const target = document.getElementById(toggle.getAttribute('data-target'));
+            if (!target) return;
+            const raw = target.value.trim();
+            target.value = raw.startsWith('-') ? raw.slice(1) : (raw ? '-' + raw : '-');
+            target.focus();
+        });
+    });
     // Transaction cells are no longer editable
     // const transactionCells = document.querySelectorAll('.cash-transaction, .loan-transaction');
     // transactionCells.forEach(makeCellEditable);
