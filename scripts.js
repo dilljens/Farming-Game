@@ -10,10 +10,11 @@ import {
     createGame,
     formatGameTime,
     getTimeWindow,
+    mergeHistoriesByPlayer,
     MIN_TIME_WINDOW_MS,
     normalizeGame,
     normalizeHistoryPoints
-} from './game-time.mjs';
+} from './game-time.mjs?v=20260907';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -718,6 +719,36 @@ function getCurrentLoanTotal() {
     return loanTotalCell ? (parseTransactionValue(loanTotalCell.textContent) || 0) : 0;
 }
 
+const MAX_DEBT = 50000;
+
+// Buying power: cash on hand plus unused debt room. A down payment may be
+// funded partly by fresh borrowing (auto-added as debt at confirm), so the
+// slider range and Buy-button gating use effective cash, not cash alone.
+function getBuyBounds(totalCost) {
+    const total = Number(totalCost) || 0;
+    const cash = getCurrentCashTotal();
+    const debtRoom = Math.max(0, MAX_DEBT - getCurrentLoanTotal());
+    const effective = cash + debtRoom;
+    // Minimum down payment: max of 20% of cost or amount needed to keep loan <= $50,000
+    let min = Math.ceil(Math.max(total * 0.2, Math.max(0, total - debtRoom)) / 100) * 100;
+    min = Math.min(min, total);
+    let max;
+    let feasible;
+    if (total <= 0) {
+        max = 0;
+        feasible = false;
+    } else if (effective >= total) {
+        // Cash + borrowing covers everything: any down payment works,
+        // the shortfall is borrowed automatically at confirm.
+        max = total;
+        feasible = max >= min;
+    } else {
+        max = Math.max(0, Math.floor(Math.min(cash, total) / 100) * 100);
+        feasible = max >= min;
+    }
+    return { min, max, feasible, cash, debtRoom, effective };
+}
+
 function getCurrentInterestValue() {
     const interestCell = document.querySelector('.interest');
     return interestCell ? (parseFloat(String(interestCell.textContent).replace(/,/g, '')) || 0) : 0;
@@ -767,15 +798,14 @@ function updateActionButtonStates() {
 
     // Buy buttons: disabled unless the player can afford the true minimum
     // down payment (20% of cost, or more when near the $50k debt cap),
-    // including the double-purchase multiplier.
+    // counting cash plus unused debt room, including the double-purchase
+    // multiplier.
     document.querySelectorAll('button.buy-btn[data-asset]').forEach((btn) => {
         const row = btn.closest('tr');
         const costCell = row && row.cells ? row.cells[3] : null;
         const unitCost = costCell ? (parseFloat(String(costCell.textContent).replace(/,/g, '')) || 0) : 0;
         const totalCost = unitCost * (isDoublePurchase ? 2 : 1);
-        const debtHeadroom = 50000 - getCurrentLoanTotal();
-        const minValid = Math.ceil(Math.max(totalCost * 0.2, Math.max(0, totalCost - debtHeadroom)) / 100) * 100;
-        const disabled = totalCost <= 0 || getCurrentCashTotal() < minValid;
+        const disabled = totalCost <= 0 || !getBuyBounds(totalCost).feasible;
         setButtonDisabled(btn, disabled);
     });
 }
@@ -900,8 +930,9 @@ function updateTotalWorth(sendData) {
     // Update the total worth cell
     const totalWorthCell = document.querySelector('.total-worth');
     if (totalWorthCell) totalWorthCell.textContent = numberWithCommasAndDecimals(totalWorth);
-    // Record every distinct networth change immediately for accurate chart (first-change window + inactivity buffer)
-    recordHistoryPoint(totalWorth);
+    // History is recorded on the debounced save (settled value), not here:
+    // this runs mid-transaction (cash out before assets in), and those
+    // transient states showed up as false dips/negatives on the chart.
     // Send the username and total worth to the server
     if (sendData) scheduleLeaderboardSave(totalWorth);
 }
@@ -1139,26 +1170,28 @@ function colorForPlayer(name) {
 }
 
 function buildChartDatasets(data) {
-    return (data || [])
-        // A creation timestamp is required to put a player's history on the
-        // shared game-time axis. Legacy documents are re-seeded on the next
-        // save instead of being plotted against an invented start time.
-        .filter(entry => Array.isArray(entry.history)
-            && entry.history.length > 0
-            && Number.isFinite(asTimestamp(entry.gameCreatedAt)))
-        .map(entry => {
-            const elapsedHistory = buildElapsedHistory(entry.history, entry.gameCreatedAt);
-            return {
-                label: entry.username,
-                data: elapsedHistory.map(point => ({ x: point.x, y: point.v })),
-                borderColor: colorForPlayer(entry.username),
-                backgroundColor: colorForPlayer(entry.username),
-                tension: 0.25,
-                pointRadius: 0,
-                borderWidth: 2,
-                fill: false
-            };
-        });
+    // One line per player per room: docs are merged first so a second device
+    // (or a fresh anonymous sign-in) can't draw a twin line that folds over
+    // the original. All lines share one uncompressed clock — like a stock
+    // chart — instead of per-player inactivity squashing that shifts lines
+    // sideways relative to each other.
+    const merged = mergeHistoriesByPlayer(data);
+    if (merged.length === 0) return [];
+    const start = Math.min(...merged.map((group) => group.gameCreatedAt));
+    return merged.map((group) => {
+        // Infinity buffer: true elapsed wall time, no gap compression.
+        const elapsedHistory = buildElapsedHistory(group.history, start, Infinity);
+        return {
+            label: group.username,
+            data: elapsedHistory.map(point => ({ x: point.x, y: point.v })),
+            borderColor: colorForPlayer(group.username),
+            backgroundColor: colorForPlayer(group.username),
+            tension: 0, // straight segments: smoothing overshoots below zero on sharp moves
+            pointRadius: 0,
+            borderWidth: 2,
+            fill: false
+        };
+    });
 }
 
 function getChartWindowForDatasets(datasets) {
@@ -1236,7 +1269,7 @@ function createProgressChart() {
                     type: 'linear',
                     min: initialWindow.min,
                     max: initialWindow.max,
-                    title: { display: true, text: 'Game time since first change (breaks >5 min compressed)' },
+                    title: { display: true, text: 'Game time since first change' },
                     ticks: {
                         maxTicksLimit: 6,
                         font: { size: 10 },
@@ -2975,29 +3008,22 @@ window.addEventListener('DOMContentLoaded', (event) => {
     let lastDownPaymentAmount = 0; // Remember last dollar amount
     let minValidDownPayment = 0;
 
-    // Recompute slider bounds from the CURRENT total cost, clamping the
-    // selectable down payment to available cash so the "Cash After Purchase"
-    // preview can never go negative. Disables Confirm when even the minimum
-    // down payment (or the loan limit) makes the purchase impossible.
+    // Recompute slider bounds from the CURRENT total cost. The down payment
+    // may draw on cash plus unused debt room (the shortfall is borrowed
+    // automatically at confirm), so a buyer with cash + borrowing power
+    // always gets the full range instead of a collapsed single price.
+    // Disables Confirm when even maximum debt makes the purchase impossible.
     function refreshDownPaymentSlider() {
         updateTotals();
-        const currentCash = getCurrentCashTotal();
+        const bounds = getBuyBounds(currentTotalCost);
         const currentLoanTotal = getCurrentLoanTotal();
-        const maxLoanIncrease = 50000 - currentLoanTotal;
 
-        // Minimum down payment: max of 20% of cost or amount needed to keep loan <= $50,000
-        const minFromLoanLimit = Math.max(0, currentTotalCost - maxLoanIncrease);
-        const minFromPercentage = currentTotalCost * 0.2;
-        minValidDownPayment = Math.max(minFromLoanLimit, minFromPercentage);
-        minValidDownPayment = Math.ceil(minValidDownPayment / 100) * 100;
-
-        const affordableMax = Math.max(0, Math.floor(currentCash / 100) * 100);
+        minValidDownPayment = bounds.min;
 
         downPaymentSlider.step = 100;
-        downPaymentSlider.min = Math.min(minValidDownPayment, currentTotalCost);
-        // Never allow selecting more cash than the player actually has
-        downPaymentSlider.max = Math.min(currentTotalCost, affordableMax);
-        if (downPaymentSlider.max < downPaymentSlider.min) {
+        downPaymentSlider.min = bounds.min;
+        downPaymentSlider.max = bounds.max;
+        if (!bounds.feasible) {
             // Unreachable minimum: collapse the range; Confirm stays disabled below
             downPaymentSlider.min = downPaymentSlider.max;
         }
@@ -3013,19 +3039,32 @@ window.addEventListener('DOMContentLoaded', (event) => {
         chosen = Math.min(chosen, maxVal); // re-clamp: rounding can overshoot a non-round max
         downPaymentSlider.value = chosen;
 
-        const cashOk = currentCash >= minValidDownPayment;
-        const loanOk = currentLoanTotal + Math.round(currentTotalCost - chosen) <= 50000;
-        setButtonDisabled(confirmBuy, !(cashOk && loanOk));
+        const shortfall = Math.max(0, chosen - bounds.cash);
+        const loanOk = currentLoanTotal + Math.round(currentTotalCost - chosen) + shortfall <= MAX_DEBT;
+        setButtonDisabled(confirmBuy, !(bounds.feasible && loanOk));
 
         const hint = document.getElementById('buyCashHint');
         if (hint) {
-            if (cashOk && loanOk) {
-                hint.classList.add('hidden');
-            } else if (!cashOk) {
-                hint.textContent = `Need $${minValidDownPayment.toLocaleString()} cash for the minimum down payment`;
+            const errorClasses = ['text-red-600'];
+            const infoClasses = ['text-amber-700'];
+            if (bounds.feasible && loanOk) {
+                if (shortfall > 0) {
+                    hint.textContent = `Includes $${shortfall.toLocaleString()} borrowed for the down payment`;
+                    hint.classList.remove(...errorClasses);
+                    hint.classList.add(...infoClasses);
+                    hint.classList.remove('hidden');
+                } else {
+                    hint.classList.add('hidden');
+                }
+            } else if (!bounds.feasible) {
+                hint.textContent = `Not affordable: $${bounds.min.toLocaleString()} down needed, $${bounds.max.toLocaleString()} available`;
+                hint.classList.remove(...infoClasses);
+                hint.classList.add(...errorClasses);
                 hint.classList.remove('hidden');
             } else {
                 hint.textContent = 'Loan would exceed the $50,000 debt limit';
+                hint.classList.remove(...infoClasses);
+                hint.classList.add(...errorClasses);
                 hint.classList.remove('hidden');
             }
         }
@@ -3059,9 +3098,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
             updateModalCosts();
         }
         
-        // Check if double purchase is affordable
-        const currentCash = getCurrentCashTotal();
-        if (isDoublePurchase && minValidDownPayment > currentCash) {
+        // Check if double purchase is affordable (cash + debt room)
+        if (isDoublePurchase && !getBuyBounds(currentTotalCost * 2).feasible) {
             isDoublePurchase = false;
             document.getElementById('doublePurchaseCheckbox').checked = false;
             updateModalCosts();
@@ -3113,8 +3151,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     document.getElementById('doublePurchaseCheckbox').addEventListener('change', function() {
         isDoublePurchase = this.checked;
         updateModalCosts();
-        const currentCash = getCurrentCashTotal();
-        if (isDoublePurchase && minValidDownPayment > currentCash) {
+        if (isDoublePurchase && !getBuyBounds(currentTotalCost).feasible) {
             isDoublePurchase = false;
             this.checked = false;
             // alert("Insufficient cash for the required down payment on double purchase.");
@@ -3142,12 +3179,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
         document.getElementById('downPaymentSummary').textContent = downPayment.toLocaleString();
         document.getElementById('loanAmount').textContent = loanAmount.toLocaleString();
 
-        // Calculate after purchase
+        // Calculate after purchase (a down-payment shortfall is borrowed,
+        // so cash never drops below $0 even when debt funds part of it)
         updateTotals();
         const currentCash = getCurrentCashTotal();
         const currentLoan = getCurrentLoanTotal();
-        const cashAfter = currentCash - downPayment;
-        const loanAfter = currentLoan + loanAmount;
+        const shortfall = Math.max(0, downPayment - currentCash);
+        const cashAfter = currentCash - downPayment + shortfall;
+        const loanAfter = currentLoan + loanAmount + shortfall;
         document.getElementById('cashAfter').textContent = cashAfter.toLocaleString();
         document.getElementById('loanAfter').textContent = loanAfter.toLocaleString();
     }
@@ -3162,18 +3201,23 @@ window.addEventListener('DOMContentLoaded', (event) => {
         lastDownPaymentAmount = downPayment; // Remember for next time
         const loanAmount = Math.round(currentTotalCost - downPayment);
 
-        // Check if user has enough cash for down payment
+        // Cash covers the down payment, borrowing the shortfall automatically
+        // when debt room allows (the slider only offers feasible choices).
         updateTotals();
         const currentCash = getCurrentCashTotal();
-        if (currentCash < downPayment) {
-            showCashFloorWarning(downPayment);
+        const shortfall = Math.max(0, downPayment - currentCash);
+        const currentLoanTotal = getCurrentLoanTotal();
+
+        // Check if loan would exceed $50,000 debt limit (remainder + borrowed down payment)
+        if (currentLoanTotal + loanAmount + shortfall > MAX_DEBT) {
+            // alert('Loan would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + loanAmount.toLocaleString() + '.');
             return;
         }
 
-        // Check if loan would exceed $50,000 debt limit
-        const currentLoanTotal = getCurrentLoanTotal();
-        if (currentLoanTotal + loanAmount > 50000) {
-            // alert('Loan would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + loanAmount.toLocaleString() + '.');
+        // Borrowing covers the shortfall first, so this can never fail, but
+        // keep the guard as a backstop against stale totals.
+        if (currentCash < downPayment - shortfall) {
+            showCashFloorWarning(downPayment);
             return;
         }
 
@@ -3222,8 +3266,15 @@ window.addEventListener('DOMContentLoaded', (event) => {
         qtyIncrease *= (isDoublePurchase ? 2 : 1);
 
         // All checks passed — now move the money and apply the purchase.
+        // The borrowed shortfall lands first so the down payment can never
+        // trip the cash floor; net effect: buyer spends all available cash
+        // and debts the rest.
+        if (shortfall > 0) {
+            addCashTransactionValue(shortfall);
+            addLoanTransactionValue(shortfall);
+        }
         // Add cash transaction (negative for payment)
-        addCashTransactionValue(-downPayment);
+        addCashTransactionValue(-(downPayment - shortfall));
         // Add loan transaction (positive for loan)
         addLoanTransactionValue(loanAmount);
 

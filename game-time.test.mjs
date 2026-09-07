@@ -8,7 +8,8 @@ import {
     MIN_TIME_WINDOW_MS,
     buildElapsedHistory,
     clampGameDuration,
-    getTimeWindow
+    getTimeWindow,
+    mergeHistoriesByPlayer
 } from './game-time.mjs';
 
 test('compresses long unchanged breaks to the five-minute buffer', () => {
@@ -55,4 +56,36 @@ test('does not let pre-game points move the game-time baseline', () => {
 
     assert.deepEqual(points.map((point) => point.x), [0, 10]);
     assert.deepEqual(points.map((point) => point.v), [105, 110]);
+});
+
+test('merges duplicate player docs into one line', () => {
+    const merged = mergeHistoriesByPlayer([
+        { username: 'Al', roomCode: 'AB', gameCreatedAt: 1000, history: [{ t: 1000, v: 10 }, { t: 3000, v: 30 }] },
+        { username: 'Al', roomCode: 'AB', gameCreatedAt: 1000, history: [{ t: 2000, v: 20 }] },
+        { username: 'Bo', roomCode: 'AB', gameCreatedAt: 1000, history: [{ t: 1000, v: 5 }] }
+    ]);
+
+    assert.equal(merged.length, 2);
+    const al = merged.find((group) => group.username === 'Al');
+    assert.deepEqual(al.history.map((point) => point.v), [10, 20, 30]);
+    assert.equal(al.gameCreatedAt, 1000);
+});
+
+test('keeps same names in different rooms on separate lines', () => {
+    const merged = mergeHistoriesByPlayer([
+        { username: 'Al', roomCode: 'AB', gameCreatedAt: 1000, history: [{ t: 1000, v: 10 }] },
+        { username: 'Al', roomCode: 'CD', gameCreatedAt: 1000, history: [{ t: 1000, v: 50 }] }
+    ]);
+
+    assert.equal(merged.length, 2);
+});
+
+test('skips docs with no usable history or start time', () => {
+    const merged = mergeHistoriesByPlayer([
+        { username: 'Al', roomCode: 'AB', gameCreatedAt: 1000, history: [] },
+        { username: 'Bo', roomCode: 'AB', gameCreatedAt: 'not-a-time', history: [{ t: 1000, v: 5 }] },
+        null
+    ]);
+
+    assert.deepEqual(merged, []);
 });

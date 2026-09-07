@@ -55,6 +55,39 @@ export function normalizeHistoryPoints(points) {
     return [...byTimestamp.values()].sort((a, b) => a.t - b.t);
 }
 
+// Merge leaderboard docs that belong to the same player in the same room.
+// One human can own several docs (phone + desktop, or a fresh anonymous
+// sign-in after clearing storage): plotted separately they share a label
+// and color and fold over each other like one broken line. Merged, they
+// form the single stock-like line the chart is meant to show.
+export function mergeHistoriesByPlayer(entries, maxPoints = 100) {
+    const groups = new Map();
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+        if (!entry || !Array.isArray(entry.history) || entry.history.length === 0) return;
+        const createdAt = asTimestamp(entry.gameCreatedAt);
+        if (!Number.isFinite(createdAt)) return;
+        const key = `${entry.roomCode || ''}${entry.username || '?'}`;
+        let group = groups.get(key);
+        if (!group) {
+            group = {
+                username: entry.username,
+                roomCode: entry.roomCode ?? null,
+                history: [],
+                gameCreatedAt: createdAt
+            };
+            groups.set(key, group);
+        }
+        group.history = group.history.concat(entry.history);
+        if (createdAt < group.gameCreatedAt) group.gameCreatedAt = createdAt;
+    });
+    return [...groups.values()].map((group) => ({
+        username: group.username,
+        roomCode: group.roomCode,
+        gameCreatedAt: group.gameCreatedAt,
+        history: normalizeHistoryPoints(group.history).slice(-maxPoints)
+    }));
+}
+
 // Turn wall-clock history into game time. A gap with no recorded state change
 // never consumes more than the five-minute break buffer on the chart.
 export function buildElapsedHistory(points, createdAt, inactivityBuffer = INACTIVITY_BUFFER_MS) {
