@@ -28,6 +28,10 @@ services:
       PGRST_DB_SCHEMAS: public
       PGRST_DB_ANON_ROLE: anon
       PGRST_SERVER_PORT: 3000
+      # Browsers fetch the API cross-origin (frontend = GitHub Pages), so the
+      # API must allow that origin or every save silently fails. Localhost
+      # needs no entry (same-origin with local dev).
+      PGRST_SERVER_CORS_ALLOWED_ORIGINS: "https://dilljens.github.io"
     ports:
       - "127.0.0.1:3002:3000"
 
