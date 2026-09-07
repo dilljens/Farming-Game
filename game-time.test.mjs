@@ -4,9 +4,11 @@ import {
     GAME_MAX_DURATION_MS,
     GAME_MIN_DURATION_MS,
     INACTIVITY_BUFFER_MS,
+    MAX_HISTORY_POINTS,
     MAX_TIME_WINDOW_MS,
     MIN_TIME_WINDOW_MS,
     buildElapsedHistory,
+    capHistoryPoints,
     clampGameDuration,
     getTimeWindow,
     mergeHistoriesByPlayer
@@ -88,4 +90,18 @@ test('skips docs with no usable history or start time', () => {
     ]);
 
     assert.deepEqual(merged, []);
+});
+
+test('cap keeps short histories untouched', () => {
+    const points = [{ t: 1, v: 1 }, { t: 2, v: 2 }];
+    assert.deepEqual(capHistoryPoints(points, 500), points);
+    assert.equal(MAX_HISTORY_POINTS, 500);
+});
+
+test('cap thins instead of truncating so the full range stays visible', () => {
+    const points = Array.from({ length: 10 }, (_, i) => ({ t: i * 1000, v: i }));
+    const capped = capHistoryPoints(points, 5);
+    assert.equal(capped.length, 5);
+    // range anchor first, live tail last, order kept
+    assert.deepEqual(capped.map((point) => point.t), [0, 1000, 4000, 6000, 9000]);
 });

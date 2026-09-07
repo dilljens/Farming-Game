@@ -297,7 +297,6 @@
         </div>
       </div>
 
-    <div class="roll-help text-gray-600 text-center">Tap the names of the asset to 1/2x, 2x, or return to normal</div>
     <div id="diceToggleWrap" class="text-center my-2">
       <button id="toggleDiceBtn" type="button" class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs">🎲 Show Dice</button>
     </div>
@@ -307,6 +306,7 @@
       <div id="diceHistory" class="text-xs text-zinc-500 mt-2 min-h-[14px]"></div>
       <button id="hideDiceBtn" type="button" class="mt-2 text-xs text-zinc-400 hover:text-zinc-600">Hide Dice</button>
     </div>
+    <div class="roll-help text-gray-600 text-center">Tap the names of the asset to 1/2x, 2x, or return to normal</div>
     <div class="table-wrap"><table class="roll-table">
       <tr>
         <th>Roll</th>
@@ -419,22 +419,10 @@
           <button id="ranchRidgeButton" type="button" class="ml-1 text-xs" aria-haspopup="menu" aria-expanded="false" aria-label="Select ridges">▾</button>
           <div id="ranchRidgeMenu" class="hidden absolute right-0 mt-1 bg-white border border-gray-200 rounded p-2 text-xs z-10">
             <div id="upgradedRidgesDisplay" class="text-xs font-bold mb-1">Ridge Expansions: 0</div>
-            <label class="block whitespace-nowrap">
-              <input type="checkbox" class="ranch-ridge-checkbox" data-key="ahtanum" data-bonus="2" />
-              Ahtanum Ridge (+2)
-            </label>
-            <label class="block whitespace-nowrap">
-              <input type="checkbox" class="ranch-ridge-checkbox" data-key="rattlesnake" data-bonus="3" />
-              Rattlesnake Ridge (+3)
-            </label>
-            <label class="block whitespace-nowrap">
-              <input type="checkbox" class="ranch-ridge-checkbox" data-key="cascades" data-bonus="4" />
-              Cascades (+4)
-            </label>
-            <label class="block whitespace-nowrap">
-              <input type="checkbox" class="ranch-ridge-checkbox" data-key="toppenish" data-bonus="5" />
-              Toppenish Ridge (+5)
-            </label>
+            <div class="block whitespace-nowrap">Ahtanum Ridge (+2) — <span data-ridge-owned="ahtanum">x0</span></div>
+            <div class="block whitespace-nowrap">Rattlesnake Ridge (+3) — <span data-ridge-owned="rattlesnake">x0</span></div>
+            <div class="block whitespace-nowrap">Cascades (+4) — <span data-ridge-owned="cascades">x0</span></div>
+            <div class="block whitespace-nowrap">Toppenish Ridge (+5) — <span data-ridge-owned="toppenish">x0</span></div>
           </div>
         </span>
       </td>

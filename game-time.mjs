@@ -4,6 +4,9 @@ export const DEFAULT_GAME_DURATION_MS = GAME_MAX_DURATION_MS;
 export const MIN_TIME_WINDOW_MS = 5 * 60 * 1000;
 export const MAX_TIME_WINDOW_MS = 5 * 60 * 60 * 1000;
 export const INACTIVITY_BUFFER_MS = 5 * 60 * 1000;
+// Cap on stored chart points per player. Raised so long games keep their
+// full range (thinning below preserves the span instead of cutting history).
+export const MAX_HISTORY_POINTS = 500;
 
 function newGameId() {
     if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -55,12 +58,34 @@ export function normalizeHistoryPoints(points) {
     return [...byTimestamp.values()].sort((a, b) => a.t - b.t);
 }
 
+// Cap stored points WITHOUT cutting the visible range: keep the first
+// point (the range anchor) plus an evenly-spaced sample spanning through
+// the latest point, so a long game's line always covers its full span and
+// the live tail is never dropped.
+export function capHistoryPoints(points, maxPoints = MAX_HISTORY_POINTS) {
+    const list = Array.isArray(points) ? points : [];
+    const max = Math.max(0, Math.floor(Number(maxPoints) || 0));
+    if (list.length <= max) return list.slice();
+    if (max < 2) return [];
+    const rest = list.slice(1);
+    const keep = max - 1;
+    const out = [list[0]];
+    if (keep === 1) {
+        out.push(rest[rest.length - 1]);
+    } else {
+        for (let i = 0; i < keep; i++) {
+            out.push(rest[Math.round((i * (rest.length - 1)) / (keep - 1))]);
+        }
+    }
+    return normalizeHistoryPoints(out);
+}
+
 // Merge leaderboard docs that belong to the same player in the same room.
 // One human can own several docs (phone + desktop, or a fresh anonymous
 // sign-in after clearing storage): plotted separately they share a label
 // and color and fold over each other like one broken line. Merged, they
 // form the single stock-like line the chart is meant to show.
-export function mergeHistoriesByPlayer(entries, maxPoints = 100) {
+export function mergeHistoriesByPlayer(entries, maxPoints = MAX_HISTORY_POINTS) {
     const groups = new Map();
     (Array.isArray(entries) ? entries : []).forEach((entry) => {
         if (!entry || !Array.isArray(entry.history) || entry.history.length === 0) return;
@@ -84,7 +109,7 @@ export function mergeHistoriesByPlayer(entries, maxPoints = 100) {
         username: group.username,
         roomCode: group.roomCode,
         gameCreatedAt: group.gameCreatedAt,
-        history: normalizeHistoryPoints(group.history).slice(-maxPoints)
+        history: capHistoryPoints(normalizeHistoryPoints(group.history), maxPoints)
     }));
 }
 

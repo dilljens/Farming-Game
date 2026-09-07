@@ -11,6 +11,8 @@ import {
     formatGameTime,
     getTimeWindow,
     mergeHistoriesByPlayer,
+    capHistoryPoints,
+    MAX_HISTORY_POINTS,
     MIN_TIME_WINDOW_MS,
     normalizeGame,
     normalizeHistoryPoints
@@ -1028,7 +1030,7 @@ function sendDataToServerAfterSeed(totalWorth, username, generation) {
 
 // --- Net worth history (feeds the leaderboard progress chart) ---
 // Stored inside each player's leaderboard doc as history: [{t, v}, ...]
-const MAX_HISTORY_POINTS = 100;
+// MAX_HISTORY_POINTS is imported from game-time.mjs (shared with the cap helper).
 const HISTORY_MIN_INTERVAL_MS = 0; // track every distinct networth change accurately (no time throttle)
 let myHistoryCache = null;      // seeded from Firestore once auth is ready
 let historySeedPromise = null;  // in-flight/complete seeding (retryable)
@@ -1062,13 +1064,13 @@ async function seedHistoryCache(generation) {
             || (storedGameId && data.game?.id && storedGameId !== data.game.id)
             || (Number.isFinite(storedCreatedAt) && storedCreatedAt !== data.game?.createdAt);
         const stored = isDifferentGame ? [] : storedData.history;
-        const storedPoints = normalizeHistoryPoints(stored).slice(-MAX_HISTORY_POINTS);
+        const storedPoints = capHistoryPoints(normalizeHistoryPoints(stored));
         // Merge instead of clobber: a debounced save may have recorded a
         // point before this read returned.
         if (Array.isArray(myHistoryCache) && myHistoryCache.length > 0) {
             const storedTs = new Set(storedPoints.map(p => p.t));
             const localOnly = myHistoryCache.filter(p => !storedTs.has(p.t));
-            myHistoryCache = normalizeHistoryPoints(storedPoints.concat(localOnly)).slice(-MAX_HISTORY_POINTS);
+            myHistoryCache = capHistoryPoints(normalizeHistoryPoints(storedPoints.concat(localOnly)));
         } else {
             myHistoryCache = storedPoints;
         }
@@ -1091,9 +1093,7 @@ function recordHistoryPoint(totalWorth) {
     if (last && now <= last.t) now = last.t + 1;
     if (last && last.v === totalWorth) return;                  // unchanged value — no new point
     myHistoryCache.push({ t: now, v: totalWorth });
-    if (myHistoryCache.length > MAX_HISTORY_POINTS) {
-        myHistoryCache = myHistoryCache.slice(-MAX_HISTORY_POINTS);
-    }
+    myHistoryCache = capHistoryPoints(myHistoryCache);
 }
 
   
@@ -1974,10 +1974,10 @@ function getBaseState() {
         },
         ranchRidgeBonus: 0,
         ranchRidgeSelections: {
-            ahtanum: false,
-            rattlesnake: false,
-            cascades: false,
-            toppenish: false
+            ahtanum: 0,
+            rattlesnake: 0,
+            cascades: 0,
+            toppenish: 0
         },
         transactions: {
             cash: ['5000'],
@@ -2005,10 +2005,7 @@ function normalizeSavedState(savedData) {
                 ? saved.transactions.loan
                 : baseState.transactions.loan
         },
-        ranchRidgeSelections: {
-            ...baseState.ranchRidgeSelections,
-            ...(saved.ranchRidgeSelections || {})
-        }
+        ranchRidgeSelections: normalizeRidgeCounts(saved.ranchRidgeSelections)
     };
 }
 
@@ -2027,28 +2024,48 @@ function startGameClock() {
     gameClockTimer = setInterval(updateGameClockDisplay, 1000);
 }
 
+// Bonus cows granted per owned ridge. Ridges are repeat-buyable property,
+// so ranchRidgeSelections maps key -> owned COUNT (see normalizeRidgeCounts).
+const RIDGE_BONUS_BY_KEY = {
+    ahtanum: 2,
+    rattlesnake: 3,
+    cascades: 4,
+    toppenish: 5
+};
+
 function getRanchRidgeBonusFromSelections(selections) {
     if (!selections) return 0;
-    const bonusByKey = {
-        ahtanum: 2,
-        rattlesnake: 3,
-        cascades: 4,
-        toppenish: 5
-    };
-    return Object.keys(bonusByKey).reduce((sum, key) => {
-        return sum + (selections[key] ? bonusByKey[key] : 0);
+    return Object.keys(RIDGE_BONUS_BY_KEY).reduce((sum, key) => {
+        const count = Math.max(0, Math.floor(Number(selections[key]) || 0));
+        return sum + count * RIDGE_BONUS_BY_KEY[key];
     }, 0);
+}
+
+// Ridges are multi-buy property: selections hold OWNED COUNTS, not flags.
+// Legacy saves stored booleans (true = owned once) — coerced on load.
+function normalizeRidgeCounts(saved) {
+    const counts = {};
+    Object.keys(RIDGE_BONUS_BY_KEY).forEach((key) => {
+        const raw = saved?.[key];
+        const n = typeof raw === 'boolean' ? (raw ? 1 : 0) : Math.floor(Number(raw) || 0);
+        counts[key] = Math.max(0, n);
+    });
+    return counts;
 }
 
 function updateUpgradedRidgesDisplay() {
     const displayEl = document.getElementById('upgradedRidgesDisplay');
-    if (!displayEl) return;
-
     const ranchCowsQty = parseInt(document.querySelector('.qty-cows')?.textContent || '0', 10) || 0;
     const ridgeBonus = data.ranchRidgeBonus || 0;
     const upgradedRidges = Math.max(0, ranchCowsQty - ridgeBonus);
-
-    displayEl.textContent = `Ridge Expansions: ${upgradedRidges}`;
+    if (displayEl) displayEl.textContent = `Ridge Expansions: ${upgradedRidges}`;
+    // Owned counts per ridge (ridges are repeat-buyable; the menu is
+    // display-only, buying happens through the buy modal).
+    document.querySelectorAll('[data-ridge-owned]').forEach((el) => {
+        const key = el.getAttribute('data-ridge-owned');
+        const n = Math.max(0, Math.floor(Number(data.ranchRidgeSelections?.[key]) || 0));
+        el.textContent = `x${n}`;
+    });
 }
 
 function saveQuantitiesToLocalStorage() {
@@ -2066,15 +2083,9 @@ function saveQuantitiesToLocalStorage() {
     const usernameCell = document.getElementById('editableUsername');
     data.username = usernameCell.innerText.trim() === 'Enter name' ? '' : usernameCell.innerText.trim();
 
-    const ridgeCheckboxes = document.querySelectorAll('.ranch-ridge-checkbox');
-    if (ridgeCheckboxes.length > 0) {
-        if (!data.ranchRidgeSelections) data.ranchRidgeSelections = {};
-        ridgeCheckboxes.forEach((cb) => {
-            const key = cb.getAttribute('data-key');
-            if (key) data.ranchRidgeSelections[key] = cb.checked;
-        });
-        data.ranchRidgeBonus = getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
-    }
+    // Ridge ownership only changes through the buy modal (which sets counts
+    // and bonus together); recompute here as a consistency guard.
+    data.ranchRidgeBonus = getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
 
     // Transactions are already maintained in the global data object
     // Don't read from DOM as it only shows 10 entries
@@ -2119,12 +2130,8 @@ function loadFromLocalStorage() {
             ? loadedData.ranchRidgeBonus
             : getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
 
-        const ridgeCheckboxes = document.querySelectorAll('.ranch-ridge-checkbox');
-        ridgeCheckboxes.forEach((cb) => {
-            const key = cb.getAttribute('data-key');
-            if (!key) return;
-            cb.checked = !!data.ranchRidgeSelections?.[key];
-        });
+        // Ridge ownership restores from data; the menu shows owned counts
+        // (refreshed by updateUpgradedRidgesDisplay below).
         
         // Update the transaction lists
         updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
@@ -2155,9 +2162,6 @@ function loadFromLocalStorage() {
 
         const usernameCell = document.getElementById('editableUsername');
         usernameCell.innerText = 'Enter name';
-
-        const ridgeCheckboxes = document.querySelectorAll('.ranch-ridge-checkbox');
-        ridgeCheckboxes.forEach((cb) => { cb.checked = false; });
 
         populateRollTable();
         updateTotals();
@@ -2677,7 +2681,6 @@ async function performReset(opts = {}) {
 
     data.ranchRidgeBonus = 0;
     data.ranchRidgeSelections = getBaseState().ranchRidgeSelections;
-    document.querySelectorAll('.ranch-ridge-checkbox').forEach((cb) => { cb.checked = false; });
 
     const ranchRidgeMenu = document.getElementById('ranchRidgeMenu');
     const ranchRidgeButton = document.getElementById('ranchRidgeButton');
@@ -3093,14 +3096,21 @@ window.addEventListener('DOMContentLoaded', (event) => {
             ridgeDiv.classList.remove('hidden');
             ridgeSelect.value = 'none'; // Reset to none
             updateRidgeCost(isDoublePurchase ? 2 : 1);
-            updateDoublePurchaseCheckbox();
+            // Unaffordable double falls back to single. Probes the already-
+            // scaled cost (probing x2 again would price 4x and overcharge).
+            if (isDoublePurchase && !getBuyBounds(currentTotalCost).feasible) {
+                isDoublePurchase = false;
+                document.getElementById('doublePurchaseCheckbox').checked = false;
+                updateRidgeCost(1);
+            }
         } else {
             ridgeDiv.classList.add('hidden');
             updateModalCosts();
         }
         
-        // Check if double purchase is affordable (cash + debt room)
-        if (isDoublePurchase && !getBuyBounds(currentTotalCost * 2).feasible) {
+        // Check if double purchase is affordable (cash + debt room).
+        // Probes the already-scaled cost (see showBuyModal note).
+        if (isDoublePurchase && !getBuyBounds(currentTotalCost).feasible) {
             isDoublePurchase = false;
             document.getElementById('doublePurchaseCheckbox').checked = false;
             updateModalCosts();
@@ -3111,41 +3121,30 @@ window.addEventListener('DOMContentLoaded', (event) => {
     function updateRidgeCost(multiplier = 1) {
         const ridgeSelect = document.getElementById('ridgeSelect');
         const selectedRidge = ridgeSelect.value;
-        let bonus = 0;
-        if (selectedRidge === 'none') {
-            bonus = 1;
-        } else {
-            const checkbox = document.querySelector(`.ranch-ridge-checkbox[data-key="${selectedRidge}"]`);
-            bonus = parseInt(checkbox.getAttribute('data-bonus')) || 0;
-        }
+        // Expand Ridge counts as a 1-cow unit; named ridges grant their bonus
+        // per unit bought (ridges are repeat-buyable).
+        const perUnitBonus = selectedRidge === 'none' ? 1 : (RIDGE_BONUS_BY_KEY[selectedRidge] || 0);
         // Cost = bonus * 10000 * multiplier
-        const ridgeCost = bonus * 10000 * multiplier;
+        const ridgeCost = perUnitBonus * 10000 * multiplier;
         currentCost = ridgeCost;
         currentTotalCost = ridgeCost;
-        document.getElementById('assetInfo').textContent = `Buying ${multiplier} ${currentAsset} at $${ridgeCost.toLocaleString()} each.`;
+        const ridgeName = selectedRidge === 'none'
+            ? 'Expand Ridge (+1)'
+            : (ridgeSelect.options[ridgeSelect.selectedIndex]?.text || selectedRidge);
+        document.getElementById('assetInfo').textContent = `Buying ${multiplier}x ${ridgeName} at $${(perUnitBonus * 10000).toLocaleString()} each.`;
         document.getElementById('totalCost').textContent = ridgeCost.toLocaleString();
 
         refreshDownPaymentSlider();
     }
 
-    function updateDoublePurchaseCheckbox() {
-        const checkbox = document.getElementById('doublePurchaseCheckbox');
-        const ridgeSelect = document.getElementById('ridgeSelect');
-        const selectedRidge = ridgeSelect.value;
-        if (currentAsset === 'cows' && selectedRidge !== 'none') {
-            checkbox.disabled = true;
-            checkbox.checked = false;
-            isDoublePurchase = false;
-        } else {
-            checkbox.disabled = false;
-            checkbox.checked = isDoublePurchase;
-        }
-    }
-
     // Add event listener for ridge select
     document.getElementById('ridgeSelect').addEventListener('change', () => {
-        updateDoublePurchaseCheckbox();
         updateRidgeCost(isDoublePurchase ? 2 : 1);
+        if (isDoublePurchase && !getBuyBounds(currentTotalCost).feasible) {
+            isDoublePurchase = false;
+            document.getElementById('doublePurchaseCheckbox').checked = false;
+            updateRidgeCost(1);
+        }
     });
 
     // Add event listener for double purchase checkbox
@@ -3227,7 +3226,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         let qtyIncrease = 1;
         let ridgeMsg = '';
         let pendingRidgeSelection = null;
-        let pendingRidgeBonus = null;
+        let pendingRidgeCount = 0;
 
         if (currentAsset === 'cows') {
             const ridgeSelect = document.getElementById('ridgeSelect');
@@ -3244,23 +3243,16 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 qtyIncrease = 1;
                 ridgeMsg = ' (Expand Ridge (+1))';
             } else {
-                const checkbox = document.querySelector(`.ranch-ridge-checkbox[data-key="${selectedRidge}"]`);
-                if (checkbox?.checked) {
-                    // alert('You already own this ridge.');
-                    return;
-                }
-
-                // Compute the new bonus without mutating state yet
-                const trialSelections = { ...(data.ranchRidgeSelections || {}) };
-                trialSelections[selectedRidge] = true;
-                const newBonus = getRanchRidgeBonusFromSelections(trialSelections);
-                const prevBonus = data.ranchRidgeBonus || 0;
-                const delta = Math.max(0, newBonus - prevBonus);
-
-                qtyIncrease = delta;
-                ridgeMsg = ` (${ridgeSelect.options[ridgeSelect.selectedIndex].text})`;
+                // Ridges are repeat-buyable property: each purchase adds
+                // more of them (and their bonus cows), charged per unit.
+                // qtyIncrease is single-unit here; the shared multiplier
+                // below scales it for 2x, matching currentTotalCost.
+                const perUnitBonus = RIDGE_BONUS_BY_KEY[selectedRidge] || 0;
+                if (!(perUnitBonus > 0)) return;
+                qtyIncrease = perUnitBonus;
+                ridgeMsg = ` (${ridgeSelect.options[ridgeSelect.selectedIndex].text} x${isDoublePurchase ? 2 : 1})`;
                 pendingRidgeSelection = selectedRidge;
-                pendingRidgeBonus = newBonus;
+                pendingRidgeCount = isDoublePurchase ? 2 : 1;
             }
         }
 
@@ -3280,12 +3272,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
         addLoanTransactionValue(loanAmount);
 
         if (pendingRidgeSelection !== null) {
-            if (!data.ranchRidgeSelections) data.ranchRidgeSelections = {};
-            data.ranchRidgeSelections[pendingRidgeSelection] = true;
-            data.ranchRidgeBonus = pendingRidgeBonus;
-
-            const checkbox = document.querySelector(`.ranch-ridge-checkbox[data-key="${pendingRidgeSelection}"]`);
-            if (checkbox) checkbox.checked = true;
+            const counts = normalizeRidgeCounts(data.ranchRidgeSelections);
+            counts[pendingRidgeSelection] = (counts[pendingRidgeSelection] || 0) + pendingRidgeCount;
+            data.ranchRidgeSelections = counts;
+            data.ranchRidgeBonus = getRanchRidgeBonusFromSelections(counts);
         }
 
         let currentQty = parseInt(currentQtyValueEl.textContent) || 0;
@@ -3306,7 +3296,6 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
     const ranchRidgeButton = document.getElementById('ranchRidgeButton');
     const ranchRidgeMenu = document.getElementById('ranchRidgeMenu');
-    const ridgeCheckboxes = document.querySelectorAll('.ranch-ridge-checkbox');
 
     function setRanchRidgeMenuOpen(isOpen) {
         if (!ranchRidgeMenu || !ranchRidgeButton) return;
@@ -3330,33 +3319,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
         });
     }
 
-    if (ridgeCheckboxes.length > 0) {
-        ridgeCheckboxes.forEach((cb) => {
-            cb.addEventListener('change', () => {
-                const prevBonus = data.ranchRidgeBonus || 0;
-                if (!data.ranchRidgeSelections) data.ranchRidgeSelections = {};
-
-                ridgeCheckboxes.forEach((box) => {
-                    const key = box.getAttribute('data-key');
-                    if (key) data.ranchRidgeSelections[key] = box.checked;
-                });
-
-                const newBonus = getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
-
-                const ranchCowsQtyEl = document.querySelector('.qty-cows');
-                if (!ranchCowsQtyEl) return;
-                const currentQty = parseInt(ranchCowsQtyEl.textContent, 10) || 0;
-                const updatedQty = Math.max(0, currentQty - prevBonus + newBonus);
-                ranchCowsQtyEl.textContent = updatedQty.toString();
-
-                data.ranchRidgeBonus = newBonus;
-                calculateNet();
-                populateRollTable();
-                saveQuantitiesToLocalStorage();
-                updateUpgradedRidgesDisplay();
-            });
-        });
-    }
+    // NOTE: the ridge menu is display-only (owned counts). Ridge ownership
+    // changes exclusively through the buy modal (with payment), so there is
+    // intentionally no toggle handler here — the old checkbox handler let
+    // anyone grant themselves bonus cows for free.
 
     // Initial total calculation
     updateTotals();
