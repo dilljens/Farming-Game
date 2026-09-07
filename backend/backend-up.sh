@@ -23,6 +23,10 @@ docker compose exec -T -e PGPASSWORD="$FG_DB_PASSWORD" db \
 docker compose exec -T -e PGPASSWORD="$FG_DB_PASSWORD" db \
   psql -h localhost -U fg -d farming -f - < permissions.sql
 
+# PostgREST caches the schema at startup: a schema change (new column) is
+# invisible to the API until the rest container restarts. Always bounce it.
+docker compose restart rest
+
 echo "backend up: REST http://localhost:3002  PG localhost:55433/farming"
 echo "waiting for postgrest..."
 for i in $(seq 1 30); do
