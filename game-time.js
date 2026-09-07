@@ -91,7 +91,9 @@ export function mergeHistoriesByPlayer(entries, maxPoints = MAX_HISTORY_POINTS) 
         if (!entry || !Array.isArray(entry.history) || entry.history.length === 0) return;
         const createdAt = asTimestamp(entry.gameCreatedAt);
         if (!Number.isFinite(createdAt)) return;
-        const key = `${entry.roomCode || ''}${entry.username || '?'}`;
+        // Separator matters: room "AB" + user "CD" must not fold into room
+        // "ABC" + user "D" (room codes are 2-4 chars, both shapes are legal).
+        const key = `${entry.roomCode || ''} ${entry.username || '?'}`;
         let group = groups.get(key);
         if (!group) {
             group = {

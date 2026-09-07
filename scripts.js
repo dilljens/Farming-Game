@@ -123,10 +123,11 @@ async function createRoom() {
 
 function roomErrorMessage(e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // Firestore's raw denial names nothing actionable: point at the console fix.
+    // Firestore is retired: denials now come from PostgREST, so point at the
+    // backend runbook instead of the Firebase console.
     if (e && (e.code === 'permission-denied' || /insufficient permissions/i.test(msg))) {
-        return 'Room service blocked: the database rules reject this request. ' +
-            'Publish rules allowing signed-in room reads/writes (Firebase console → Firestore → Rules), wait a minute, then retry.';
+        return 'Room service blocked: the backend rejected this request. ' +
+            'Check that the PostgREST service is up and backend/permissions.sql is applied, wait a minute, then retry.';
     }
     return msg;
 }
@@ -238,7 +239,8 @@ async function leaveRoom() {
                 }
             });
             if (candidates.length > 0) {
-                candidates.sort((a,b)=> (a.updatedAt||0)-(b.updatedAt||0));
+                // Most recently active first — the stalest presence must not inherit the room.
+                candidates.sort((a,b)=> (b.updatedAt||0)-(a.updatedAt||0));
                 const next = candidates[0];
                 await setDoc(doc(db, 'rooms', leavingCode), { hostUid: next.id, last_activity_at: new Date().toISOString() }, { merge: true });
             }
@@ -417,7 +419,9 @@ function parseTransactionValue(rawValue) {
     }
 
     const n = Number(s);
-    return Number.isFinite(n) ? n : NaN;
+    // Whole dollars only — the game has no cents, and displays round, so the
+    // ledger must round too or totals and gating math silently disagree.
+    return Number.isFinite(n) ? Math.round(n) : NaN;
 }
 
 function handleTransaction(inputId, transactionClass, totalClass) {
@@ -919,9 +923,8 @@ function updateInterest() {
     // Convert to float and handle potential NaN if the text can't be converted
     const loanTotalValue = parseFloat(loanTotalText) || 0;
     
-    // Calculate interest (assuming interest is 10% of loan total)
-    // The interest is also rounded to the nearest cent using Math.round
-    const interestValue = Math.round((loanTotalValue) * 10) / 100;
+    // Calculate interest (10% of loan total), whole dollars — the game has no cents.
+    const interestValue = Math.round(loanTotalValue * 0.1);
 
     // Update the interest cell with formatted value
     const interestCell = document.querySelector('.interest');
@@ -1131,7 +1134,7 @@ function updateLeaderboardTable(data) {
         usernameCell.className = 'text-center';
 
         const networthCell = document.createElement('td');
-        networthCell.textContent = parseFloat(entry.networth).toLocaleString('en-US'); // Format the number with commas
+        networthCell.textContent = parseFloat(entry.networth ?? 0).toLocaleString('en-US'); // Format the number with commas
         networthCell.className = 'text-center';
 
         const debtCell = document.createElement('td');
@@ -1550,7 +1553,7 @@ function updateCustomBuyPreview() {
     const sellerSel = document.getElementById('customBuySeller');
     const asset = document.getElementById('customBuyAsset')?.value || 'Hay';
     const qty = parseInt(document.getElementById('customBuyQty')?.value || '1', 10);
-    const price = parseFloat(String(document.getElementById('customBuyPrice')?.value || '0').replace(/,/g, '')) || 0;
+    const price = Math.round(parseFloat(String(document.getElementById('customBuyPrice')?.value || '0').replace(/,/g, '')) || 0);
     const opt = sellerSel?.selectedOptions?.[0];
     const sellerName = opt?.dataset?.username || opt?.textContent?.split(' —')[0] || 'seller';
     const sellerData = (latestLeaderboardData || []).find(p => (p._id && p._id === opt?.dataset?.uid) || p.username === sellerName);
@@ -1731,7 +1734,7 @@ async function performCustomBuy() {
     const sellerSel = document.getElementById('customBuySeller');
     const asset = document.getElementById('customBuyAsset')?.value || 'Hay';
     const qty = parseInt(document.getElementById('customBuyQty')?.value || '1', 10);
-    const price = parseFloat(String(document.getElementById('customBuyPrice')?.value || '0').replace(/,/g, '')) || 0;
+    const price = Math.round(parseFloat(String(document.getElementById('customBuyPrice')?.value || '0').replace(/,/g, '')) || 0);
     const hint = document.getElementById('customBuyHint');
     const opt = sellerSel?.selectedOptions?.[0];
     const sellerUid = opt?.dataset?.uid || '';
@@ -1783,7 +1786,10 @@ function startFirestoreListener() {
     // Room-scoped leaderboard: where(roomCode==current) then client-sort. Avoids composite index need.
     let q;
     if (currentRoomCode) {
-        q = query(collection(db, 'leaderboard'), where('roomCode', '==', currentRoomCode));
+        // Stable order (user_id is unique): without it PostgREST returns rows
+        // in unspecified order, every poll looks "changed", and the table +
+        // chart re-render continuously. Display order is client-sorted below.
+        q = query(collection(db, 'leaderboard'), where('roomCode', '==', currentRoomCode), orderBy('user_id'));
     } else {
         q = query(collection(db, 'leaderboard'), orderBy('networth', 'desc'), limit(10));
     }
@@ -2655,14 +2661,21 @@ async function resetLeaderboardForAllPlayers() {
     }
 }
 
-// Clicking the "Reset Game" title inside the modal resets the leaderboard.
+// Clicking the "Reset Game" title inside the modal follows the same rule as
+// Confirm: host resets the room, everyone else resets only themselves. It must
+// never wipe the global board (one misclick used to clear every room).
+async function resetFromModalTitle(e) {
+    if (e) e.preventDefault();
+    if (currentRoomCode && isHost) await resetRoomForHost();
+    else await performReset();
+    hideModal();
+}
 const resetModalTitle = document.getElementById('modal-title');
 if (resetModalTitle) {
-    resetModalTitle.addEventListener('click', resetLeaderboardForAllPlayers);
+    resetModalTitle.addEventListener('click', resetFromModalTitle);
     resetModalTitle.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            resetLeaderboardForAllPlayers();
+            resetFromModalTitle(e);
         }
     });
 }

@@ -82,6 +82,15 @@ test('keeps same names in different rooms on separate lines', () => {
     assert.equal(merged.length, 2);
 });
 
+test('room AB + user CD does not fold into room ABC + user D', () => {
+    const merged = mergeHistoriesByPlayer([
+        { username: 'CD', roomCode: 'AB', gameCreatedAt: 1000, history: [{ t: 1000, v: 10 }] },
+        { username: 'D', roomCode: 'ABC', gameCreatedAt: 1000, history: [{ t: 1000, v: 50 }] }
+    ]);
+
+    assert.equal(merged.length, 2);
+});
+
 test('skips docs with no usable history or start time', () => {
     const merged = mergeHistoriesByPlayer([
         { username: 'Al', roomCode: 'AB', gameCreatedAt: 1000, history: [] },
