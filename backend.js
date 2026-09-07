@@ -50,8 +50,7 @@ const COLUMN_MAP = {
         buyerUid: 'buyer_uid', buyerName: 'buyer_name',
         sellerUid: 'seller_uid', sellerName: 'seller_name',
         asset: 'asset', qty: 'qty', price: 'price', status: 'status',
-        createdAt: 'created_at', updatedAt: 'updated_at',
-        gameStart: 'game_start'
+        createdAt: 'created_at', updatedAt: 'updated_at'
     }
 };
 const REVERSE_MAP = {};

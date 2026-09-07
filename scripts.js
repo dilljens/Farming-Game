@@ -1693,6 +1693,19 @@ function markTradeApplied(tradeId) {
         localStorage.setItem('farmingGameAppliedTrades', JSON.stringify(arr));
     } catch {}
 }
+// An offer belongs to the game that was running when it was created. Compare
+// against MY OWN game clock (same device, always valid) — never against
+// another device's timestamps. Offers predating my game (self-reset, host
+// reset I followed) are refused, never applied.
+function tradeInCurrentGame(t) {
+    try {
+        const created = new Date(t.createdAt || 0).getTime();
+        if (!Number.isFinite(created) || !created) return true;
+        const gameStart = Number(data?.game?.createdAt) || 0;
+        if (!gameStart) return true;
+        return created >= gameStart - 60 * 1000;
+    } catch { return true; }
+}
 // Only auto-apply recently accepted trades, and never ones settled before the
 // current game started (those belong to a previous board, e.g. fresh device
 // with no applied-ID history). Persisted applied IDs are the primary guard.
@@ -1744,9 +1757,8 @@ function renderTradeInbox(trades) {
     // This handles buyer applying after seller accepts
     acceptedForMe.forEach(t => {
         if (t.buyerUid === myUid && !seenTradeIds.has('applied-'+t.id)) {
-            // Offers from a previous game are never auto-applied, even if touched recently.
-            const myGameStart = Number(data?.game?.createdAt) || 0;
-            if (t.gameStart != null && myGameStart && Number(t.gameStart) !== myGameStart) return;
+            // Offers from before my current game are never auto-applied.
+            if (!tradeInCurrentGame(t)) return;
             // buyer applies now if not already
             const ok = applyLocalTrade(t, 'buyer');
             if (ok) { markTradeApplied(t.id); delete tradeApplyFails[t.id]; }
@@ -1805,9 +1817,8 @@ async function acceptTrade(tradeId) {
     const t = { id: snap.id, ...snap.data() };
     if (t.status !== 'pending') return;
     if (t.sellerUid !== auth.currentUser?.uid) return;
-    // Refuse offers stamped from a previous game (pending across a host reset).
-    const myGameStart = Number(data?.game?.createdAt) || 0;
-    if (t.gameStart != null && myGameStart && Number(t.gameStart) !== myGameStart) {
+    // Refuse offers from before my current game (pending across a reset).
+    if (!tradeInCurrentGame(t)) {
         const s = document.getElementById('roomStatus');
         if (s) s.textContent = `Offer ${t.qty} ${t.asset} is from a previous game — ask ${t.buyerName} to re-offer.`;
         return;
@@ -1898,10 +1909,7 @@ async function performCustomBuy() {
             roomCode: tRoom,
             status: 'pending',
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            // Game stamp: accepts from a previous game are refused, so a host
-            // reset can't leak pending offers into the fresh board.
-            gameStart: Number(data?.game?.createdAt) || null
+            updatedAt: new Date().toISOString()
         });
         hideCustomBuyModal();
         const status = document.getElementById('roomStatus');
