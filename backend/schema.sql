@@ -60,6 +60,9 @@ CREATE TABLE IF NOT EXISTS trades (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Offers predate created_by (buyer-created only); the column tells Accept
+-- whose click counts once sell-initiated offers exist.
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS created_by TEXT;
 
 CREATE INDEX IF NOT EXISTS leaderboard_room_code_idx ON leaderboard (room_code);
 CREATE INDEX IF NOT EXISTS trades_room_code_idx ON trades (room_code);

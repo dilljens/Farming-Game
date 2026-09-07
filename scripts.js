@@ -1529,6 +1529,16 @@ document.getElementById('customBuyPrice')?.addEventListener('input', updateCusto
 document.getElementById('customBuySeller')?.addEventListener('change', updateCustomBuyPreview);
 document.getElementById('customBuyModal')?.addEventListener('click', (e) => { if (e.target.id === 'customBuyModal') hideCustomBuyModal(); });
 
+// custom sell wiring (mirror of buy: seller initiates, buyer accepts)
+document.getElementById('customSellBtn')?.addEventListener('click', showCustomSellModal);
+document.getElementById('cancelCustomSell')?.addEventListener('click', hideCustomSellModal);
+document.getElementById('confirmCustomSell')?.addEventListener('click', performCustomSell);
+document.getElementById('customSellAsset')?.addEventListener('change', () => { refreshCustomSellBuyers(); updateCustomSellPreview(); });
+document.getElementById('customSellQty')?.addEventListener('input', updateCustomSellPreview);
+document.getElementById('customSellPrice')?.addEventListener('input', updateCustomSellPreview);
+document.getElementById('customSellBuyer')?.addEventListener('change', updateCustomSellPreview);
+document.getElementById('customSellModal')?.addEventListener('click', (e) => { if (e.target.id === 'customSellModal') hideCustomSellModal(); });
+
 // host controls — only host sees Reset Room (imposterirl: host controls game start/settings)
 document.getElementById('hostResetRoomBtn')?.addEventListener('click', async () => { await resetRoomForHost(); });
 document.getElementById('hostResetGameBtn')?.addEventListener('click', async () => { await performReset({ keepRoom: true }); });
@@ -1585,7 +1595,7 @@ document.getElementById('hideDiceBtn')?.addEventListener('click', () => setDiceV
 document.getElementById('rollDiceBtn')?.addEventListener('click', () => rollDice());
 // haptics for thumb actions (dice/buy/qty/roll)
 document.addEventListener('click', (e) => {
-    if (e.target.closest('.buy-btn, .qty-btn, .roll-cell-button, #rollDiceBtn, #confirmBuy, #confirmCustomBuy, #payPerAcreBtn, #payInterestBtn, #gainPerAcreBtn, #payOffLoanBtn')) {
+    if (e.target.closest('.buy-btn, .qty-btn, .roll-cell-button, #rollDiceBtn, #confirmBuy, #confirmCustomBuy, #confirmCustomSell, #payPerAcreBtn, #payInterestBtn, #gainPerAcreBtn, #payOffLoanBtn')) {
         try { navigator.vibrate && navigator.vibrate(10); } catch {}
     }
 });
@@ -1642,6 +1652,20 @@ function getSellerQty(sellerData, asset) {
     if (key === 'harvester') return Number(sellerData.harvester || 0);
     if (key === 'tractor') return Number(sellerData.tractor || 0);
     return Number(sellerData[key] ?? sellerData[key.toLowerCase()] ?? 0);
+}
+// My own board holdings (DOM-grained) — used to validate sell offers and accepts.
+function myAssetQty(asset) {
+    const classMap = { Hay:'qty-hay', Grain:'qty-grain', Fruit:'qty-fruit', Farm:'qty-farm', Cows:'qty-cows', Harvester:'qty-harvester', Tractor:'qty-tractor' };
+    const cell = document.querySelector(`.${classMap[getAssetQtyKey(asset)] || 'qty-hay'}`);
+    return parseInt(cell?.textContent || '0', 10) || 0;
+}
+// Who may click Accept: a party who didn't create the offer. Offers predate
+// createdBy were buyer-created (Custom Buy), so the seller accepts those.
+function canAcceptTrade(t, myUid) {
+    if (!t || t.status !== 'pending' || !myUid) return false;
+    if (t.buyerUid !== myUid && t.sellerUid !== myUid) return false;
+    const creator = t.createdBy || t.buyerUid;
+    return myUid !== creator;
 }
 function updateCustomBuyPreview() {
     const preview = document.getElementById('customBuyPreview');
@@ -1755,9 +1779,11 @@ function renderTradeInbox(trades) {
     const box = document.getElementById('tradeInbox');
     if (!box) return;
     const myUid = auth.currentUser?.uid || '';
-    // pending where I am seller -> incoming, where I am buyer -> outgoing pending
-    const incoming = trades.filter(t => t.status === 'pending' && t.sellerUid === myUid);
-    const outgoing = trades.filter(t => t.status === 'pending' && t.buyerUid === myUid);
+    // Actionable offers: I'm a party and I didn't create it. My own pending
+    // offers wait on the other side (outgoing). Legacy offers were
+    // buyer-created, so the seller still accepts those.
+    const incoming = trades.filter(t => t.status === 'pending' && canAcceptTrade(t, myUid));
+    const outgoing = trades.filter(t => t.status === 'pending' && (t.buyerUid === myUid || t.sellerUid === myUid) && !canAcceptTrade(t, myUid));
     const acceptedForMe = trades.filter(t => t.status === 'accepted' && (t.buyerUid === myUid || t.sellerUid === myUid) && !seenTradeIds.has('applied-'+t.id) && isRecentTrade(t));
     // apply accepted trades that I haven't applied locally yet (buyer side applies on accept, seller already applied on accept)
     // This handles buyer applying after seller accepts
@@ -1770,9 +1796,14 @@ function renderTradeInbox(trades) {
             const ok = applyLocalTrade(t, 'buyer');
             if (ok) { markTradeApplied(t.id); delete tradeApplyFails[t.id]; }
             else { tradeApplyFails[t.id] = (tradeApplyFails[t.id] || 0) + 1; failedApplies++; }
-        } else if (t.sellerUid === myUid) {
-            // seller applied at accept time; just record so reloads never replay it
-            markTradeApplied(t.id);
+        } else if (t.sellerUid === myUid && !seenTradeIds.has('applied-'+t.id)) {
+            // Seller side settles here when the BUYER accepted (sell offers):
+            // the seller never clicked, so nothing applied yet. Buy offers
+            // applied at accept-click time, making this a no-op safety net.
+            if (!tradeInCurrentGame(t)) return;
+            const ok = applyLocalTrade(t, 'seller');
+            if (ok) { markTradeApplied(t.id); delete tradeApplyFails[t.id]; }
+            else { tradeApplyFails[t.id] = (tradeApplyFails[t.id] || 0) + 1; failedApplies++; }
         }
     });
     // Forget fail counts for trades that are gone or settled.
@@ -1780,10 +1811,14 @@ function renderTradeInbox(trades) {
     Object.keys(tradeApplyFails).forEach(id => { if (!liveIds.has(id)) delete tradeApplyFails[id]; });
     let html = '';
     if (incoming.length) {
-        html += `<div class="font-bold mb-1">Incoming trade offers — you are seller</div>`;
+        html += `<div class="font-bold mb-1">Incoming trade offers</div>`;
         incoming.forEach(t => {
+            // Direction-aware line: buy offers want my goods, sell offers offer theirs.
+            const line = t.buyerUid === myUid
+                ? `${t.sellerName} offers ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()}`
+                : `${t.buyerName} wants ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()}`;
             html += `<div class="flex items-center justify-between gap-2 py-1 border-b border-amber-100">
-                <span>${t.buyerName} wants ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()}</span>
+                <span>${line} — you are ${t.buyerUid === myUid ? 'buyer' : 'seller'}</span>
                 <span class="flex gap-1">
                   <button data-accept="${t.id}" class="px-2 py-1 bg-green-600 text-white rounded text-xs">Accept</button>
                   <button data-reject="${t.id}" class="px-2 py-1 bg-zinc-300 rounded text-xs">Reject</button>
@@ -1792,9 +1827,12 @@ function renderTradeInbox(trades) {
         });
     }
     if (outgoing.length) {
-        html += `<div class="font-bold mt-2 mb-1">Outgoing — waiting for seller</div>`;
+        html += `<div class="font-bold mt-2 mb-1">Outgoing — waiting for them</div>`;
         outgoing.forEach(t => {
-            html += `<div class="py-1 border-b border-amber-100">${t.qty} ${t.asset} from ${t.sellerName} for $${Number(t.price).toLocaleString()} — pending</div>`;
+            const line = t.sellerUid === myUid
+                ? `${t.qty} ${t.asset} to ${t.buyerName} for $${Number(t.price).toLocaleString()} — pending`
+                : `${t.qty} ${t.asset} from ${t.sellerName} for $${Number(t.price).toLocaleString()} — pending`;
+            html += `<div class="py-1 border-b border-amber-100">${line}</div>`;
         });
     }
     const justAccepted = trades.filter(t => t.status === 'accepted' && (Date.now() - new Date(t.updatedAt||t.createdAt).getTime() < 15000) && (t.buyerUid===myUid || t.sellerUid===myUid));
@@ -1802,12 +1840,14 @@ function renderTradeInbox(trades) {
         const role = t.sellerUid===myUid ? 'sold' : 'bought';
         html += `<div class="text-xs text-green-700 mt-1">✓ ${role} ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()} ${t.sellerUid===myUid?'to '+t.buyerName:'from '+t.sellerName}</div>`;
     });
-    // A buyer who went broke between offer and accept used to retry silently
-    // forever. Keep retrying (cash may arrive), but say so out loud.
+    // A stuck side used to retry silently forever. Keep retrying (cash or
+    // stock may arrive), but say so out loud — role-aware either way.
     acceptedForMe
-        .filter(t => t.buyerUid === myUid && (tradeApplyFails[t.id] || 0) >= MAX_BUYER_APPLY_FAILS)
+        .filter(t => (tradeApplyFails[t.id] || 0) >= MAX_BUYER_APPLY_FAILS)
         .forEach(t => {
-            html += `<div class="text-xs text-red-700 mt-1">⚠ Can't afford ${t.qty} ${t.asset} from ${t.sellerName} ($${Number(t.price).toLocaleString()}) — still accepted, applies when you have cash.</div>`;
+            html += t.buyerUid === myUid
+                ? `<div class="text-xs text-red-700 mt-1">⚠ Can't afford ${t.qty} ${t.asset} from ${t.sellerName} ($${Number(t.price).toLocaleString()}) — still accepted, applies when you have cash.</div>`
+                : `<div class="text-xs text-red-700 mt-1">⚠ Short on ${t.asset} for ${t.buyerName} (need ${t.qty}) — still accepted, applies when you restock.</div>`;
         });
     if (!html) { box.classList.add('hidden'); box.innerHTML=''; }
     else {
@@ -1832,20 +1872,29 @@ async function acceptTrade(tradeId) {
     const snap = await getDoc(ref);
     if (!snap.exists()) return;
     const t = { id: snap.id, ...snap.data() };
-    if (t.status !== 'pending') return;
-    if (t.sellerUid !== auth.currentUser?.uid) return;
+    const myUid = auth.currentUser?.uid;
+    if (!canAcceptTrade(t, myUid)) return;
     // Refuse offers from before my current game (pending across a reset).
     if (!tradeInCurrentGame(t)) {
         const s = document.getElementById('roomStatus');
-        if (s) s.textContent = `Offer ${t.qty} ${t.asset} is from a previous game — ask ${t.buyerName} to re-offer.`;
+        if (s) s.textContent = `Offer ${t.qty} ${t.asset} is from a previous game — ask for a re-offer.`;
         return;
     }
-    // validate seller has qty locally
-    const qtyKey = getAssetQtyKey(t.asset);
-    const classMap = { Hay:'qty-hay', Grain:'qty-grain', Fruit:'qty-fruit', Farm:'qty-farm', Cows:'qty-cows', Harvester:'qty-harvester', Tractor:'qty-tractor' };
-    const cell = document.querySelector(`.${classMap[qtyKey]||'qty-hay'}`);
-    const cur = parseInt(cell?.textContent||'0',10)||0;
-    if (cur < Number(t.qty||0)) { alert(`You only have ${cur} ${t.asset}, need ${t.qty}`); return; }
+    const iAmBuyer = t.buyerUid === myUid;
+    if (iAmBuyer) {
+        // Buyer accepting a sell offer: must afford it right now.
+        if (Number(t.price || 0) !== 0 && wouldGoNegativeCash(-Number(t.price || 0))) {
+            const s = document.getElementById('roomStatus');
+            if (s) s.textContent = `You need $${Number(t.price || 0).toLocaleString()} cash to accept.`;
+            return;
+        }
+    } else {
+        // Seller accepting a buy offer: must hold the qty right now.
+        if (myAssetQty(t.asset) < Number(t.qty || 0)) {
+            alert(`You only have ${myAssetQty(t.asset)} ${t.asset}, need ${t.qty}`);
+            return;
+        }
+    }
     // Write FIRST, apply locally after. If the write fails nothing moved, so
     // retrying the accept can never deduct twice. (The local apply cannot fail
     // after the check above — same tick, no interleaving.)
@@ -1857,8 +1906,9 @@ async function acceptTrade(tradeId) {
         if (s) s.textContent = 'Accept failed: ' + roomErrorMessage(e);
         return;
     }
-    // apply seller side locally (remove qty, add cash) — accurate networth point via updateTotalWorth
-    if (applyLocalTrade(t, 'seller')) markTradeApplied(t.id);
+    // Apply my own side locally (seller removes qty/adds cash, buyer adds
+    // qty/pays) — the counterparty settles via their poll listener.
+    if (applyLocalTrade(t, iAmBuyer ? 'buyer' : 'seller')) markTradeApplied(t.id);
     try { navigator.vibrate && navigator.vibrate([10,30,10]); } catch {}
 }
 async function rejectTrade(tradeId) {
@@ -1929,11 +1979,123 @@ async function performCustomBuy() {
             roomCode: tRoom,
             status: 'pending',
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            // Creator stamp: the counterparty accepts. Buy offers are
+            // buyer-created (seller accepts); sell offers are seller-created.
+            createdBy: auth.currentUser.uid
         });
         hideCustomBuyModal();
         const status = document.getElementById('roomStatus');
         if (status) status.textContent = `Offer sent to ${sellerName}: ${qty} ${asset} for $${price.toLocaleString()} — waiting for accept`;
+    } catch (e) {
+        console.error('trade create failed', e);
+        if (hint){hint.textContent = 'Offer failed: ' + roomErrorMessage(e); hint.classList.remove('hidden');}
+        return;
+    }
+}
+
+// --- Custom Sell — offer your property to another player at a price you set ---
+function refreshCustomSellBuyers() {
+    const sel = document.getElementById('customSellBuyer');
+    if (!sel) return;
+    const myUsername = document.getElementById('editableUsername')?.innerText.trim() || '';
+    const prev = sel.value;
+    sel.innerHTML = '';
+    const others = (latestLeaderboardData || []).filter(p => (p.username || '').trim() !== myUsername && p.username !== 'Enter name');
+    if (others.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = currentRoomCode ? 'No other players in this room yet' : 'No other players online yet';
+        sel.appendChild(opt);
+    } else {
+        others.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p._id || p.username;
+            opt.dataset.uid = p._id || '';
+            opt.dataset.username = p.username;
+            opt.textContent = `${p.username} (net $${(p.networth||0).toLocaleString()})`;
+            sel.appendChild(opt);
+        });
+    }
+    if (prev) {
+        const hasPrev = [...sel.options].some(o => o.value === prev);
+        if (hasPrev) sel.value = prev;
+    }
+    updateCustomSellPreview();
+}
+function updateCustomSellPreview() {
+    const preview = document.getElementById('customSellPreview');
+    const hint = document.getElementById('customSellHint');
+    if (!preview) return;
+    const buyerSel = document.getElementById('customSellBuyer');
+    const asset = document.getElementById('customSellAsset')?.value || 'Hay';
+    const qty = parseInt(document.getElementById('customSellQty')?.value || '1', 10);
+    const price = Math.round(parseFloat(String(document.getElementById('customSellPrice')?.value || '0').replace(/,/g, '')) || 0);
+    const opt = buyerSel?.selectedOptions?.[0];
+    const buyerName = opt?.dataset?.username || opt?.textContent?.split(' (')[0] || 'buyer';
+    const myQty = myAssetQty(asset);
+    preview.innerHTML = `You: ${asset} ${myQty} → ${myQty - qty} after sale<br>${buyerName} pays $${price.toLocaleString()} for ${qty} × ${asset}`;
+    let err = '';
+    if (!buyerSel || !buyerSel.value) err = 'Pick a buyer.';
+    else if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
+    else if (!Number.isFinite(price) || price < 0) err = 'Price must be ≥0.';
+    else if (myQty < qty) err = `You only have ${myQty} ${asset}.`;
+    if (hint) { hint.textContent = err; hint.classList.toggle('hidden', !err); }
+    const confirm = document.getElementById('confirmCustomSell');
+    if (confirm) confirm.disabled = !!err;
+}
+function showCustomSellModal() {
+    refreshCustomSellBuyers();
+    document.getElementById('customSellModal')?.classList.remove('hidden');
+}
+function hideCustomSellModal() {
+    document.getElementById('customSellModal')?.classList.add('hidden');
+}
+async function performCustomSell() {
+    const buyerSel = document.getElementById('customSellBuyer');
+    const asset = document.getElementById('customSellAsset')?.value || 'Hay';
+    const qty = parseInt(document.getElementById('customSellQty')?.value || '1', 10);
+    const price = Math.round(parseFloat(String(document.getElementById('customSellPrice')?.value || '0').replace(/,/g, '')) || 0);
+    const hint = document.getElementById('customSellHint');
+    const opt = buyerSel?.selectedOptions?.[0];
+    const buyerUid = opt?.dataset?.uid || '';
+    const buyerName = opt?.dataset?.username || '';
+    // re-validate (preview state may be stale)
+    updateCustomSellPreview();
+    if (document.getElementById('confirmCustomSell')?.disabled) return;
+    if (!buyerUid) { if (hint){hint.textContent='Buyer not found (no UID).'; hint.classList.remove('hidden');} return; }
+    if (buyerUid === auth.currentUser?.uid) { if (hint){hint.textContent='Cannot sell to yourself.'; hint.classList.remove('hidden');} return; }
+    if (myAssetQty(asset) < qty) { if (hint){hint.textContent=`You only have ${myAssetQty(asset)} ${asset}.`; hint.classList.remove('hidden');} return; }
+    // Roomless trades go through the shared lobby room (created on demand).
+    const tRoom = tradeRoomCode();
+    if (!currentRoomCode) {
+        try {
+            await setDoc(doc(db, 'rooms', LOBBY_ROOM_CODE), {
+                room_code: LOBBY_ROOM_CODE,
+                createdAt: new Date().toISOString(),
+                last_activity_at: new Date().toISOString(),
+                status: 'Lobby',
+            }, { merge: true });
+        } catch {}
+    }
+    // create pending trade — buyer must accept before property/money moves
+    const qtyKey = getAssetQtyKey(asset);
+    try {
+        const tradeId = `${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+        await setDoc(doc(db, 'rooms', tRoom, 'trades', tradeId), {
+            buyerUid, buyerName,
+            sellerUid: auth.currentUser.uid,
+            sellerName: document.getElementById('editableUsername')?.innerText.trim() || 'seller',
+            asset: qtyKey, qty, price,
+            roomCode: tRoom,
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            createdBy: auth.currentUser.uid
+        });
+        hideCustomSellModal();
+        const status = document.getElementById('roomStatus');
+        if (status) status.textContent = `Offer sent to ${buyerName}: ${qty} ${asset} for $${price.toLocaleString()} — waiting for accept`;
     } catch (e) {
         console.error('trade create failed', e);
         if (hint){hint.textContent = 'Offer failed: ' + roomErrorMessage(e); hint.classList.remove('hidden');}
