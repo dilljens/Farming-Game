@@ -1174,12 +1174,11 @@ function updateLeaderboardTable(data) {
 let progressChart = null;
 let latestLeaderboardData = [];
 
-// Deterministic per-player color: same name => same color on every client
-function colorForPlayer(name) {
-    let h = 0;
-    const s = String(name || '?');
-    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-    const hue = (h * 137.508) % 360; // golden angle for well-spaced hues
+// Distinct per-player colors: roster sorted by name => evenly spaced hues, so
+// no two players in the same game land in the same color family. Same roster
+// => same colors on every client (hashing names alone clustered greens).
+function paletteColor(index, total) {
+    const hue = total > 0 ? (index * 360) / total : 0;
     return `hsl(${hue.toFixed(1)}, 70%, 45%)`;
 }
 
@@ -1192,14 +1191,17 @@ function buildChartDatasets(data) {
     const merged = mergeHistoriesByPlayer(data);
     if (merged.length === 0) return [];
     const start = Math.min(...merged.map((group) => group.gameCreatedAt));
-    return merged.map((group) => {
+    const ordered = [...merged].sort((a, b) =>
+        String(a.username || '').localeCompare(String(b.username || ''), undefined, { sensitivity: 'base' }));
+    return ordered.map((group, i) => {
         // Infinity buffer: true elapsed wall time, no gap compression.
         const elapsedHistory = buildElapsedHistory(group.history, start, Infinity);
+        const color = paletteColor(i, ordered.length);
         return {
             label: group.username,
             data: elapsedHistory.map(point => ({ x: point.x, y: point.v })),
-            borderColor: colorForPlayer(group.username),
-            backgroundColor: colorForPlayer(group.username),
+            borderColor: color,
+            backgroundColor: color,
             tension: 0, // straight segments: smoothing overshoots below zero on sharp moves
             pointRadius: 0,
             borderWidth: 2,
@@ -1874,41 +1876,20 @@ function makeEditableCellsExitOnEnter() {
 makeEditableCellsExitOnEnter();
 //console.log('log working')
 function numberWithCommasAndDecimals(x) {
-    //console.log('numberWithCommasAndDecimals called with:', x);
-
-    // Ensure x is a string and remove any existing commas
+    // Whole dollars only — the game never deals in cents, so no ".00".
+    // Name kept so the existing call sites don't change.
     const cleanInput = String(x).replace(/,/g, '');
-    
-    // Parse the input as a float and ensure two decimal places
+
     const numericValue = parseFloat(cleanInput);
     if (isNaN(numericValue)) {
-        //console.error('Input is not a valid number:', x);
-        return '0.00';
+        return '0';
     }
 
-    // Convert the number to a string with two decimal places
-    let parts = numericValue.toFixed(2).split(".");
-    //console.log('Split parts:', parts);
-
-    // Add commas to the integer part
-    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    //console.log('Integer part with commas:', parts[0]);
-
-    // If the decimal part is only one digit, append a zero
-    if (parts[1].length < 2) {
-        parts[1] = parts[1] + '0';
-    }
-    //console.log('Decimal part after check:', parts[1]);
-
-    // Combine the integer part with the decimal part
-    const formattedNumber = parts[0] + "." + parts[1];
-    //console.log('Formatted number:', formattedNumber);
-
-    return formattedNumber;
+    return Math.round(numericValue).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 // Example usage:
-//console.log(numberWithCommasAndDecimals('1107.1')); // Should log '1,105.10'
+//console.log(numberWithCommasAndDecimals('1107.1')); // Should log '1,107'
 
 function populateRollTable() {
     // Define the base monetary values for each roll and item type
