@@ -94,6 +94,15 @@
                         
                         <h4 class="font-semibold mt-4">Options to Buy</h4>
                         <p>Able to buy 2x of a OTB after one person reaches a networth of $250,000.</p>
+
+                        <h4 class="font-semibold mt-4">Market Rules (host picks per room)</h4>
+                        <ul class="list-disc list-inside">
+                          <li><strong>Scarcity</strong> — Hay/Grain/Fruit price follows room abundance: scarce costs up to 2×, gluts drop to half.</li>
+                          <li><strong>Seasons</strong> — crop prices ride the game year: harvest gluts are cheap, winter is dear.</li>
+                          <li><strong>Rubber-band</strong> — room leader pays +10%, trailer pays −10% on everything.</li>
+                          <li><strong>Estate</strong> — your Nth Farm/Harvester/Tractor costs +10% per unit you own.</li>
+                        </ul>
+                        <p class="mt-2">Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted.</p>
                         
                         <h4 class="font-semibold mt-4">2nd Week of February</h4>
                         <p>After passing/reaching Spring planting go to 2nd week of February.</p>
@@ -252,6 +261,13 @@
         <div id="hostControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
           <button id="hostResetRoomBtn" type="button" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-bold">Reset Room (host)</button>
           <button id="hostResetGameBtn" type="button" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs">Reset My Game</button>
+        </div>
+        <div id="marketRules" class="mt-2 flex flex-wrap items-center justify-center gap-3 text-xs text-zinc-600" title="Market rules — the host picks, everyone sees. Same prices on every device.">
+          <span class="uppercase tracking-widest text-zinc-400">Market:</span>
+          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="scarcity"> Scarcity</label>
+          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="seasons"> Seasons</label>
+          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="rubberband"> Rubber-band</label>
+          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="estate"> Estate</label>
         </div>
         <div id="guestControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
           <button id="becomeHostBtn" type="button" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-bold">Become Host</button>
@@ -648,7 +664,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20260907f"></script>
+<script type="module" src="scripts.js?v=20260907g"></script>
 
 </body>
 </html>

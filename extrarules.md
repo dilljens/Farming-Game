@@ -19,6 +19,15 @@ This multiplier affects the **roll payout values** shown in the roll table (prof
 
 Able to buy 2x of an OTB after one person reaches a networth of $250,000.
 
+## Market Rules (room host picks per room, same prices on every device)
+
+- **Scarcity** — Hay/Grain/Fruit price follows room abundance: scarce costs up to 2×, gluts drop to half.
+- **Seasons** — crop prices ride the game year: harvest gluts are cheap, winter is dear.
+- **Rubber-band** — room leader pays +10%, trailer pays −10% on everything.
+- **Estate** — your Nth Farm/Harvester/Tractor costs +10% per unit you own.
+
+Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted.
+
 ## 2nd Week of February
 
 After passing/reaching Spring planting go to 2nd week of February.

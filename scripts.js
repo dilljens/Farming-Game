@@ -18,6 +18,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907e';
+import { computeMarketPrice, normalizeRules } from './pricing.js?v=20260907g';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -117,6 +118,7 @@ async function createRoom() {
         status: 'Lobby',
         hostUid,
         hostName,
+        rules: {},
     });
     return code;
 }
@@ -298,6 +300,12 @@ function startRoomDocListener() {
         }
         isHost = !!myUid && myUid === currentRoomHostUid;
         updateRoomUi();
+        // Market rules ride the room doc: host writes, everyone applies.
+        currentRoomRules = normalizeRules(data.rules);
+        document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
+            el.checked = !!currentRoomRules[el.dataset.rule];
+        });
+        refreshPriceCells();
         // host reset signal — mirror imposterirl resetGameForNewRound via room doc
         const resetAt = data.lastHostResetAt;
         if (resetAt && !isHost) {
@@ -1243,6 +1251,75 @@ function updateProgressChart(data) {
     progressChart.update('none');
 }
 
+// --- Market pricing: room-creator-selectable rules (rooms.rules JSONB) ---
+// Prices derive from the polled leaderboard snapshot + local game clock, so
+// every device computes identical prices with no server round trip. Owned
+// holdings revalue at market: rewriting the Cost cells flows through net
+// worth, the buy modal, and saves automatically. Player-to-player trades
+// stay negotiated and are never adjusted.
+let currentRoomRules = {};
+
+function marketBoard() {
+    const rows = Array.isArray(latestLeaderboardData) ? latestLeaderboardData : [];
+    if (currentRoomCode) return rows.filter((d) => (d.roomCode || '').toUpperCase() === currentRoomCode);
+    return rows;
+}
+
+function currentMarketCtx(asset) {
+    const board = marketBoard();
+    const players = board.length;
+    const uid = (typeof auth !== 'undefined' && auth.currentUser) ? auth.currentUser.uid : null;
+    const sorted = [...board].sort((a, b) => (Number(b.networth) || 0) - (Number(a.networth) || 0));
+    const idx = uid ? sorted.findIndex((d) => d._id === uid) : -1;
+    const g = (typeof data !== 'undefined' && data && data.game) || {};
+    const dur = Number(g.durationMs) || 0;
+    const progress = dur > 0 ? (Date.now() - Number(g.createdAt)) / dur : 0;
+    const key = String(asset || '').toLowerCase();
+    let total = 0;
+    for (const d of board) total += Number(d[key] ?? 0) || 0;
+    const myOwned = parseInt(document.querySelector(`.qty-${key}`)?.textContent) || 0;
+    return {
+        rules: normalizeRules(currentRoomRules),
+        players,
+        rank: idx < 0 ? undefined : idx,
+        progress,
+        avgOwned: players > 0 ? total / players : NaN,
+        myOwned
+    };
+}
+
+function marketNote(asset) {
+    try {
+        const { mult, notes } = computeMarketPrice(1, asset, currentMarketCtx(asset));
+        if (!notes.length) return '';
+        const m = mult.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+        return ` Market ×${m} (${notes.join(' · ')})`;
+    } catch { return ''; }
+}
+
+const MARKET_CELL_ASSETS = ['hay', 'grain', 'fruit', 'farm', 'harvester', 'tractor'];
+
+function refreshPriceCells() {
+    let changed = false;
+    for (const asset of MARKET_CELL_ASSETS) {
+        const btn = document.querySelector(`.buy-btn[data-asset="${asset}"]`);
+        const costCell = btn?.closest('tr')?.cells?.[3];
+        if (!costCell) continue;
+        if (costCell.dataset.base === undefined || costCell.dataset.base === '') {
+            costCell.dataset.base = (costCell.innerText || '').replace(/,/g, '').trim();
+        }
+        const base = parseFloat(costCell.dataset.base) || 0;
+        if (!(base > 0)) continue;
+        const { price } = computeMarketPrice(base, asset, currentMarketCtx(asset));
+        const text = price.toLocaleString('en-US');
+        if (costCell.innerText.trim() !== text) {
+            costCell.innerText = text;
+            changed = true;
+        }
+    }
+    if (changed && typeof calculateNet === 'function') calculateNet();
+}
+
 function createProgressChart() {
     if (progressChart || typeof Chart === 'undefined') return;
     const canvas = document.getElementById('progressChart');
@@ -1457,6 +1534,26 @@ document.getElementById('hostResetRoomBtn')?.addEventListener('click', async () 
 document.getElementById('hostResetGameBtn')?.addEventListener('click', async () => { await performReset({ keepRoom: true }); });
 // guests can take over hosting so there is always a way to become host + make/run the game
 document.getElementById('becomeHostBtn')?.addEventListener('click', async () => { await claimHost(); });
+
+// Market rules: host-only checkboxes, persisted on the room doc; every
+// client (including the host) applies them via the room-doc listener.
+document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
+    el.addEventListener('change', async () => {
+        if (!currentRoomCode || !isHost) {
+            el.checked = !!currentRoomRules[el.dataset.rule];
+            return;
+        }
+        const rules = {};
+        document.querySelectorAll('#marketRules input[data-rule]').forEach((box) => {
+            rules[box.dataset.rule] = !!box.checked;
+        });
+        currentRoomRules = normalizeRules(rules);
+        try {
+            await setDoc(doc(db, 'rooms', currentRoomCode), { rules: currentRoomRules }, { merge: true });
+        } catch (e) { console.error('rule save failed', e); }
+        refreshPriceCells();
+    });
+});
 
 // --- Digital dice — hidden by default, for tables without physical dice ---
 let diceHistory = [];
@@ -1806,6 +1903,7 @@ function startFirestoreListener() {
         }
         updateLeaderboardTable(leaderboardData);
         updateProgressChart(leaderboardData);
+        refreshPriceCells();
         // keep custom-buy seller list fresh
         if (typeof refreshCustomBuySellers === 'function') refreshCustomBuySellers();
     }, (error) => {
@@ -2033,6 +2131,8 @@ function updateGameClockDisplay() {
     const duration = clampGameDuration(data.game.durationMs);
     display.textContent = `Game time: ${formatGameTime(Math.min(elapsed, duration))} / ${formatGameTime(duration)}`;
     display.title = `Started ${new Date(data.game.createdAt).toLocaleString()}`;
+    // Seasons move with the clock: cheap guarded recompute, DOM only on change.
+    try { refreshPriceCells(); } catch {}
 }
 
 function startGameClock() {
@@ -3148,14 +3248,17 @@ window.addEventListener('DOMContentLoaded', (event) => {
         // Expand Ridge counts as a 1-cow unit; named ridges grant their bonus
         // per unit bought (ridges are repeat-buyable).
         const perUnitBonus = selectedRidge === 'none' ? 1 : (RIDGE_BONUS_BY_KEY[selectedRidge] || 0);
-        // Cost = bonus * 10000 * multiplier
-        const ridgeCost = perUnitBonus * 10000 * multiplier;
+        // Cost = bonus * 10000 * multiplier, with the rubberband rule applied
+        // (it prices everything; scarcity/seasons/estate leave ridges alone).
+        const unitBase = perUnitBonus * 10000;
+        const unit = computeMarketPrice(unitBase, 'cows', currentMarketCtx('cows')).price;
+        const ridgeCost = unit * multiplier;
         currentCost = ridgeCost;
         currentTotalCost = ridgeCost;
         const ridgeName = selectedRidge === 'none'
             ? 'Expand Ridge (+1)'
             : (ridgeSelect.options[ridgeSelect.selectedIndex]?.text || selectedRidge);
-        document.getElementById('assetInfo').textContent = `Buying ${multiplier}x ${ridgeName} at $${(perUnitBonus * 10000).toLocaleString()} each.`;
+        document.getElementById('assetInfo').textContent = `Buying ${multiplier}x ${ridgeName} at $${unit.toLocaleString()} each.` + marketNote('cows');
         document.getElementById('totalCost').textContent = ridgeCost.toLocaleString();
 
         refreshDownPaymentSlider();
@@ -3189,7 +3292,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
             updateRidgeCost(multiplier);
         } else {
             currentTotalCost = currentBaseCost * multiplier;
-            document.getElementById('assetInfo').textContent = `Buying ${multiplier} ${currentAsset} at $${currentBaseCost.toLocaleString()} each.`;
+            document.getElementById('assetInfo').textContent = `Buying ${multiplier} ${currentAsset} at $${currentBaseCost.toLocaleString()} each.` + marketNote(currentAsset);
             document.getElementById('totalCost').textContent = currentTotalCost.toLocaleString();
 
             refreshDownPaymentSlider();

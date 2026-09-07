@@ -131,7 +131,7 @@ rsync -avz backend/ ubuntu@40.160.241.74:/opt/farming-backend/
 # Explicit file list — never rsync the repo root blindly (would ship .git,
 # backend/, node_modules). First time only, the dir needs creating:
 #   ssh ubuntu@40.160.241.74 "sudo mkdir -p /opt/farming-game && sudo chown -R ubuntu:ubuntu /opt/farming-game"
-rsync -avz index.html scripts.js styles.css backend.js game-time.js \
+rsync -avz index.html scripts.js styles.css backend.js game-time.js pricing.js \
   manifest.json icon-192.svg icon-512.svg vendor ubuntu@40.160.241.74:/opt/farming-game/
 # NOTE: `vendor` with NO trailing slash — `vendor/` would scatter its contents
 # into /opt/farming-game/ instead of /opt/farming-game/vendor/.

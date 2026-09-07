@@ -34,7 +34,8 @@ const COLUMN_MAP = {
         hostUid: 'host_uid', hostName: 'host_name',
         createdAt: 'created_at', updatedAt: 'updated_at',
         last_activity_at: 'last_activity_at',
-        lastHostResetAt: 'last_host_reset_at'
+        lastHostResetAt: 'last_host_reset_at',
+        rules: 'rules'
     },
     leaderboard: {
         username: 'username', networth: 'networth', debt: 'debt', cash: 'cash',

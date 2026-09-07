@@ -18,8 +18,12 @@ CREATE TABLE IF NOT EXISTS rooms (
     host_name TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_activity_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_host_reset_at TEXT
+    last_host_reset_at TEXT,
+    rules JSONB NOT NULL DEFAULT '{}'
 );
+-- Live databases created before the market-rules update need the column too
+-- (this file is re-applied idempotently by backend-up.sh).
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS rules JSONB NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS leaderboard (
     user_id TEXT PRIMARY KEY,
