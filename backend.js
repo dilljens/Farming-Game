@@ -113,6 +113,7 @@ async function rest(path, { method = 'GET', body, headers = {} } = {}) {
     if (!res.ok) {
         const text = await res.text().catch(() => '');
         const err = new Error(`backend ${method} ${path} -> ${res.status} ${text}`.slice(0, 300));
+        err.status = res.status;
         if (res.status === 404 || res.status === 403) err.code = res.status === 403 ? 'permission-denied' : 'not-found';
         throw err;
     }
@@ -264,11 +265,31 @@ export async function getDocs(target) {
 
 export async function setDoc(ref, data, _options) {
     const row = toRow(ref.table, ref.id, data);
-    await rest(`/${ref.table}?on_conflict=${ref.pk}`, {
-        method: 'POST',
-        headers: { Prefer: 'resolution=merge-duplicates' },
+    const idParam = `${ref.pk}=eq.${encodeURIComponent(ref.id)}`;
+    // PATCH first: PostgREST upsert (POST + merge-duplicates) cannot write a
+    // partial row — it takes the INSERT path and dies on NOT NULL columns the
+    // payload omits (trades.room_code). PATCH updates in place; only a true
+    // miss (empty representation) falls through to POST.
+    const patched = await rest(`/${ref.table}?${idParam}`, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
         body: row
     });
+    if (Array.isArray(patched) && patched.length > 0) return;
+    try {
+        await rest(`/${ref.table}?on_conflict=${ref.pk}`, {
+            method: 'POST',
+            headers: { Prefer: 'resolution=merge-duplicates' },
+            body: row
+        });
+    } catch (e) {
+        if (e && e.status === 409) {
+            // Lost a create race: the row exists now, converge with one PATCH.
+            await rest(`/${ref.table}?${idParam}`, { method: 'PATCH', body: row });
+            return;
+        }
+        throw e;
+    }
 }
 
 export async function deleteDoc(ref) {

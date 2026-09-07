@@ -1,9 +1,9 @@
 // Backend imports — local PostgREST adapter (same call surface as the
 // Firebase SDK it replaces). See backend/AI_BACKEND.md. Point the game at
 // another backend via localStorage 'fgBackendUrl' or window.FG_BACKEND_URL.
-import { initializeApp } from './backend.js?v=20260907e';
-import { getFirestore, collection, query, where, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from './backend.js?v=20260907e';
-import { getAuth, signInAnonymously, onAuthStateChanged } from './backend.js?v=20260907e';
+import { initializeApp } from './backend.js?v=20260907i';
+import { getFirestore, collection, query, where, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from './backend.js?v=20260907i';
+import { getAuth, signInAnonymously, onAuthStateChanged } from './backend.js?v=20260907i';
 import {
     asTimestamp,
     buildElapsedHistory,
@@ -1860,8 +1860,10 @@ function startTradeListener() {
     if (tradeListenerUnsub) { try{tradeListenerUnsub();}catch{} tradeListenerUnsub=null; }
     // Roomless players trade through the shared lobby room, so this always
     // listens — scoped to the current room, or the lobby when outside one.
+    // The room filter is load-bearing: without it every room's offers land in
+    // this inbox (and Accept would act on foreign trades).
     const tRoom = tradeRoomCode();
-    const q = query(collection(db, 'rooms', tRoom, 'trades'));
+    const q = query(collection(db, 'rooms', tRoom, 'trades'), where('roomCode', '==', tRoom));
     tradeListenerUnsub = onSnapshot(q, (snap)=>{
         const trades = [];
         snap.forEach(d=> trades.push({ id:d.id, ...d.data()}));
