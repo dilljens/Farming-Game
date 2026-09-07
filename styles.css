@@ -261,26 +261,15 @@ input, .editable {
     white-space: normal;
 }
 
-/* Quick-transaction buttons: wrap to fit, never overflow */
-#quickTransactionButtons {
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
-    padding: 0 8px;
-    box-sizing: border-box;
-}
-#quickTransactionButtons .grid {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 6px;
-    width: 100%;
-}
-#quickTransactionButtons button {
-    flex: 1 1 70px;
-    min-width: 0;
-    max-width: 110px;
-    width: auto !important;
+/* Quick-transaction buttons: 6 cols on desktop, reflow to 3 cols on small screens */
+@media screen and (max-width: 600px) {
+    #quickTransactionButtons .grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        width: 100%;
+    }
+    #quickTransactionButtons button {
+        width: auto !important;
+    }
 }
 
 @media screen and (max-width: 600px) {
