@@ -1680,6 +1680,12 @@ let seenTradeIds = new Set();
 // restarts the count, which is fine — the persisted applied-IDs stay primary).
 const tradeApplyFails = {};
 const MAX_BUYER_APPLY_FAILS = 5;
+// Retry-chain timer: onSnapshot only re-renders on DATA change, so a counter
+// incremented inside the render would stall at 1 and warnings/staleness would
+// never resolve. While buyer applies keep failing, re-poll fresh (never act
+// on a stale snapshot). Cleared on every (re)subscribe, so room switches and
+// leaves can never leak or double-subscribe.
+let tradeRetryTimer = null;
 // Trades already applied locally survive reloads (otherwise a refresh would
 // re-apply every historical accepted trade and duplicate qty/cash).
 try {
@@ -1755,6 +1761,7 @@ function renderTradeInbox(trades) {
     const acceptedForMe = trades.filter(t => t.status === 'accepted' && (t.buyerUid === myUid || t.sellerUid === myUid) && !seenTradeIds.has('applied-'+t.id) && isRecentTrade(t));
     // apply accepted trades that I haven't applied locally yet (buyer side applies on accept, seller already applied on accept)
     // This handles buyer applying after seller accepts
+    let failedApplies = 0;
     acceptedForMe.forEach(t => {
         if (t.buyerUid === myUid && !seenTradeIds.has('applied-'+t.id)) {
             // Offers from before my current game are never auto-applied.
@@ -1762,7 +1769,7 @@ function renderTradeInbox(trades) {
             // buyer applies now if not already
             const ok = applyLocalTrade(t, 'buyer');
             if (ok) { markTradeApplied(t.id); delete tradeApplyFails[t.id]; }
-            else tradeApplyFails[t.id] = (tradeApplyFails[t.id] || 0) + 1;
+            else { tradeApplyFails[t.id] = (tradeApplyFails[t.id] || 0) + 1; failedApplies++; }
         } else if (t.sellerUid === myUid) {
             // seller applied at accept time; just record so reloads never replay it
             markTradeApplied(t.id);
@@ -1802,11 +1809,21 @@ function renderTradeInbox(trades) {
         .forEach(t => {
             html += `<div class="text-xs text-red-700 mt-1">⚠ Can't afford ${t.qty} ${t.asset} from ${t.sellerName} ($${Number(t.price).toLocaleString()}) — still accepted, applies when you have cash.</div>`;
         });
-    if (!html) { box.classList.add('hidden'); box.innerHTML=''; return; }
-    box.innerHTML = html;
-    box.classList.remove('hidden');
+    if (!html) { box.classList.add('hidden'); box.innerHTML=''; }
+    else {
+        box.innerHTML = html;
+        box.classList.remove('hidden');
+    }
     box.querySelectorAll('[data-accept]').forEach(b=> b.addEventListener('click', ()=> acceptTrade(b.dataset.accept)));
     box.querySelectorAll('[data-reject]').forEach(b=> b.addEventListener('click', ()=> rejectTrade(b.dataset.reject)));
+    // Keep polling fresh while buyer applies fail: the snapshot layer only
+    // re-renders on data change, so without this the fail counter (and the
+    // warning below, and the 15s confirmation lines) would freeze after one
+    // attempt. Fresh resubscribe each tick — never renders stale data.
+    // Scheduled even for an empty inbox so the count can't stall there either.
+    if (failedApplies > 0 && !tradeRetryTimer) {
+        tradeRetryTimer = setTimeout(() => { tradeRetryTimer = null; startTradeListener(); }, 2600);
+    }
 }
 
 async function acceptTrade(tradeId) {
@@ -1858,6 +1875,7 @@ async function rejectTrade(tradeId) {
 }
 function startTradeListener() {
     if (tradeListenerUnsub) { try{tradeListenerUnsub();}catch{} tradeListenerUnsub=null; }
+    if (tradeRetryTimer) { clearTimeout(tradeRetryTimer); tradeRetryTimer = null; }
     // Roomless players trade through the shared lobby room, so this always
     // listens — scoped to the current room, or the lobby when outside one.
     // The room filter is load-bearing: without it every room's offers land in
