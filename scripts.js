@@ -1,8 +1,9 @@
-// Firebase imports (CDN ESM modules)
-// Note: Browsers can't resolve bare imports like "firebase/app" without a bundler.
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getFirestore, collection, query, where, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+// Backend imports — local PostgREST adapter (same call surface as the
+// Firebase SDK it replaces). See backend/AI_BACKEND.md. Point the game at
+// another backend via window.FG_BACKEND_URL or localStorage 'fgBackendUrl'.
+import { initializeApp } from './backend.mjs?v=20260907';
+import { getFirestore, collection, query, where, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from './backend.mjs?v=20260907';
+import { getAuth, signInAnonymously, onAuthStateChanged } from './backend.mjs?v=20260907';
 import {
     asTimestamp,
     buildElapsedHistory,
@@ -18,23 +19,17 @@ import {
     normalizeHistoryPoints
 } from './game-time.mjs?v=20260907';
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyAtqaz8FSpuOvvw5fTNisHXlJQ0cdVebfk",
-  authDomain: "farming-game-dc69d.firebaseapp.com",
-  projectId: "farming-game-dc69d",
-  storageBucket: "farming-game-dc69d.firebasestorage.app",
-  messagingSenderId: "66379455382",
-  appId: "1:66379455382:web:8aacd4af449190a32f1bb7",
-  measurementId: "G-KKMBMM437Z"
-};
+// Backend selection lives in backend.mjs (window.FG_BACKEND_URL >
+// localStorage 'fgBackendUrl' > http://localhost:3001). Firebase config
+// retired with the Firestore cutover.
+const backendConfig = {};
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize backend client
+const app = initializeApp(backendConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// Wait for auth before doing any Firestore reads.
+// Wait for auth before doing any backend reads.
 let resolveAuthReady;
 const authReady = new Promise((resolve) => {
     resolveAuthReady = resolve;
@@ -43,13 +38,13 @@ onAuthStateChanged(auth, (user) => {
     if (user) resolveAuthReady(user);
 });
 
-// Authenticate anonymously
+// Local identity (UUID in localStorage) — no login, nothing to configure.
 signInAnonymously(auth)
   .then(() => {
-    console.log('Signed in anonymously');
+    console.log('Signed in with local identity', auth.currentUser?.uid);
   })
   .catch((error) => {
-    console.error('Anonymous sign-in failed:', error);
+    console.error('Sign-in failed:', error);
   });
 
 // --- Room lobby — mirrors imposterirl/src/lib/games.ts + src/app/lobby/[room_code]/page.tsx + RoomCodeDisplay.tsx ---
@@ -67,6 +62,14 @@ let roomDocUnsub = null;
 let roomQrVisible = false;
 let currentRoomHostUid = null;
 let isHost = false;
+
+// Roomless trading rides on a shared system room ("global tavern").
+// Lowercase on purpose: generated codes are A-Z only, so it can never
+// collide with a real room, and the join box (which uppercases) can't open it.
+const LOBBY_ROOM_CODE = 'lobby';
+function tradeRoomCode() {
+    return currentRoomCode || LOBBY_ROOM_CODE;
+}
 
 function getRoomJoinUrl(roomCode) {
     // GitHub Pages safe: https://dilljens.github.io/Farming-Game/?room=AB
@@ -116,6 +119,16 @@ async function createRoom() {
         hostName,
     });
     return code;
+}
+
+function roomErrorMessage(e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // Firestore's raw denial names nothing actionable: point at the console fix.
+    if (e && (e.code === 'permission-denied' || /insufficient permissions/i.test(msg))) {
+        return 'Room service blocked: the database rules reject this request. ' +
+            'Publish rules allowing signed-in room reads/writes (Firebase console → Firestore → Rules), wait a minute, then retry.';
+    }
+    return msg;
 }
 
 function persistRoomCode(code) {
@@ -1371,7 +1384,7 @@ document.getElementById('createRoomBtn')?.addEventListener('click', async () => 
         restartRoomListener();
     } catch (e) {
         console.error(e);
-        if (status) status.textContent = e instanceof Error ? e.message : String(e);
+        if (status) status.textContent = roomErrorMessage(e);
     } finally { if (btn) btn.disabled = false; }
 });
 
@@ -1386,7 +1399,7 @@ document.getElementById('joinRoomBtn')?.addEventListener('click', async () => {
         if (status) status.textContent = `Joined room ${raw}`;
     } catch (e) {
         console.error(e);
-        if (status) status.textContent = e instanceof Error ? e.message : String(e);
+        if (status) status.textContent = roomErrorMessage(e);
     }
 });
 
@@ -1482,7 +1495,7 @@ function refreshCustomBuySellers() {
     if (others.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
-        opt.textContent = currentRoomCode ? 'No other players in this room yet' : 'Join a room to see sellers';
+        opt.textContent = currentRoomCode ? 'No other players in this room yet' : 'No other players online yet';
         sel.appendChild(opt);
     } else {
         others.forEach(p => {
@@ -1539,7 +1552,7 @@ function updateCustomBuyPreview() {
     const myCash = getCurrentCashTotal();
     preview.innerHTML = `You: cash $${myCash.toLocaleString()} → $${(myCash - price).toLocaleString()} after pay<br>Seller ${sellerName}: ${asset} ${sellerQty} → ${sellerQty - qty} after sale<br>Price: $${price.toLocaleString()} for ${qty} × ${asset}`;
     let err = '';
-    if (!sellerSel || !sellerSel.value) err = 'Pick a seller in this room.';
+    if (!sellerSel || !sellerSel.value) err = 'Pick a seller.';
     else if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
     else if (!Number.isFinite(price) || price < 0) err = 'Price must be ≥0.';
     else if (sellerQty < qty) err = `Seller only has ${sellerQty} ${asset}.`;
@@ -1661,8 +1674,8 @@ function renderTradeInbox(trades) {
 }
 
 async function acceptTrade(tradeId) {
-    if (!currentRoomCode || !tradeId) return;
-    const ref = doc(db, 'rooms', currentRoomCode, 'trades', tradeId);
+    if (!tradeId) return;
+    const ref = doc(db, 'rooms', tradeRoomCode(), 'trades', tradeId);
     const snap = await getDoc(ref);
     if (!snap.exists()) return;
     const t = { id: snap.id, ...snap.data() };
@@ -1682,8 +1695,8 @@ async function acceptTrade(tradeId) {
     try { navigator.vibrate && navigator.vibrate([10,30,10]); } catch {}
 }
 async function rejectTrade(tradeId) {
-    if (!currentRoomCode || !tradeId) return;
-    const ref = doc(db, 'rooms', currentRoomCode, 'trades', tradeId);
+    if (!tradeId) return;
+    const ref = doc(db, 'rooms', tradeRoomCode(), 'trades', tradeId);
     const snap = await getDoc(ref);
     if (!snap.exists()) return;
     const t = snap.data();
@@ -1695,8 +1708,10 @@ async function rejectTrade(tradeId) {
 }
 function startTradeListener() {
     if (tradeListenerUnsub) { try{tradeListenerUnsub();}catch{} tradeListenerUnsub=null; }
-    if (!currentRoomCode) { const b=document.getElementById('tradeInbox'); if(b){b.classList.add('hidden'); b.innerHTML='';} return; }
-    const q = query(collection(db, 'rooms', currentRoomCode, 'trades'));
+    // Roomless players trade through the shared lobby room, so this always
+    // listens — scoped to the current room, or the lobby when outside one.
+    const tRoom = tradeRoomCode();
+    const q = query(collection(db, 'rooms', tRoom, 'trades'));
     tradeListenerUnsub = onSnapshot(q, (snap)=>{
         const trades = [];
         snap.forEach(d=> trades.push({ id:d.id, ...d.data()}));
@@ -1715,22 +1730,33 @@ async function performCustomBuy() {
     const opt = sellerSel?.selectedOptions?.[0];
     const sellerUid = opt?.dataset?.uid || '';
     const sellerName = opt?.dataset?.username || '';
-    if (!currentRoomCode) { if (hint){hint.textContent='Join a room first.'; hint.classList.remove('hidden');} return; }
-    // re-validate
+    // re-validate (preview state may be stale)
     updateCustomBuyPreview();
     if (document.getElementById('confirmCustomBuy')?.disabled) return;
     if (!sellerUid) { if (hint){hint.textContent='Seller not found (no UID).'; hint.classList.remove('hidden');} return; }
     if (sellerUid === auth.currentUser?.uid) { if (hint){hint.textContent='Cannot buy from yourself.'; hint.classList.remove('hidden');} return; }
     if (price !== 0 && wouldGoNegativeCash(-price)) { if (hint){hint.textContent='Not enough cash.'; hint.classList.remove('hidden');} return; }
+    // Roomless trades go through the shared lobby room (created on demand).
+    const tRoom = tradeRoomCode();
+    if (!currentRoomCode) {
+        try {
+            await setDoc(doc(db, 'rooms', LOBBY_ROOM_CODE), {
+                room_code: LOBBY_ROOM_CODE,
+                createdAt: new Date().toISOString(),
+                last_activity_at: new Date().toISOString(),
+                status: 'Lobby',
+            }, { merge: true });
+        } catch {}
+    }
     // create pending trade — seller must accept before property/money moves (accurate for both)
     const qtyKey = getAssetQtyKey(asset);
     try {
         const tradeId = `${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
-        await setDoc(doc(db, 'rooms', currentRoomCode, 'trades', tradeId), {
+        await setDoc(doc(db, 'rooms', tRoom, 'trades', tradeId), {
             buyerUid: auth.currentUser.uid,
             buyerName: document.getElementById('editableUsername')?.innerText.trim() || 'buyer',
             sellerUid, sellerName, asset: qtyKey, qty, price,
-            roomCode: currentRoomCode,
+            roomCode: tRoom,
             status: 'pending',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -1740,7 +1766,7 @@ async function performCustomBuy() {
         if (status) status.textContent = `Offer sent to ${sellerName}: ${qty} ${asset} for $${price.toLocaleString()} — waiting for accept`;
     } catch (e) {
         console.error('trade create failed', e);
-        if (hint){hint.textContent = 'Offer failed: ' + (e instanceof Error ? e.message : String(e)); hint.classList.remove('hidden');}
+        if (hint){hint.textContent = 'Offer failed: ' + roomErrorMessage(e); hint.classList.remove('hidden');}
         return;
     }
 }
