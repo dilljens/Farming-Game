@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "node --test game-time.test.mjs"
+    "test": "node --test game-time.test.js"
   },
   "dependencies": {
     "firebase": "^12.7.0",

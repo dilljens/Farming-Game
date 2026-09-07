@@ -1,9 +1,9 @@
 // Backend imports — local PostgREST adapter (same call surface as the
 // Firebase SDK it replaces). See backend/AI_BACKEND.md. Point the game at
 // another backend via localStorage 'fgBackendUrl' or window.FG_BACKEND_URL.
-import { initializeApp } from './backend.mjs?v=20260907b';
-import { getFirestore, collection, query, where, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from './backend.mjs?v=20260907b';
-import { getAuth, signInAnonymously, onAuthStateChanged } from './backend.mjs?v=20260907b';
+import { initializeApp } from './backend.js?v=20260907e';
+import { getFirestore, collection, query, where, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from './backend.js?v=20260907e';
+import { getAuth, signInAnonymously, onAuthStateChanged } from './backend.js?v=20260907e';
 import {
     asTimestamp,
     buildElapsedHistory,
@@ -17,9 +17,9 @@ import {
     MIN_TIME_WINDOW_MS,
     normalizeGame,
     normalizeHistoryPoints
-} from './game-time.mjs?v=20260907';
+} from './game-time.js?v=20260907e';
 
-// Backend selection lives in backend.mjs (localStorage 'fgBackendUrl' >
+// Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
 // retired with the Firestore cutover.
 const backendConfig = {};
@@ -1043,7 +1043,7 @@ function sendDataToServerAfterSeed(totalWorth, username, generation) {
 
 // --- Net worth history (feeds the leaderboard progress chart) ---
 // Stored inside each player's leaderboard doc as history: [{t, v}, ...]
-// MAX_HISTORY_POINTS is imported from game-time.mjs (shared with the cap helper).
+// MAX_HISTORY_POINTS is imported from game-time.js (shared with the cap helper).
 const HISTORY_MIN_INTERVAL_MS = 0; // track every distinct networth change accurately (no time throttle)
 let myHistoryCache = null;      // seeded from Firestore once auth is ready
 let historySeedPromise = null;  // in-flight/complete seeding (retryable)

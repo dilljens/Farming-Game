@@ -12,7 +12,7 @@ import {
     clampGameDuration,
     getTimeWindow,
     mergeHistoriesByPlayer
-} from './game-time.mjs';
+} from './game-time.js';
 
 test('compresses long unchanged breaks to the five-minute buffer', () => {
     const points = buildElapsedHistory([

@@ -72,11 +72,11 @@ cat backup.sql | ./backend-psql.sh
 
 ## 4. How the game uses it
 
-- `backend.mjs` (repo root) exposes the same names the Firebase SDK had
+- `backend.js` (repo root) exposes the same names the Firebase SDK had
   (`collection/doc/query/where/orderBy/limit/getDoc/getDocs/setDoc/deleteDoc/
   onSnapshot`, plus `getAuth/signInAnonymously/onAuthStateChanged`), backed by
   the REST above. `scripts.js` imports it — no other game code changed.
-- camelCase in JS ↔ snake_case in SQL is mapped inside `backend.mjs`
+- camelCase in JS ↔ snake_case in SQL is mapped inside `backend.js`
   (e.g. `hostUid` ↔ `host_uid`); `Date` values serialize to ISO strings.
 - Identity = local UUID (`localStorage.fgUid`), like imposterirl's player id.
   **Cutover note:** Firebase anon UIDs won't carry over — every device gets a
@@ -131,7 +131,7 @@ rsync -avz backend/ ubuntu@40.160.241.74:/opt/farming-backend/
 # Explicit file list — never rsync the repo root blindly (would ship .git,
 # backend/, node_modules). First time only, the dir needs creating:
 #   ssh ubuntu@40.160.241.74 "sudo mkdir -p /opt/farming-game && sudo chown -R ubuntu:ubuntu /opt/farming-game"
-rsync -avz index.html scripts.js styles.css backend.mjs game-time.mjs \
+rsync -avz index.html scripts.js styles.css backend.js game-time.js \
   manifest.json icon-192.svg icon-512.svg ubuntu@40.160.241.74:/opt/farming-game/
 
 # 2. On the VPS: real password + start. NEVER commit `.env`.
