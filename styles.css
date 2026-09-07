@@ -286,7 +286,7 @@ input, .editable {
 @media screen and (max-width: 600px) {
     html { -webkit-text-size-adjust: 100%; }
     body {
-        font-size: clamp(11px, 2.8vw, 14px);
+        font-size: 2vw; /* pre-rooms sizing */
         overscroll-behavior-y: contain;
     }
     table {
@@ -294,62 +294,25 @@ input, .editable {
         max-width: 100%;
     }
     th, td {
-        padding: 4px 3px;
-        font-size: 12px;
-    }
-    /* Leaderboard 8 cols must fit 320px screens: tiny type, ellipsis names */
-    #leaderboard th, #leaderboard td {
-        padding: 3px 2px;
-        font-size: 11px;
+        padding: 2px; /* pre-rooms sizing */
     }
     .roll-table th, .roll-table td {
         border: 1px solid #777777;
         text-align: center;
-        padding: 6px 4px;
+        padding: 2px;
     }
-    
+
     .roll-table th {
         background-color: #f2f2f2;
     }
 
     .input-cell input, .small-input input {
-        padding: 8px 6px;
-        font-size: 16px;
+        padding: 1px; /* pre-rooms sizing */
     }
-    
+
     .roll-table, .financial-table {
         margin-top: 10px;
         margin-bottom: 5px;
-    }
-
-    /* Qty +/- buttons stay compact so the spreadsheet fits */
-    .qty-btn {
-        min-width: 28px;
-        min-height: 32px;
-        padding: 4px 6px;
-        font-size: 14px;
-        line-height: 1;
-    }
-    .qty-cell {
-        gap: 2px;
-        flex-wrap: nowrap;
-    }
-    .qty-cell span {
-        min-width: 0;
-        padding: 0 2px;
-    }
-    .buy-btn {
-        min-height: 44px;
-        padding: 8px 10px;
-        font-size: 13px;
-    }
-    .pay-acre-button, .roll-cell-button {
-        min-height: 44px;
-        padding: 8px 4px;
-    }
-    .lb-toggle-btn {
-        min-height: 36px;
-        padding: 6px 12px;
     }
 
     /* Modals: fit small screens + safe-area + scroll */
@@ -375,8 +338,7 @@ input, .editable {
         table-layout: fixed;
     }
     .pay-per-acre-table th, .pay-per-acre-table td {
-        padding: 4px 2px;
-        font-size: 11px;
+        padding: 4px; /* pre-rooms sizing */
         white-space: normal;
         word-break: break-word;
     }
