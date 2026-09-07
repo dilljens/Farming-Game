@@ -85,7 +85,7 @@ cat backup.sql | ./backend-psql.sh
 - Point the game elsewhere without rebuilding: `window.FG_BACKEND_URL` wins,
   then `localStorage.fgBackendUrl`, then `http://localhost:3002`.
 
-## 5. VPS placement (`40.160.241.74` — see `MEGA/FerrumEng/VPS.md`)
+## 5. VPS placement (`40.160.241.74` — full inventory: `~/MEGA/FerrumEng/VPS.md`)
 
 Fit, checked against the server's port map — **do not change these ports**:
 - REST `:3002` (127.0.0.1): `:3000` is imposter PostgREST, `:3001` is the
@@ -95,16 +95,88 @@ Fit, checked against the server's port map — **do not change these ports**:
   as umami's own postgres.
 - Disk is at 71% — this stack adds ~500 MB (PG image + volume).
 
-Deploy (mirrors the imposter `/opt/` layout):
-1. `rsync backend/ ubuntu@40.160.241.74:/opt/farming-backend/` (next to
-   `imposter-backend/`, `imposter-frontend/`).
-2. On the VPS: `cd /opt/farming-backend`, copy `.env.example` to `.env`
-   with a real `FG_DB_PASSWORD`, then `./backend-up.sh`.
-3. TLS: add a Caddy site in `/etc/caddy/sites/` proxying to
-   `127.0.0.1:3002` (same shape as the umami/livrotalk entries),
-   `systemctl reload caddy`.
-4. Point the game at it: `localStorage.fgBackendUrl='https://<site>'`
-   (or bake `window.FG_BACKEND_URL` into hosting).
+### 5.0 Access — how to get into the VPS
+
+```bash
+# Primary: SSH key (your ~/.ssh/id_ed25519). User is ALWAYS `ubuntu`, never `root`.
+ssh ubuntu@40.160.241.74
+
+# Fallback inside the tailnet (same machine, Tailscale IP):
+ssh ubuntu@100.73.157.121
+
+# If the key isn't loaded yet:
+ssh-add ~/.ssh/id_ed25519
+ssh ubuntu@40.160.241.74
+```
+
+- Fallback password exists (`raspi9000`, see DagLock `docs/vps.md`) — key first.
+- `/opt/` is root-owned. First time only, make our dir writable by `ubuntu`
+  so plain `rsync`/`./backend-up.sh` work without sudo every time:
+
+```bash
+ssh ubuntu@40.160.241.74 "sudo mkdir -p /opt/farming-backend && sudo chown -R ubuntu:ubuntu /opt/farming-backend"
+```
+
+### 5.1 Deploy (mirrors the imposter `/opt/` layout)
+
+From the repo root on your laptop:
+
+```bash
+# 1. Ship the code next to imposter-backend/ and imposter-frontend/
+rsync -avz backend/ ubuntu@40.160.241.74:/opt/farming-backend/
+
+# 2. On the VPS: real password + start. NEVER commit `.env`.
+ssh ubuntu@40.160.241.74
+cd /opt/farming-backend
+cp .env.example .env
+openssl rand -hex 32   # paste the output as the value below
+nano .env              # FG_DB_PASSWORD=<the 64-hex string>
+./backend-up.sh        # compose up, apply schema+permissions, health-check
+curl -s http://localhost:3002/leaderboard?limit=1 | head -c 200  # expect 200 + JSON
+```
+
+Repeat deploys are the same two lines: `rsync` from the laptop, then
+`./backend-up.sh` on the VPS (idempotent — safe to re-run).
+
+### 5.2 TLS — Caddy site (Docker `ferrum-caddy`, auto-TLS)
+
+TLS comes from the shared `ferrum-caddy` container, **not** host nginx and
+**not** certbot. Site snippets live in the sololedger deploy repo and are
+mounted read-only into the container (`./sites:/etc/caddy/sites:ro`), so:
+
+1. Create the snippet **on the VPS** at `/opt/sololedger/deploy/sites/farming.conf`
+   (appears as `/etc/caddy/sites/farming.conf` inside the container):
+
+```caddy
+# /opt/sololedger/deploy/sites/farming.conf
+farm.ferrumeng.com {
+    handle {
+        reverse_proxy 127.0.0.1:3002
+    }
+}
+```
+
+2. DNS first: Cloudflare → `farm.ferrumeng.com` → `A 40.160.241.74`
+   (DNS-only / grey cloud, same as the other game subdomains).
+3. Apply (Caddy watches the file on restart, then issues TLS automatically):
+
+```bash
+ssh ubuntu@40.160.241.74
+sudo tee /opt/sololedger/deploy/sites/farming.conf < farming.conf
+docker compose -f /opt/sololedger/deploy/docker-compose.yml restart caddy
+sleep 5; curl -s -o /dev/null -w "%{http_code}\n" https://farm.ferrumeng.com/leaderboard?limit=1
+```
+
+> Old note this replaces: do NOT write to host `/etc/caddy/sites/` and do NOT
+> `systemctl reload caddy` — there is no host Caddy service, only the
+> `ferrum-caddy` container.
+
+### 5.3 Point the game at it
+
+```js
+localStorage.fgBackendUrl = 'https://farm.ferrumeng.com'  // devtools console, per device
+// or bake it in hosting: window.FG_BACKEND_URL = 'https://farm.ferrumeng.com'
+```
 
 ## 6. Troubleshooting
 
