@@ -14,7 +14,7 @@ cd backend
 ./backend-down.sh      # stop (data kept in the pgdata volume)
 ```
 
-- REST: `http://localhost:3001` (ports offset so imposterirl's stack can run too)
+- REST: `http://localhost:3002` (ports offset so imposterirl's stack can run too)
 - Postgres: `localhost:55433`, user `fg`, db `farming`, password `$FG_DB_PASSWORD`
   (default `farming-dev-pw`, highest precedence: env var)
 
@@ -29,10 +29,10 @@ cd backend
 - Roles: everything `GRANT ALL TO anon`, RLS open (`USING (true)`), same as
   imposterirl's `20_anon_permissions.sql`. No keys, no login, no console.
 
-## 3. Curl cookbook (replace `$R` with the REST base, default `http://localhost:3001`)
+## 3. Curl cookbook (replace `$R` with the REST base, default `http://localhost:3002`)
 
 ```bash
-R=http://localhost:3001
+R=http://localhost:3002
 
 # rooms
 curl -s $R/rooms | head -c 500                                          # list
@@ -83,21 +83,32 @@ cat backup.sql | ./backend-psql.sh
   fresh id, so the leaderboard restarts clean on switchover. Fine for rooms
   (ephemeral); say so before cutting over mid-season.
 - Point the game elsewhere without rebuilding: `window.FG_BACKEND_URL` wins,
-  then `localStorage.fgBackendUrl`, then `http://localhost:3001`.
+  then `localStorage.fgBackendUrl`, then `http://localhost:3002`.
 
-## 5. VPS deploy sketch (same pattern as imposterirl's `.deploy/`)
+## 5. VPS placement (`40.160.241.74` — see `MEGA/FerrumEng/VPS.md`)
 
-1. Copy `backend/` to the VPS, set `FG_DB_PASSWORD` to something real.
-2. `./backend-up.sh`, open/forward the REST port (or put nginx in front:
-   `location /fg/ { proxy_pass http://127.0.0.1:3001/; }`).
-3. Set the game to it: `localStorage.fgBackendUrl='https://vps/fg'` (or bake
-   `window.FG_BACKEND_URL` into hosting). PostgREST answers CORS `*` by default.
-4. Back up: cron `pg_dump` (see §3). Harden later: RLS policies +
-   `PGRST_JWT_SECRET` when open-write is no longer wanted.
+Fit, checked against the server's port map — **do not change these ports**:
+- REST `:3002` (127.0.0.1): `:3000` is imposter PostgREST, `:3001` is the
+  imposter frontend. `:3002` is free.
+- PG `:55433` (127.0.0.1): imposter PG owns `:5432`, umami PG `:5433`.
+  Separate container (not the imposter database) — same isolation pattern
+  as umami's own postgres.
+- Disk is at 71% — this stack adds ~500 MB (PG image + volume).
+
+Deploy (mirrors the imposter `/opt/` layout):
+1. `rsync backend/ ubuntu@40.160.241.74:/opt/farming-backend/` (next to
+   `imposter-backend/`, `imposter-frontend/`).
+2. On the VPS: `cd /opt/farming-backend`, copy `.env.example` to `.env`
+   with a real `FG_DB_PASSWORD`, then `./backend-up.sh`.
+3. TLS: add a Caddy site in `/etc/caddy/sites/` proxying to
+   `127.0.0.1:3002` (same shape as the umami/livrotalk entries),
+   `systemctl reload caddy`.
+4. Point the game at it: `localStorage.fgBackendUrl='https://<site>'`
+   (or bake `window.FG_BACKEND_URL` into hosting).
 
 ## 6. Troubleshooting
 
-- `connection refused :3001` → `./backend-up.sh` (also starts the daemon's containers).
+- `connection refused :3002` → `./backend-up.sh` (also starts the daemon's containers).
 - Empty boards, game works otherwise → some client pointed at the wrong `$R`
   (check `localStorage.fgBackendUrl` / `window.FG_BACKEND_URL`).
 - `column "X" does not exist` on write → adapter `COLUMN_MAP` vs `schema.sql`

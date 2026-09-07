@@ -19,7 +19,7 @@ function resolveBackendUrl() {
             if (stored) return stored;
         }
     } catch {}
-    return 'http://localhost:3001';
+    return 'http://localhost:3002';
 }
 
 const BACKEND_URL = resolveBackendUrl();
