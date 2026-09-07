@@ -146,6 +146,9 @@ function updateRoomUi() {
     }
     if (hostBadge) hostBadge.classList.toggle('hidden', !isHost || !currentRoomCode);
     if (hostControls) hostControls.classList.toggle('hidden', !isHost || !currentRoomCode);
+    // Guests in a room get a visible way to become the host (take over / make the game theirs)
+    const guestControls = document.getElementById('guestControls');
+    if (guestControls) guestControls.classList.toggle('hidden', isHost || !currentRoomCode);
     if (qrCodeText) qrCodeText.textContent = currentRoomCode || '';
     if (joinUrlEl) joinUrlEl.textContent = currentRoomCode ? getRoomJoinUrl(currentRoomCode) : '';
     // QR wrap visibility is controlled by toggle, but hide when leaving
@@ -234,6 +237,27 @@ async function leaveRoom() {
     if (wrap) { wrap.classList.add('hidden'); wrap.classList.remove('flex'); }
     roomQrVisible = false;
     restartRoomListener();
+}
+
+// Any player in a room can become the host: claims hostUid on the room doc.
+// If someone else is host, this takes over (with their client updating via listener).
+async function claimHost() {
+    const status = document.getElementById('roomStatus');
+    if (!currentRoomCode) { if (status) status.textContent = 'Join or create a room first.'; return; }
+    try { await authReady; } catch {}
+    const myUid = auth.currentUser?.uid;
+    if (!myUid) { if (status) status.textContent = 'Still signing in — try again in a second.'; return; }
+    if (isHost) { if (status) status.textContent = `You are already host of ${currentRoomCode}`; return; }
+    const hostName = document.getElementById('editableUsername')?.innerText.trim() || 'Host';
+    await setDoc(doc(db, 'rooms', currentRoomCode), {
+        hostUid: myUid,
+        hostName,
+        last_activity_at: new Date().toISOString(),
+    }, { merge: true });
+    currentRoomHostUid = myUid;
+    isHost = true;
+    updateRoomUi();
+    if (status) status.textContent = `You are now HOST of room ${currentRoomCode} — leaderboard is room-scoped`;
 }
 
 function startRoomDocListener() {
@@ -922,6 +946,8 @@ function sendDataToServerAfterSeed(totalWorth, username, generation) {
     const farmCowsQty = parseInt(document.querySelector('.qty-farm')?.textContent || '0', 10) || 0;
     const ranchCowsQty = parseInt(document.querySelector('.qty-cows')?.textContent || '0', 10) || 0;
     const cowsQty = farmCowsQty + ranchCowsQty;
+    const harvesterQty = parseInt(document.querySelector('.qty-harvester')?.textContent || '0', 10) || 0;
+    const tractorQty = parseInt(document.querySelector('.qty-tractor')?.textContent || '0', 10) || 0;
 
     const loanTotalCell = document.querySelector('.loan-total');
     const debt = loanTotalCell ? (parseFloat(loanTotalCell.textContent.replace(/,/g, '')) || 0) : 0;
@@ -939,6 +965,9 @@ function sendDataToServerAfterSeed(totalWorth, username, generation) {
         grain: grainQty,
         fruit: fruitQty,
         cows: cowsQty,
+        farm: farmCowsQty,
+        harvester: harvesterQty,
+        tractor: tractorQty,
         history: Array.isArray(myHistoryCache) ? myHistoryCache : [],
         gameId: data.game.id,
         gameCreatedAt: data.game.createdAt,
@@ -1370,6 +1399,8 @@ document.getElementById('customBuyModal')?.addEventListener('click', (e) => { if
 // host controls — only host sees Reset Room (imposterirl: host controls game start/settings)
 document.getElementById('hostResetRoomBtn')?.addEventListener('click', async () => { await resetRoomForHost(); });
 document.getElementById('hostResetGameBtn')?.addEventListener('click', async () => { await performReset({ keepRoom: true }); });
+// guests can take over hosting so there is always a way to become host + make/run the game
+document.getElementById('becomeHostBtn')?.addEventListener('click', async () => { await claimHost(); });
 
 // --- Digital dice — hidden by default, for tables without physical dice ---
 let diceHistory = [];
@@ -1426,11 +1457,9 @@ function refreshCustomBuySellers() {
             // store uid in dataset for Firestore update, display name + qty preview
             opt.dataset.uid = p._id || '';
             opt.dataset.username = p.username;
-            const qtyKey = (document.getElementById('customBuyAsset')?.value || 'Hay').toLowerCase();
-            let qty = p[qtyKey] ?? p[qtyKey.toLowerCase()] ?? 0;
-            if (qtyKey === 'cows') qty = p.cows ?? 0;
-            if (qtyKey === 'farm') qty = p.farm ?? p.cows ?? 0;
-            opt.textContent = `${p.username} — ${document.getElementById('customBuyAsset')?.value || 'Hay'}: ${qty} (net $${(p.networth||0).toLocaleString()})`;
+            const assetName = document.getElementById('customBuyAsset')?.value || 'Hay';
+            const qty = getSellerQty(p, assetName);
+            opt.textContent = `${p.username} — ${assetName}: ${qty} (net $${(p.networth||0).toLocaleString()})`;
             sel.appendChild(opt);
         });
     }
@@ -1447,8 +1476,18 @@ function getAssetQtyKey(asset) {
 function getSellerQty(sellerData, asset) {
     if (!sellerData) return 0;
     const key = asset.toLowerCase();
-    if (key === 'cows' || key === 'ranch cows') return Number(sellerData.cows || 0);
-    if (key === 'farm' || key === 'farm cows') return Number(sellerData.farm ?? sellerData.cows ?? 0);
+    if (key === 'cows' || key === 'ranch cows') {
+        // Prefer the split ranch field; fall back to combined cows for legacy docs
+        if (sellerData.ranch != null) return Number(sellerData.ranch || 0);
+        if (sellerData.farm != null) return Number(sellerData.cows || 0) - Number(sellerData.farm || 0);
+        return Number(sellerData.cows || 0);
+    }
+    if (key === 'farm' || key === 'farm cows') {
+        if (sellerData.farm != null) return Number(sellerData.farm || 0);
+        return Number(sellerData.cows || 0); // legacy docs only stored combined cows
+    }
+    if (key === 'harvester') return Number(sellerData.harvester || 0);
+    if (key === 'tractor') return Number(sellerData.tractor || 0);
     return Number(sellerData[key] ?? sellerData[key.toLowerCase()] ?? 0);
 }
 function updateCustomBuyPreview() {
@@ -1484,6 +1523,31 @@ function hideCustomBuyModal() {
 }
 let tradeListenerUnsub = null;
 let seenTradeIds = new Set();
+// Trades already applied locally survive reloads (otherwise a refresh would
+// re-apply every historical accepted trade and duplicate qty/cash).
+try {
+    const stored = JSON.parse(localStorage.getItem('farmingGameAppliedTrades') || '[]');
+    if (Array.isArray(stored)) stored.forEach(id => seenTradeIds.add(id));
+} catch {}
+function markTradeApplied(tradeId) {
+    seenTradeIds.add('applied-' + tradeId);
+    try {
+        const arr = [...seenTradeIds].filter(s => s.startsWith('applied-')).slice(-200);
+        localStorage.setItem('farmingGameAppliedTrades', JSON.stringify(arr));
+    } catch {}
+}
+// Only auto-apply recently accepted trades, and never ones settled before the
+// current game started (those belong to a previous board, e.g. fresh device
+// with no applied-ID history). Persisted applied IDs are the primary guard.
+function isRecentTrade(t, maxAgeMs = 24 * 60 * 60 * 1000) {
+    const ts = new Date(t.updatedAt || t.createdAt || 0).getTime();
+    if (!Number.isFinite(ts) || (Date.now() - ts) >= maxAgeMs) return false;
+    try {
+        const gameStart = Number(data?.game?.createdAt) || 0;
+        if (gameStart && ts < gameStart - 60 * 1000) return false;
+    } catch {}
+    return true;
+}
 
 function applyLocalTrade(trade, role) {
     const qty = Number(trade.qty || 0);
@@ -1518,14 +1582,17 @@ function renderTradeInbox(trades) {
     // pending where I am seller -> incoming, where I am buyer -> outgoing pending
     const incoming = trades.filter(t => t.status === 'pending' && t.sellerUid === myUid);
     const outgoing = trades.filter(t => t.status === 'pending' && t.buyerUid === myUid);
-    const acceptedForMe = trades.filter(t => t.status === 'accepted' && (t.buyerUid === myUid || t.sellerUid === myUid) && !seenTradeIds.has('applied-'+t.id));
+    const acceptedForMe = trades.filter(t => t.status === 'accepted' && (t.buyerUid === myUid || t.sellerUid === myUid) && !seenTradeIds.has('applied-'+t.id) && isRecentTrade(t));
     // apply accepted trades that I haven't applied locally yet (buyer side applies on accept, seller already applied on accept)
     // This handles buyer applying after seller accepts
     acceptedForMe.forEach(t => {
         if (t.buyerUid === myUid && !seenTradeIds.has('applied-'+t.id)) {
             // buyer applies now if not already
             const ok = applyLocalTrade(t, 'buyer');
-            if (ok) seenTradeIds.add('applied-'+t.id);
+            if (ok) markTradeApplied(t.id);
+        } else if (t.sellerUid === myUid) {
+            // seller applied at accept time; just record so reloads never replay it
+            markTradeApplied(t.id);
         }
     });
     let html = '';
@@ -1576,12 +1643,20 @@ async function acceptTrade(tradeId) {
     // apply seller side locally (remove qty, add cash) — accurate networth point via updateTotalWorth
     const ok = applyLocalTrade(t, 'seller');
     if (!ok) return;
+    markTradeApplied(t.id);
     await setDoc(ref, { status: 'accepted', updatedAt: new Date().toISOString() }, { merge: true });
     try { navigator.vibrate && navigator.vibrate([10,30,10]); } catch {}
 }
 async function rejectTrade(tradeId) {
     if (!currentRoomCode || !tradeId) return;
     const ref = doc(db, 'rooms', currentRoomCode, 'trades', tradeId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+    const t = snap.data();
+    if (t.status !== 'pending') return;
+    // Only the buyer (cancel) or the seller (decline) can reject — not third parties
+    const myUid = auth.currentUser?.uid;
+    if (t.sellerUid !== myUid && t.buyerUid !== myUid) return;
     await setDoc(ref, { status: 'rejected', updatedAt: new Date().toISOString() }, { merge: true });
 }
 function startTradeListener() {

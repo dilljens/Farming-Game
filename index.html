@@ -229,9 +229,9 @@
     <div class="tables-container">
       <!-- Room lobby — mirrors imposterirl/src/app/lobby/[room_code]/page.tsx + RoomCodeDisplay.tsx -->
       <div id="roomLobby" class="w-full text-center">
-        <div id="roomCodeDisplay" class="text-center mb-6 mt-2 hidden" data-testid="lobby-room-code">
+        <div id="roomCodeDisplay" class="text-center mb-4 mt-2 hidden" data-testid="lobby-room-code">
           <p class="text-gray-400 text-sm uppercase tracking-widest mb-1">Room Code <span id="hostBadge" class="hidden ml-2 px-2 py-0.5 bg-amber-400 text-black text-xs rounded-full align-middle">HOST</span></p>
-          <h1 id="roomCodeBig" class="text-6xl font-extrabold tracking-widest text-gray-900">--</h1>
+          <h1 id="roomCodeBig" class="text-4xl font-extrabold tracking-widest text-gray-900">--</h1>
         </div>
         <div id="roomControls" class="flex flex-wrap items-center justify-center gap-2 mb-2">
           <input id="roomCodeInput" type="text" maxlength="4" placeholder="AB" class="w-24 p-2 rounded bg-white border border-zinc-300 text-2xl tracking-widest text-center uppercase focus:outline-none focus:border-blue-500" data-testid="join-room-input" />
@@ -251,6 +251,9 @@
         <div id="hostControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
           <button id="hostResetRoomBtn" type="button" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-bold">Reset Room (host)</button>
           <button id="hostResetGameBtn" type="button" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs">Reset My Game</button>
+        </div>
+        <div id="guestControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
+          <button id="becomeHostBtn" type="button" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-bold">Become Host</button>
         </div>
       </div>
       <div id="tradeInbox" class="hidden w-full max-w-lg mx-auto my-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-left text-sm"></div>
@@ -499,21 +502,21 @@
   </table></div>
 
 <div id="quickTransactionButtons" class="mt-1 mb-1 flex flex-col items-center gap-2">
-  <div class="grid grid-cols-6 gap-2">
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="500">+500</button>
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="1000">+1000</button>
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="1500">+1500</button>
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="2000">+2000</button>
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="3000">+3000</button>
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="5000">+5000</button>
+  <div class="grid">
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="500">+500</button>
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="1000">+1000</button>
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="1500">+1500</button>
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="2000">+2000</button>
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="3000">+3000</button>
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="5000">+5000</button>
   </div>
-  <div class="grid grid-cols-6 gap-2">
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-500">-500</button>
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-1000">-1000</button>
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-1500">-1500</button>
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-2000">-2000</button>
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-3000">-3000</button>
-    <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-5000">-5000</button>
+  <div class="grid">
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-500">-500</button>
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-1000">-1000</button>
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-1500">-1500</button>
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-2000">-2000</button>
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-3000">-3000</button>
+    <button type="button" class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center" data-quick-transaction-value="-5000">-5000</button>
   </div>
 </div>
 
@@ -654,37 +657,7 @@
   </div>
 </div>
 
-<div id="thumbBar" class="hidden"></div>
-
 <script type="module" src="scripts.js"></script>
-<script>
-// Populate thumb bar on mobile — primary actions within thumb reach
-(function(){
-  const bar = document.getElementById('thumbBar');
-  if (!bar) return;
-  function build(){
-    if (window.innerWidth > 600) { bar.innerHTML=''; bar.classList.add('hidden'); return; }
-    bar.innerHTML = `
-      <button onclick="document.getElementById('toggleDiceBtn')?.click(); try{navigator.vibrate(10)}catch{}; document.getElementById('diceComponent')?.scrollIntoView({behavior:'smooth',block:'center'})" class="flex-1 flex flex-col items-center justify-center py-2.5 bg-zinc-900 text-white rounded-xl text-xs font-bold leading-none shadow-sm min-h-[52px]">
-        <span class="text-base leading-none">🎲</span><span class="mt-0.5">Dice</span>
-      </button>
-      <button onclick="document.getElementById('customBuyBtn')?.click(); try{navigator.vibrate(10)}catch{}" class="flex-1 flex flex-col items-center justify-center py-2.5 bg-purple-600 text-white rounded-xl text-xs font-bold leading-none shadow-sm min-h-[52px]">
-        <span class="text-base leading-none">🤝</span><span class="mt-0.5">Trade</span>
-      </button>
-      <button onclick="document.getElementById('roomQrBtn')?.click(); try{navigator.vibrate(10)}catch{}; if(document.getElementById('roomQrWrap')?.classList.contains('hidden')===false) document.getElementById('roomQrWrap')?.scrollIntoView({behavior:'smooth',block:'center'})" class="flex-1 flex flex-col items-center justify-center py-2.5 bg-[#16a34a] text-white rounded-xl text-xs font-bold leading-none shadow-sm min-h-[52px]">
-        <span class="text-base leading-none">📱</span><span class="mt-0.5">Invite</span>
-      </button>
-      <button onclick="window.scrollTo({top:0,behavior:'smooth'}); try{navigator.vibrate(10)}catch{}" class="px-4 py-2.5 bg-white border border-zinc-200 text-zinc-700 rounded-xl text-xs font-bold shadow-sm min-h-[52px]" aria-label="Back to top">↑</button>
-    `;
-    bar.classList.remove('hidden');
-  }
-  build();
-  window.addEventListener('resize', build);
-})();
-if ('serviceWorker' in navigator) {
-  // optional offline — no SW file yet, will 404 quietly
-}
-</script>
 
 </body>
 </html>

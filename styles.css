@@ -1,7 +1,14 @@
+html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+}
+
 body {
     font-family: Arial, sans-serif;
     background-color: #f0efef;
     font-size: 14;
+    margin: 0;
+    padding: 0;
 }
 
 table {
@@ -15,7 +22,9 @@ th, td {
     border: 1px solid #777777;
     text-align: center;
     padding: 2px;
-    white-space: nowrap; /* Prevents text from wrapping and keeps the cell width to the minimum required */
+    /* Allow wrapping so tables fit the screen instead of forcing sideways scroll */
+    white-space: normal;
+    word-break: break-word;
     /* Avoid constraining table cells so tightly that buttons/inputs become unusable. */
 }
 
@@ -224,47 +233,74 @@ input, .editable {
     touch-action: manipulation;
 }
 
-/* Scrollable table wrappers — prevents 8-col leaderboard from squishing */
+/* Fit-to-screen table wrappers — never force sideways scroll.
+   Tables shrink to fit the viewport; columns wrap instead of overflowing. */
 .table-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
-    scrollbar-width: thin;
+    overflow-x: hidden;
+    max-width: 100%;
 }
 .table-wrap table {
-    min-width: 520px; /* allow horizontal scroll instead of crushing columns */
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+}
+/* Spreadsheet qty cells need auto layout for the +/- buttons */
+#spreadsheet {
+    table-layout: fixed;
 }
 
-/* Bottom thumb bar for primary actions (mobile) */
-#thumbBar {
-    position: fixed;
-    left: 0; right: 0; bottom: 0;
-    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
-    background: rgba(255,255,255,0.96);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-top: 1px solid #e5e7eb;
-    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
-    z-index: 45;
+/* Room lobby always wraps inside the screen */
+#roomLobby, #roomControls, #hostControls {
+    max-width: 100%;
+    flex-wrap: wrap;
 }
-#thumbBar:empty { display: none; }
-@media (min-width: 601px) {
-    #thumbBar { display: none !important; }
-    body { padding-bottom: 0 !important; }
+#roomControls input, #roomControls button,
+#hostControls button {
+    max-width: 100%;
+    white-space: normal;
+}
+
+/* Quick-transaction buttons: wrap to fit, never overflow */
+#quickTransactionButtons {
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0 8px;
+    box-sizing: border-box;
+}
+#quickTransactionButtons .grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+}
+#quickTransactionButtons button {
+    flex: 1 1 70px;
+    min-width: 0;
+    max-width: 110px;
+    width: auto !important;
 }
 
 @media screen and (max-width: 600px) {
     html { -webkit-text-size-adjust: 100%; }
     body {
         font-size: clamp(11px, 2.8vw, 14px);
-        padding-bottom: calc(72px + env(safe-area-inset-bottom));
         overscroll-behavior-y: contain;
     }
     table {
         width: 100%;
+        max-width: 100%;
     }
     th, td {
-        padding: 6px 4px;
+        padding: 4px 3px;
+        font-size: 12px;
+    }
+    /* Leaderboard 8 cols must fit 320px screens: tiny type, ellipsis names */
+    #leaderboard th, #leaderboard td {
+        padding: 3px 2px;
+        font-size: 11px;
     }
     .roll-table th, .roll-table td {
         border: 1px solid #777777;
@@ -286,13 +322,21 @@ input, .editable {
         margin-bottom: 5px;
     }
 
-    /* 44px minimum tap targets — qty/borrow/spend */
+    /* Qty +/- buttons stay compact so the spreadsheet fits */
     .qty-btn {
-        min-width: 44px;
-        min-height: 44px;
-        padding: 6px 8px;
-        font-size: 16px;
+        min-width: 28px;
+        min-height: 32px;
+        padding: 4px 6px;
+        font-size: 14px;
         line-height: 1;
+    }
+    .qty-cell {
+        gap: 2px;
+        flex-wrap: nowrap;
+    }
+    .qty-cell span {
+        min-width: 0;
+        padding: 0 2px;
     }
     .buy-btn {
         min-height: 44px;
@@ -324,31 +368,17 @@ input, .editable {
         padding-left: max(8px, env(safe-area-inset-left));
         padding-right: max(8px, env(safe-area-inset-right));
     }
-    /* Sticky first col for spreadsheet so Assets stays visible while scrolling */
-    #spreadsheet th:first-child, #spreadsheet td:first-child {
-        position: sticky;
-        left: 0;
-        background: #f0efef;
-        z-index: 1;
-        border-right: 2px solid #d1d5db;
-    }
-    #spreadsheet tr.highlight td:first-child {
-        background: #5fd7a9;
-    }
-    /* Quick cash buttons: 6 cols overflow on 320px — reflow to 3 cols */
-    #quickTransactionButtons .grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        width: 100%;
-    }
-    #quickTransactionButtons button {
-        width: auto !important;
-    }
-    /* Pay-per-acre modal table also scrollable on mobile */
+    /* Pay-per-acre modal table fits the screen */
     .pay-per-acre-table {
-        display: block;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        white-space: nowrap;
+        width: 100%;
+        max-width: 100%;
+        table-layout: fixed;
+    }
+    .pay-per-acre-table th, .pay-per-acre-table td {
+        padding: 4px 2px;
+        font-size: 11px;
+        white-space: normal;
+        word-break: break-word;
     }
 }
 
