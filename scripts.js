@@ -798,14 +798,15 @@ function updateActionButtonStates() {
 
     // Buy buttons: disabled unless the player can afford the true minimum
     // down payment (20% of cost, or more when near the $50k debt cap),
-    // counting cash plus unused debt room, including the double-purchase
-    // multiplier.
+    // counting cash plus unused debt room. Gated on a SINGLE unit: the
+    // modal is the gatekeeper for 2x (it downgrades when double is
+    // unaffordable). Gating here on a stale 2x flag greyed buttons out
+    // from under players who could afford one.
     document.querySelectorAll('button.buy-btn[data-asset]').forEach((btn) => {
         const row = btn.closest('tr');
         const costCell = row && row.cells ? row.cells[3] : null;
         const unitCost = costCell ? (parseFloat(String(costCell.textContent).replace(/,/g, '')) || 0) : 0;
-        const totalCost = unitCost * (isDoublePurchase ? 2 : 1);
-        const disabled = totalCost <= 0 || !getBuyBounds(totalCost).feasible;
+        const disabled = unitCost <= 0 || !getBuyBounds(unitCost).feasible;
         setButtonDisabled(btn, disabled);
     });
 }
