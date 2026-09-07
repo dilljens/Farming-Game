@@ -173,10 +173,10 @@ sleep 5; curl -s -o /dev/null -w "%{http_code}\n" https://farm.ferrumeng.com/lea
 
 ### 5.3 Point the game at it
 
-```js
-localStorage.fgBackendUrl = 'https://farm.ferrumeng.com'  // devtools console, per device
-// or bake it in hosting: window.FG_BACKEND_URL = 'https://farm.ferrumeng.com'
-```
+`index.html` bakes `window.FG_BACKEND_URL = 'https://farm.ferrumeng.com'`.
+A per-device `localStorage.fgBackendUrl` wins over the baked default
+(use it for local dev: `localStorage.fgBackendUrl = 'http://localhost:3002'`);
+with neither set the game uses `http://localhost:3002`.
 
 ## 6. Troubleshooting
 

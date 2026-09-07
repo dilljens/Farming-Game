@@ -20,6 +20,9 @@
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <!-- Prod backend default (PostgREST on the VPS, via Caddy TLS).
+         Override per device for local dev: localStorage.fgBackendUrl = 'http://localhost:3002' -->
+    <script>window.FG_BACKEND_URL = 'https://farm.ferrumeng.com';</script>
 
   </head>
   
@@ -647,7 +650,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20260907b"></script>
+<script type="module" src="scripts.js?v=20260907c"></script>
 
 </body>
 </html>

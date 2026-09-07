@@ -1,9 +1,9 @@
 // Backend imports — local PostgREST adapter (same call surface as the
 // Firebase SDK it replaces). See backend/AI_BACKEND.md. Point the game at
-// another backend via window.FG_BACKEND_URL or localStorage 'fgBackendUrl'.
-import { initializeApp } from './backend.mjs?v=20260907';
-import { getFirestore, collection, query, where, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from './backend.mjs?v=20260907';
-import { getAuth, signInAnonymously, onAuthStateChanged } from './backend.mjs?v=20260907';
+// another backend via localStorage 'fgBackendUrl' or window.FG_BACKEND_URL.
+import { initializeApp } from './backend.mjs?v=20260907b';
+import { getFirestore, collection, query, where, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from './backend.mjs?v=20260907b';
+import { getAuth, signInAnonymously, onAuthStateChanged } from './backend.mjs?v=20260907b';
 import {
     asTimestamp,
     buildElapsedHistory,
@@ -19,8 +19,8 @@ import {
     normalizeHistoryPoints
 } from './game-time.mjs?v=20260907';
 
-// Backend selection lives in backend.mjs (window.FG_BACKEND_URL >
-// localStorage 'fgBackendUrl' > http://localhost:3001). Firebase config
+// Backend selection lives in backend.mjs (localStorage 'fgBackendUrl' >
+// window.FG_BACKEND_URL > http://localhost:3002). Firebase config
 // retired with the Firestore cutover.
 const backendConfig = {};
 

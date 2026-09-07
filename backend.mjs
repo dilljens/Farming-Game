@@ -7,17 +7,19 @@
 // short polling (2.5s), the same as imposterirl's realtime fallback.
 //
 // Point the game at a backend with (first wins):
-//   window.FG_BACKEND_URL, localStorage 'fgBackendUrl', default localhost.
+//   localStorage 'fgBackendUrl' (explicit per-device choice, e.g. localhost
+//   for dev), window.FG_BACKEND_URL (baked default in index.html),
+//   default localhost.
 
 function resolveBackendUrl() {
-    try {
-        if (typeof window !== 'undefined' && window.FG_BACKEND_URL) return window.FG_BACKEND_URL;
-    } catch {}
     try {
         if (typeof localStorage !== 'undefined') {
             const stored = localStorage.getItem('fgBackendUrl');
             if (stored) return stored;
         }
+    } catch {}
+    try {
+        if (typeof window !== 'undefined' && window.FG_BACKEND_URL) return window.FG_BACKEND_URL;
     } catch {}
     return 'http://localhost:3002';
 }
