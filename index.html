@@ -240,10 +240,8 @@
           <input id="roomCodeInput" type="text" maxlength="4" placeholder="AB" class="w-24 p-2 rounded bg-white border border-zinc-300 text-2xl tracking-widest text-center uppercase focus:outline-none focus:border-blue-500" data-testid="join-room-input" />
           <button id="joinRoomBtn" type="button" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold" data-testid="join-submit">JOIN ROOM</button>
           <button id="createRoomBtn" type="button" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold">CREATE ROOM</button>
+          <button id="roomQrBtn" type="button" class="hidden px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold" data-testid="lobby-qr-button">📱 JOIN QR</button>
           <button id="leaveRoomBtn" type="button" class="hidden px-3 py-2 bg-zinc-200 hover:bg-zinc-300 rounded-lg text-sm">LEAVE</button>
-        </div>
-        <div class="flex items-center justify-center gap-2 mb-2">
-          <button id="roomQrBtn" type="button" class="hidden text-xs px-3 py-1.5 rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition border border-zinc-700" data-testid="lobby-qr-button">📱 JOIN QR</button>
         </div>
         <div id="roomQrWrap" class="hidden flex-col items-center gap-2 mb-3 p-4 bg-white border border-zinc-300 rounded-lg max-w-sm mx-auto">
           <img id="roomQrImg" alt="QR to join room" class="w-40 h-40 bg-white p-1 rounded" />
