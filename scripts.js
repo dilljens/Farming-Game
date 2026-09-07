@@ -190,10 +190,14 @@ async function updateRoomQr(roomCode) {
     const joinUrlEl = document.getElementById('roomJoinUrl');
     if (joinUrlEl) joinUrlEl.textContent = url;
     try {
-        const QR = globalThis.QRCode;
-        if (QR && QR.toDataURL) {
-            const dataUrl = await QR.toDataURL(url, { width: 256, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
-            img.src = dataUrl;
+        // Self-hosted generator (vendor/qrcode.js). Remote fallback kept in
+        // case the vendored file ever fails to load.
+        const makeQr = globalThis.qrcode;
+        if (typeof makeQr === 'function') {
+            const qr = makeQr(0, 'M');
+            qr.addData(url);
+            qr.make();
+            img.src = qr.createDataURL(6, 4);
         } else {
             img.src = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(url)}`;
         }

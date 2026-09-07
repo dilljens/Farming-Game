@@ -19,7 +19,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <script src="./vendor/qrcode.js"></script><!-- self-hosted QR generator (MIT) — no CDN, works offline -->
     <!-- Prod backend default (PostgREST on the VPS, via Caddy TLS).
          Override per device for local dev: localStorage.fgBackendUrl = 'http://localhost:3002' -->
     <script>window.FG_BACKEND_URL = 'https://farm.ferrumeng.com';</script>
@@ -648,7 +648,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20260907e"></script>
+<script type="module" src="scripts.js?v=20260907f"></script>
 
 </body>
 </html>

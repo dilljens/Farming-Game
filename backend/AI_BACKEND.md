@@ -132,7 +132,7 @@ rsync -avz backend/ ubuntu@40.160.241.74:/opt/farming-backend/
 # backend/, node_modules). First time only, the dir needs creating:
 #   ssh ubuntu@40.160.241.74 "sudo mkdir -p /opt/farming-game && sudo chown -R ubuntu:ubuntu /opt/farming-game"
 rsync -avz index.html scripts.js styles.css backend.js game-time.js \
-  manifest.json icon-192.svg icon-512.svg ubuntu@40.160.241.74:/opt/farming-game/
+  manifest.json icon-192.svg icon-512.svg vendor/ ubuntu@40.160.241.74:/opt/farming-game/
 
 # 2. On the VPS: real password + start. NEVER commit `.env`.
 ssh ubuntu@40.160.241.74
