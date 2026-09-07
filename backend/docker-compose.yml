@@ -1,7 +1,9 @@
 # Farming Game backend — Supabase-style, AI-operable (mirrors imposterirl).
 # Postgres + PostgREST only. No server code, no auth: any agent (or the game)
 # drives everything over plain REST. Snapshots are delivered by client polling.
-# Ports are offset so this can run next to imposterirl's Supabase CLI stack.
+# Loopback-bound like the imposter stack (never world-writable); TLS comes
+# from the Caddy site in front. Ports avoid the VPS map (:3000/:3001 imposter,
+# :5432/:5433 imposter/umami PG).
 
 services:
   db:
@@ -11,14 +13,14 @@ services:
       POSTGRES_PASSWORD: ${FG_DB_PASSWORD:-farming-dev-pw}
       POSTGRES_DB: farming
     ports:
-      - "55433:5432"
+      - "127.0.0.1:55433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./permissions.sql:/docker-entrypoint-initdb.d/02-permissions.sql
 
   rest:
-    image: postgrest/postgrest:v12
+    image: postgrest/postgrest:v14.13
     depends_on:
       - db
     environment:
@@ -27,7 +29,7 @@ services:
       PGRST_DB_ANON_ROLE: anon
       PGRST_SERVER_PORT: 3000
     ports:
-      - "3002:3000"
+      - "127.0.0.1:3002:3000"
 
 volumes:
   pgdata: {}

@@ -16,9 +16,18 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
+# Schema via the db container's own psql (no host client needed).
 export PGPASSWORD="$FG_DB_PASSWORD"
-psql -h localhost -p 55433 -U fg -d farming -f schema.sql
-psql -h localhost -p 55433 -U fg -d farming -f permissions.sql
+docker compose exec -T -e PGPASSWORD="$FG_DB_PASSWORD" db \
+  psql -h localhost -U fg -d farming -f - < schema.sql
+docker compose exec -T -e PGPASSWORD="$FG_DB_PASSWORD" db \
+  psql -h localhost -U fg -d farming -f - < permissions.sql
 
 echo "backend up: REST http://localhost:3002  PG localhost:55433/farming"
+echo "waiting for postgrest..."
+for i in $(seq 1 30); do
+  code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3002/leaderboard?limit=1)
+  if [ "$code" = "200" ]; then break; fi
+  sleep 1
+done
 curl -s -o /dev/null -w "rest status: %{http_code}\n" http://localhost:3002/leaderboard?limit=1
