@@ -1676,6 +1676,10 @@ function hideCustomBuyModal() {
 }
 let tradeListenerUnsub = null;
 let seenTradeIds = new Set();
+// Consecutive failed buyer auto-applies per trade (in-memory only: a reload
+// restarts the count, which is fine — the persisted applied-IDs stay primary).
+const tradeApplyFails = {};
+const MAX_BUYER_APPLY_FAILS = 5;
 // Trades already applied locally survive reloads (otherwise a refresh would
 // re-apply every historical accepted trade and duplicate qty/cash).
 try {
@@ -1740,14 +1744,21 @@ function renderTradeInbox(trades) {
     // This handles buyer applying after seller accepts
     acceptedForMe.forEach(t => {
         if (t.buyerUid === myUid && !seenTradeIds.has('applied-'+t.id)) {
+            // Offers from a previous game are never auto-applied, even if touched recently.
+            const myGameStart = Number(data?.game?.createdAt) || 0;
+            if (t.gameStart != null && myGameStart && Number(t.gameStart) !== myGameStart) return;
             // buyer applies now if not already
             const ok = applyLocalTrade(t, 'buyer');
-            if (ok) markTradeApplied(t.id);
+            if (ok) { markTradeApplied(t.id); delete tradeApplyFails[t.id]; }
+            else tradeApplyFails[t.id] = (tradeApplyFails[t.id] || 0) + 1;
         } else if (t.sellerUid === myUid) {
             // seller applied at accept time; just record so reloads never replay it
             markTradeApplied(t.id);
         }
     });
+    // Forget fail counts for trades that are gone or settled.
+    const liveIds = new Set(acceptedForMe.map(t => t.id));
+    Object.keys(tradeApplyFails).forEach(id => { if (!liveIds.has(id)) delete tradeApplyFails[id]; });
     let html = '';
     if (incoming.length) {
         html += `<div class="font-bold mb-1">Incoming trade offers — you are seller</div>`;
@@ -1772,6 +1783,13 @@ function renderTradeInbox(trades) {
         const role = t.sellerUid===myUid ? 'sold' : 'bought';
         html += `<div class="text-xs text-green-700 mt-1">✓ ${role} ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()} ${t.sellerUid===myUid?'to '+t.buyerName:'from '+t.sellerName}</div>`;
     });
+    // A buyer who went broke between offer and accept used to retry silently
+    // forever. Keep retrying (cash may arrive), but say so out loud.
+    acceptedForMe
+        .filter(t => t.buyerUid === myUid && (tradeApplyFails[t.id] || 0) >= MAX_BUYER_APPLY_FAILS)
+        .forEach(t => {
+            html += `<div class="text-xs text-red-700 mt-1">⚠ Can't afford ${t.qty} ${t.asset} from ${t.sellerName} ($${Number(t.price).toLocaleString()}) — still accepted, applies when you have cash.</div>`;
+        });
     if (!html) { box.classList.add('hidden'); box.innerHTML=''; return; }
     box.innerHTML = html;
     box.classList.remove('hidden');
@@ -1787,17 +1805,32 @@ async function acceptTrade(tradeId) {
     const t = { id: snap.id, ...snap.data() };
     if (t.status !== 'pending') return;
     if (t.sellerUid !== auth.currentUser?.uid) return;
+    // Refuse offers stamped from a previous game (pending across a host reset).
+    const myGameStart = Number(data?.game?.createdAt) || 0;
+    if (t.gameStart != null && myGameStart && Number(t.gameStart) !== myGameStart) {
+        const s = document.getElementById('roomStatus');
+        if (s) s.textContent = `Offer ${t.qty} ${t.asset} is from a previous game — ask ${t.buyerName} to re-offer.`;
+        return;
+    }
     // validate seller has qty locally
     const qtyKey = getAssetQtyKey(t.asset);
     const classMap = { Hay:'qty-hay', Grain:'qty-grain', Fruit:'qty-fruit', Farm:'qty-farm', Cows:'qty-cows', Harvester:'qty-harvester', Tractor:'qty-tractor' };
     const cell = document.querySelector(`.${classMap[qtyKey]||'qty-hay'}`);
     const cur = parseInt(cell?.textContent||'0',10)||0;
     if (cur < Number(t.qty||0)) { alert(`You only have ${cur} ${t.asset}, need ${t.qty}`); return; }
+    // Write FIRST, apply locally after. If the write fails nothing moved, so
+    // retrying the accept can never deduct twice. (The local apply cannot fail
+    // after the check above — same tick, no interleaving.)
+    try {
+        await setDoc(ref, { status: 'accepted', updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (e) {
+        console.error('accept write failed', e);
+        const s = document.getElementById('roomStatus');
+        if (s) s.textContent = 'Accept failed: ' + roomErrorMessage(e);
+        return;
+    }
     // apply seller side locally (remove qty, add cash) — accurate networth point via updateTotalWorth
-    const ok = applyLocalTrade(t, 'seller');
-    if (!ok) return;
-    markTradeApplied(t.id);
-    await setDoc(ref, { status: 'accepted', updatedAt: new Date().toISOString() }, { merge: true });
+    if (applyLocalTrade(t, 'seller')) markTradeApplied(t.id);
     try { navigator.vibrate && navigator.vibrate([10,30,10]); } catch {}
 }
 async function rejectTrade(tradeId) {
@@ -1865,7 +1898,10 @@ async function performCustomBuy() {
             roomCode: tRoom,
             status: 'pending',
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            // Game stamp: accepts from a previous game are refused, so a host
+            // reset can't leak pending offers into the fresh board.
+            gameStart: Number(data?.game?.createdAt) || null
         });
         hideCustomBuyModal();
         const status = document.getElementById('roomStatus');

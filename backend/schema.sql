@@ -58,8 +58,11 @@ CREATE TABLE IF NOT EXISTS trades (
     price DOUBLE PRECISION NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    game_start BIGINT
 );
+-- Live databases predate the offer game-stamp the same way rooms predated rules.
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS game_start BIGINT;
 
 CREATE INDEX IF NOT EXISTS leaderboard_room_code_idx ON leaderboard (room_code);
 CREATE INDEX IF NOT EXISTS trades_room_code_idx ON trades (room_code);
