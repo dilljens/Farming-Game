@@ -1918,6 +1918,10 @@ authReady
         ensureHistorySeeded();
         startFirestoreListener();
         startTradeListener();
+        // Room-doc listener too: fresh loads (?room= link or restored room)
+        // otherwise never learn host, rules, or host resets (restartRoomListener
+        // only runs on create/join/leave clicks).
+        startRoomDocListener();
         // The initial calculation can run before anonymous auth finishes. Try
         // the current state once more so a cold start is not silently lost.
         const username = document.getElementById('editableUsername')?.innerText.trim();
