@@ -90,6 +90,8 @@ cat backup.sql | ./backend-psql.sh
 Fit, checked against the server's port map — **do not change these ports**:
 - REST `:3002` (127.0.0.1): `:3000` is imposter PostgREST, `:3001` is the
   imposter frontend. `:3002` is free.
+- Static frontend `:3003` (127.0.0.1, nginx in this stack): serves
+  `/opt/farming-game/` (game files rsync'd from the repo root).
 - PG `:55433` (127.0.0.1): imposter PG owns `:5432`, umami PG `:5433`.
   Separate container (not the imposter database) — same isolation pattern
   as umami's own postgres.
@@ -122,8 +124,15 @@ ssh ubuntu@40.160.241.74 "sudo mkdir -p /opt/farming-backend && sudo chown -R ub
 From the repo root on your laptop:
 
 ```bash
-# 1. Ship the code next to imposter-backend/ and imposter-frontend/
+# 1. Ship the backend next to imposter-backend/ and imposter-frontend/
 rsync -avz backend/ ubuntu@40.160.241.74:/opt/farming-backend/
+
+# 1b. Ship the game files (served by this stack's nginx on :3003).
+# Explicit file list — never rsync the repo root blindly (would ship .git,
+# backend/, node_modules). First time only, the dir needs creating:
+#   ssh ubuntu@40.160.241.74 "sudo mkdir -p /opt/farming-game && sudo chown -R ubuntu:ubuntu /opt/farming-game"
+rsync -avz index.html scripts.js styles.css backend.mjs game-time.mjs \
+  manifest.json icon-192.svg icon-512.svg ubuntu@40.160.241.74:/opt/farming-game/
 
 # 2. On the VPS: real password + start. NEVER commit `.env`.
 ssh ubuntu@40.160.241.74
@@ -149,9 +158,19 @@ mounted read-only into the container (`./sites:/etc/caddy/sites:ro`), so:
 
 ```caddy
 # /opt/sololedger/deploy/sites/farming.conf
+# Same-origin frontend + API: game files via nginx :3003, tables via PostgREST :3002.
 farm.ferrumeng.com {
-    handle {
+    handle /leaderboard* {
         reverse_proxy 127.0.0.1:3002
+    }
+    handle /rooms* {
+        reverse_proxy 127.0.0.1:3002
+    }
+    handle /trades* {
+        reverse_proxy 127.0.0.1:3002
+    }
+    handle {
+        reverse_proxy 127.0.0.1:3003
     }
 }
 ```
