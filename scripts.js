@@ -919,6 +919,10 @@ function updateActionButtonStates() {
         setButtonDisabled(payOffLoanBtn, disabled);
     }
 
+    // Card-expense borrow widget: type any card-drawn expense, borrow it
+    // plus $1,000 extra. Label tracks the typed amount; debt cap disables.
+    updateBorrowExpenseWidget();
+
     // Buy buttons: disabled unless the player can afford the true minimum
     // down payment (20% of cost, or more when near the $50k debt cap),
     // counting cash plus unused debt room. Gated on a SINGLE unit: the
@@ -3685,6 +3689,46 @@ function borrowForExpense(expense, label) {
     updateActionButtonStates();
     return true;
 }
+
+// Card-expense borrow widget (standalone button under the quick cash
+// buttons): any card-drawn expense the player can't cover borrows the
+// expense plus $1,000 extra through the shared borrowForExpense terms.
+function borrowExpenseWidgetAmount() {
+    const input = document.getElementById('borrowExpenseAmount');
+    return Math.round(Number(input?.value) || 0);
+}
+function updateBorrowExpenseWidget() {
+    const btn = document.getElementById('borrowExpenseBtn');
+    const hint = document.getElementById('borrowExpenseHint');
+    if (!btn) return;
+    const amount = borrowExpenseWidgetAmount();
+    const loan = amount + EXPENSE_LOAN_EXTRA;
+    if (!(amount > 0)) {
+        btn.textContent = 'Borrow + $1k';
+        setButtonDisabled(btn, true);
+        if (hint) hint.textContent = 'Short on cash for a card? Borrow the expense + $1,000 extra.';
+        return;
+    }
+    const capOk = getCurrentLoanTotal() + loan <= debtCap();
+    btn.textContent = `Borrow $${amount.toLocaleString()} + $1k (loan $${loan.toLocaleString()})`;
+    setButtonDisabled(btn, !capOk);
+    if (hint) {
+        hint.textContent = capOk
+            ? 'Pays the card now; you keep $1,000 cash.'
+            : `Debt cap $${debtCap().toLocaleString()} blocks this loan.`;
+    }
+}
+document.getElementById('borrowExpenseAmount')?.addEventListener('input', updateBorrowExpenseWidget);
+document.getElementById('borrowExpenseBtn')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    const amount = borrowExpenseWidgetAmount();
+    if (!(amount > 0)) return;
+    if (borrowForExpense(amount, 'Card expense')) {
+        const input = document.getElementById('borrowExpenseAmount');
+        if (input) input.value = '';
+        updateBorrowExpenseWidget();
+    }
+});
 
 async function resetRoomForHost() {
     if (!currentRoomCode || !isHost) {

@@ -541,6 +541,11 @@
     <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center text-red-600" data-quick-transaction-value="-3000">-3000</button>
     <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center text-red-600" data-quick-transaction-value="-5000">-5000</button>
   </div>
+  <div class="flex items-center justify-center gap-2 flex-wrap">
+    <input id="borrowExpenseAmount" type="number" min="0" step="100" placeholder="Card expense $" inputmode="numeric" class="w-32 p-1 rounded bg-white border border-zinc-300 text-sm text-center" />
+    <button id="borrowExpenseBtn" type="button" class="px-3 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold">Borrow + $1k</button>
+  </div>
+  <p id="borrowExpenseHint" class="text-xs text-gray-500 min-h-[14px]">Short on cash for a card? Borrow the expense + $1,000 extra.</p>
 </div>
 
 <div class="table-wrap"><table class="financial-table" id="financialTable">
@@ -749,7 +754,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20260907t"></script>
+<script type="module" src="scripts.js?v=20260907u"></script>
 
 </body>
 </html>
