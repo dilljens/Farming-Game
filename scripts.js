@@ -165,9 +165,6 @@ function updateRoomUi() {
     }
     if (hostBadge) hostBadge.classList.toggle('hidden', !isHost || !currentRoomCode);
     if (hostControls) hostControls.classList.toggle('hidden', !isHost || !currentRoomCode);
-    // Number tuning (economy + harvest) is host-only, like the rule flags.
-    const hostSettings = document.getElementById('hostSettings');
-    if (hostSettings) hostSettings.classList.toggle('hidden', !isHost || !currentRoomCode);
     // Guests in a room get a visible way to become the host (take over / make the game theirs)
     const guestControls = document.getElementById('guestControls');
     if (guestControls) guestControls.classList.toggle('hidden', isHost || !currentRoomCode);
@@ -303,10 +300,8 @@ function startRoomDocListener() {
         }
         isHost = !!myUid && myUid === currentRoomHostUid;
         updateRoomUi();
-        // Market rules ride the room doc: host writes, everyone applies.
+        // Market rules ride the room doc: set at creation, everyone applies.
         currentRoomRules = normalizeRules(data.rules);
-        syncRuleCheckboxes();
-        try { syncHostSettingsInputs(); } catch {}
         try { updateScenarioBadge(); } catch {}
         refreshPriceCells();
         // Number settings (econ/harvest) also ride the room doc: re-derive
@@ -1487,7 +1482,15 @@ function createProgressChart() {
                 y: {
                     ticks: {
                         font: { size: 10 },
-                        callback: (v) => Number(v).toLocaleString('en-US')
+                        // Compact ($1M, $250k) so wide values don't squeeze
+                        // the plot off narrow phone screens.
+                        callback: (v) => {
+                            const n = Number(v) || 0;
+                            const a = Math.abs(n);
+                            if (a >= 1000000) return `$${parseFloat((n / 1000000).toFixed(1))}M`;
+                            if (a >= 1000) return `$${parseFloat((n / 1000).toFixed(1))}k`;
+                            return `$${n}`;
+                        }
                     }
                 }
             }
@@ -1657,13 +1660,18 @@ function renderSetupForm() {
             box.dataset.setupRule = key;
             box.className = 'mt-0.5';
             const body = document.createElement('span');
+            const nameRow = document.createElement('span');
+            nameRow.className = 'flex items-center gap-1 font-bold text-gray-800';
             const name = document.createElement('span');
-            name.className = 'block font-bold text-gray-800';
             name.textContent = RULE_LABELS[key] || key;
+            const info = makeInfoButton(RULE_LABELS[key] || key);
             const desc = document.createElement('span');
-            desc.className = 'block text-zinc-500';
+            desc.className = 'info-tip hidden';
             desc.textContent = RULE_DESCRIPTIONS[key] || '';
-            body.appendChild(name);
+            wireInfoButton(info, desc);
+            nameRow.appendChild(name);
+            nameRow.appendChild(info);
+            body.appendChild(nameRow);
             body.appendChild(desc);
             label.appendChild(box);
             label.appendChild(body);
@@ -1779,21 +1787,27 @@ document.getElementById('roomCodeInput')?.addEventListener('input', (e) => {
 // boot room UI
 initRoomFromUrl();
 
-// custom buy wiring (inline forms — no open/cancel buttons or overlays)
+// custom buy wiring (side-by-side buttons pop up the modal)
+document.getElementById('customBuyBtn')?.addEventListener('click', showCustomBuyModal);
+document.getElementById('cancelCustomBuy')?.addEventListener('click', hideCustomBuyModal);
+document.getElementById('customBuyModal')?.addEventListener('click', (e) => { if (e.target.id === 'customBuyModal') hideCustomBuyModal(); });
 document.getElementById('confirmCustomBuy')?.addEventListener('click', performCustomBuy);
 document.getElementById('customBuyAsset')?.addEventListener('change', refreshCustomBuySellers);
 document.getElementById('customBuyQty')?.addEventListener('input', updateCustomBuyPreview);
 document.getElementById('customBuyPrice')?.addEventListener('input', updateCustomBuyPreview);
 document.getElementById('customBuySeller')?.addEventListener('change', updateCustomBuyPreview);
 
-// custom sell wiring (inline forms — mirror of buy: seller initiates, buyer accepts)
+// custom sell wiring (mirror of buy: seller initiates, buyer accepts)
+document.getElementById('customSellBtn')?.addEventListener('click', showCustomSellModal);
+document.getElementById('cancelCustomSell')?.addEventListener('click', hideCustomSellModal);
+document.getElementById('customSellModal')?.addEventListener('click', (e) => { if (e.target.id === 'customSellModal') hideCustomSellModal(); });
 document.getElementById('confirmCustomSell')?.addEventListener('click', performCustomSell);
 document.getElementById('customSellAsset')?.addEventListener('change', () => { refreshCustomSellBuyers(); updateCustomSellPreview(); });
 document.getElementById('customSellQty')?.addEventListener('input', updateCustomSellPreview);
 document.getElementById('customSellPrice')?.addEventListener('input', updateCustomSellPreview);
 document.getElementById('customSellBuyer')?.addEventListener('change', updateCustomSellPreview);
 
-// Inline trade forms populate on load; snapshots keep them fresh after.
+// Trade dropdowns populate on load; snapshots keep them fresh after.
 try { refreshCustomBuySellers(); } catch {}
 try { refreshCustomSellBuyers(); } catch {}
 
@@ -1803,87 +1817,34 @@ document.getElementById('hostResetGameBtn')?.addEventListener('click', async () 
 // guests can take over hosting so there is always a way to become host + make/run the game
 document.getElementById('becomeHostBtn')?.addEventListener('click', async () => { await claimHost(); });
 
-// Market rules: host-only checkboxes, persisted on the room doc; every
-// client (including the host) applies them via the room-doc listener.
-// Number settings (econ/harvest) ride alongside — spread them back in so a
-// checkbox flip never resets the host's tuned numbers.
-// Any hand edit clears the scenario stamp (back to Standard/Custom badge).
-function syncRuleCheckboxes() {
-    document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
-        el.checked = !!currentRoomRules[el.dataset.rule];
-    });
-}
-
+// Market readout (read-only): all settings are fixed at room creation.
+// The badge names the scenario; the text lists the active rules for
+// hand-mixed (Custom) rooms. Everyone sees the same via the room doc.
 function updateScenarioBadge() {
     const badge = document.getElementById('scenarioBadge');
-    if (badge) badge.textContent = scenarioName(currentRoomRules);
-    document.querySelectorAll('#hostControls [data-scenario]').forEach((btn) => {
-        const active = currentRoomRules.scenario === btn.dataset.scenario ||
-            (!currentRoomRules.scenario && btn.dataset.scenario === 'standard' && scenarioName(currentRoomRules) === 'Standard');
-        btn.classList.toggle('bg-emerald-500', !!active);
-        btn.classList.toggle('text-white', !!active);
-        btn.classList.toggle('bg-zinc-200', !active);
-        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-    });
+    const on = RULE_KEYS.filter((k) => !!currentRoomRules[k]);
+    const names = on.map((k) => RULE_LABELS[k] || k);
+    if (badge) {
+        badge.textContent = scenarioName(currentRoomRules);
+        badge.title = names.length ? `Active rules: ${names.join(', ')}` : 'Standard game — no market rules on';
+    }
+    const rulesText = document.getElementById('activeRulesText');
+    if (rulesText) rulesText.textContent = names.join(' • ');
 }
 
-document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
-    el.addEventListener('change', async () => {
-        if (!currentRoomCode || !isHost) {
-            el.checked = !!currentRoomRules[el.dataset.rule];
-            return;
-        }
-        const rules = { econ: currentRoomRules.econ, harvest: currentRoomRules.harvest };
-        document.querySelectorAll('#marketRules input[data-rule]').forEach((box) => {
-            rules[box.dataset.rule] = !!box.checked;
-        });
-        currentRoomRules = normalizeRules(rules);
-        try {
-            await setDoc(doc(db, 'rooms', currentRoomCode), { rules: currentRoomRules }, { merge: true });
-        } catch (e) { console.error('rule save failed', e); }
-        try { syncHostSettingsInputs(); } catch {}
-        updateScenarioBadge();
-        refreshPriceCells();
-        // Flag flips can retune the economy/harvest too (Economy/Harvest
-        // checkboxes gate the number groups), so re-derive everything.
-        try { updateTotals(); } catch {}
-        try { populateRollTable(); } catch {}
-    });
-});
-
-// Scenarios: one-tap presets for the host. Applying one is identical to
-// ticking the boxes + typing the numbers by hand — same room-doc path, so
-// guests follow with no new sync.
-document.querySelectorAll('#hostControls [data-scenario]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-        if (!currentRoomCode || !isHost) return;
-        currentRoomRules = applyScenario(btn.dataset.scenario);
-        try {
-            await setDoc(doc(db, 'rooms', currentRoomCode), { rules: currentRoomRules }, { merge: true });
-        } catch (e) { console.error('scenario save failed', e); }
-        syncRuleCheckboxes();
-        try { syncHostSettingsInputs(); } catch {}
-        updateScenarioBadge();
-        refreshPriceCells();
-        try { updateTotals(); } catch {}
-        try { populateRollTable(); } catch {}
-    });
-});
-
 // Number settings (economy + harvest tuning): slider + number-box rows
-// rendered from one spec, shared by the host panel (scope 'host') and the
-// room setup screen (scope 'setup'). Host rows persist to the room doc;
-// setup rows are a draft read once when the room is made.
+// rendered from one spec for the room setup screen (scope 'setup').
+// Setup rows are a draft read once when the room is made.
 const SETTING_SPECS = [
-    { group: 'econ', key: 'debtCap', label: 'Max loan $', min: 0, max: 500000, step: 5000, def: 50000 },
-    { group: 'econ', key: 'interestPct', label: 'Interest %', min: 0, max: 100, step: 1, def: 10 },
-    { group: 'econ', key: 'downPct', label: 'Min down %', min: 0, max: 100, step: 5, def: 20 },
-    { group: 'harvest', key: 'hayMidQty', label: 'Hay mid qty', min: 2, max: 20, step: 1, def: 5 },
-    { group: 'harvest', key: 'hayMidMult', label: 'Hay mid ×', min: 1, max: 3, step: 0.5, def: 1.5 },
-    { group: 'harvest', key: 'hayHighQty', label: 'Hay high qty', min: 3, max: 30, step: 1, def: 10 },
-    { group: 'harvest', key: 'hayHighMult', label: 'Hay high ×', min: 1, max: 5, step: 0.5, def: 2 },
-    { group: 'harvest', key: 'equipRate', label: 'Equip +%/unit', min: 0, max: 200, step: 5, def: 20, percent: true },
-    { group: 'harvest', key: 'equipCap', label: 'Equip cap', min: 0, max: 10, step: 1, def: 5 }
+    { group: 'econ', key: 'debtCap', label: 'Max loan $', min: 0, max: 500000, step: 5000, def: 50000, desc: 'The biggest loan the bank will give you. Set to 0 for no loans at all (Debt-Free).' },
+    { group: 'econ', key: 'interestPct', label: 'Interest %', min: 0, max: 100, step: 1, def: 10, desc: 'Yearly cut added to what you owe. Higher means borrowed money costs more over time.' },
+    { group: 'econ', key: 'downPct', label: 'Min down %', min: 0, max: 100, step: 5, def: 20, desc: 'Cash you must pay up front on every buy — the rest is borrowed. 100 means cash only.' },
+    { group: 'harvest', key: 'hayMidQty', label: 'Hay mid qty', min: 2, max: 20, step: 1, def: 5, desc: 'Hay you must own to reach the middle bonus tier on roll payouts.' },
+    { group: 'harvest', key: 'hayMidMult', label: 'Hay mid ×', min: 1, max: 3, step: 0.5, def: 1.5, desc: 'Hay roll payout multiplier once you reach the middle tier.' },
+    { group: 'harvest', key: 'hayHighQty', label: 'Hay high qty', min: 3, max: 30, step: 1, def: 10, desc: 'Hay you must own to reach the top bonus tier on roll payouts.' },
+    { group: 'harvest', key: 'hayHighMult', label: 'Hay high ×', min: 1, max: 5, step: 0.5, def: 2, desc: 'Hay roll payout multiplier once you reach the top tier.' },
+    { group: 'harvest', key: 'equipRate', label: 'Equip +%/unit', min: 0, max: 200, step: 5, def: 20, percent: true, desc: 'Extra crop on every roll for each tractor (hay) or harvester (grain) you own.' },
+    { group: 'harvest', key: 'equipCap', label: 'Equip cap', min: 0, max: 10, step: 1, def: 5, desc: 'Most tractors/harvesters that count toward the bonus. The rest still count for net worth.' }
 ];
 const HOST_SETTING_FIELDS = [
     ['econ', 'debtCap'], ['econ', 'interestPct'], ['econ', 'downPct'],
@@ -1891,6 +1852,25 @@ const HOST_SETTING_FIELDS = [
     ['harvest', 'hayHighQty'], ['harvest', 'hayHighMult'],
     ['harvest', 'equipRate'], ['harvest', 'equipCap']
 ];
+
+// Tap-to-reveal explainer: the ⓘ button toggles its tip without
+// triggering the surrounding label/row (mobile has no hover).
+function wireInfoButton(btn, tip) {
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        tip.classList.toggle('hidden');
+    });
+}
+
+function makeInfoButton(about) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'info-btn';
+    btn.textContent = 'i';
+    btn.setAttribute('aria-label', `What does this do? ${about}`);
+    return btn;
+}
 
 function renderSettingRows(containerId, scope) {
     const box = document.getElementById(containerId);
@@ -1911,7 +1891,19 @@ function renderSettingRows(containerId, scope) {
         }
         const label = document.createElement('label');
         label.className = 'flex flex-col gap-1';
-        label.textContent = spec.label;
+        const head = document.createElement('span');
+        head.className = 'flex items-center gap-1 text-sm font-medium text-gray-700';
+        const nameEl = document.createElement('span');
+        nameEl.textContent = spec.label;
+        const info = makeInfoButton(spec.label);
+        const tip = document.createElement('span');
+        tip.className = 'info-tip hidden text-xs';
+        tip.textContent = spec.desc;
+        wireInfoButton(info, tip);
+        head.appendChild(nameEl);
+        head.appendChild(info);
+        label.appendChild(head);
+        label.appendChild(tip);
         const row = document.createElement('span');
         row.className = 'flex items-center gap-2';
         const slider = document.createElement('input');
@@ -2003,47 +1995,8 @@ function bindSettingsSliders(scope, onCommit) {
     });
 }
 
-function hostSettingInput(group, key) {
-    return settingInput('host', group, key);
-}
-
-function syncHostSettingsInputs() {
-    syncSettingsInputs('host');
-}
-
-function readHostSettingsInputs() {
-    return readSettingsInputs('host');
-}
-
-async function saveHostSettingsFromInputs() {
-    if (!currentRoomCode || !isHost) {
-        syncHostSettingsInputs();
-        return;
-    }
-    const tuned = readHostSettingsInputs();
-    const rules = { ...currentRoomRules, econ: tuned.econ, harvest: tuned.harvest };
-    // Hand-tuned numbers are no longer the preset — drop the stamp so
-    // the badge falls back to Custom.
-    delete rules.scenario;
-    document.querySelectorAll('#marketRules input[data-rule]').forEach((box) => {
-        rules[box.dataset.rule] = !!box.checked;
-    });
-    currentRoomRules = normalizeRules(rules);
-    try {
-        await setDoc(doc(db, 'rooms', currentRoomCode), { rules: currentRoomRules }, { merge: true });
-    } catch (e) { console.error('settings save failed', e); }
-    syncHostSettingsInputs(); // show clamped values
-    updateScenarioBadge();
-    refreshPriceCells();
-    updateTotals();
-    populateRollTable();
-}
-
-renderSettingRows('hostSettingsRows', 'host');
-document.querySelectorAll('input[data-scope="host"][data-setting]').forEach((el) => {
-    el.addEventListener('change', saveHostSettingsFromInputs);
-});
-bindSettingsSliders('host', saveHostSettingsFromInputs);
+// Number settings live only in the room setup screen (scope 'setup') —
+// there is no mid-game tuning. The shared renderer above serves it.
 
 // --- Digital dice — hidden by default, for tables without physical dice ---
 let diceHistory = [];
@@ -2171,14 +2124,16 @@ function updateCustomBuyPreview() {
     const confirm = document.getElementById('confirmCustomBuy');
     if (confirm) confirm.disabled = !!err;
 }
-// Inline trade forms live in the page flow (no modals): refresh the
-// counterparty dropdowns whenever snapshots arrive so they track who's
-// actually online. Selection-preserving via the prev-restore in refresh.
+// Trade popups: side-by-side buttons open the buy/sell modals. Refresh
+// the counterparty dropdowns on open (plus on every snapshot) so they
+// track who's actually online. Selection-preserving via prev-restore.
 function showCustomBuyModal() {
     refreshCustomBuySellers();
+    updateCustomBuyPreview();
+    document.getElementById('customBuyModal')?.classList.remove('hidden');
 }
 function hideCustomBuyModal() {
-    // No modal to hide — forms stay inline. Kept for existing callers.
+    document.getElementById('customBuyModal')?.classList.add('hidden');
 }
 let tradeListenerUnsub = null;
 let seenTradeIds = new Set();
@@ -2547,9 +2502,11 @@ function updateCustomSellPreview() {
 }
 function showCustomSellModal() {
     refreshCustomSellBuyers();
+    updateCustomSellPreview();
+    document.getElementById('customSellModal')?.classList.remove('hidden');
 }
 function hideCustomSellModal() {
-    // No modal to hide — forms stay inline. Kept for existing callers.
+    document.getElementById('customSellModal')?.classList.add('hidden');
 }
 async function performCustomSell() {
     const buyerSel = document.getElementById('customSellBuyer');

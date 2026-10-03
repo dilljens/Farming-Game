@@ -491,6 +491,35 @@ input[type="range"]::-moz-range-thumb {
     line-height: 1.05;
 }
 
+/* Info (i) buttons: tap to show what a setting does (mobile-first — no hover) */
+.info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    width: 24px;
+    height: 24px;
+    border-radius: 9999px;
+    background-color: #e4e4e7;
+    color: #3f3f46;
+    font-size: 13px;
+    font-weight: 700;
+    font-style: italic;
+    font-family: Georgia, 'Times New Roman', serif;
+    border: 0;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.info-btn:active {
+    background-color: #d4d4d8;
+}
+
+.info-tip {
+    font-weight: 400;
+    color: #71717a;
+}
+
 /* Leaderboard header: title + table/chart toggle */
 .leaderboard-header {
     display: flex;
@@ -507,9 +536,11 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .lb-toggle-btn {
-    padding: 2px 12px;
-    font-size: 12px;
+    padding: 8px 20px;
+    font-size: 15px;
+    font-weight: 700;
     line-height: 1.4;
+    min-height: 44px;
     background-color: #f9fafb;
     color: #374151;
     border: 0;
@@ -521,9 +552,15 @@ input[type="range"]::-moz-range-thumb {
     color: #ffffff;
 }
 
-/* Chart view: fixed-height box so Chart.js can size the canvas */
+/* Chart view: fixed-height box so Chart.js can size the canvas.
+   Tall enough for legend + axis labels on narrow phones. */
 #leaderboardChartWrap {
     position: relative;
-    height: 260px;
+    height: 340px;
+    max-width: 100%;
     margin-top: 8px;
+}
+
+#leaderboardChartWrap canvas {
+    max-width: 100%;
 }

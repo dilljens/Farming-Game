@@ -106,20 +106,21 @@
                           <li><strong>Economy</strong> — enables the host's economy numbers below (unticked = standard $50k loan cap, 10% interest, 20% min down).</li>
                           <li><strong>Harvest</strong> — enables the host's harvest numbers below (unticked = standard hay tiers and equipment bonuses).</li>
                         </ul>
-                        <p class="mt-2">Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted. All eight boxes mix and match.</p>
-                        <h4 class="font-semibold mt-4">Scenarios (host one-tap presets)</h4>
+                        <p class="mt-2">Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted — the Buy/Sell to player buttons pop up the trade forms. All eight boxes mix and match.</p>
+                        <h4 class="font-semibold mt-4">Scenarios (one-tap presets in the Make Room popup)</h4>
                         <ul class="list-disc list-inside">
                           <li><strong>Standard</strong> — the classic game: all boxes off, standard money and harvests.</li>
                           <li><strong>Drought</strong> — harsh harvests plus tight expensive credit ($25k cap, 25% interest, 40% down).</li>
                           <li><strong>Bull Market</strong> — Scarcity + Balance + Boom&amp;Bust with standard money; the best crop rotates every season.</li>
                           <li><strong>Debt-Free</strong> — no loans: 100% down, cash only.</li>
                         </ul>
-                        <p class="mt-2">A scenario just ticks the boxes and fills the numbers below — hand-tweaking anything after flips the badge to Custom.</p>
-                        <h4 class="font-semibold mt-4">Host settings (host tunes per room, everyone applies)</h4>
+                        <p class="mt-2">A scenario just fills the popup form — hand-tweaking anything after flips the badge to Custom.</p>
+                        <h4 class="font-semibold mt-4">Settings (chosen once in the Make Room popup, everyone applies)</h4>
                         <ul class="list-disc list-inside">
                           <li><strong>Economy</strong> numbers (need Economy ☑) — max loan $, loan interest %, minimum down-payment %.</li>
                           <li><strong>Harvest</strong> numbers (need Harvest ☑) — hay bonus tiers (qty → ×mult) and equipment bonus +%/unit with unit cap.</li>
                         </ul>
+                        <p class="mt-2">Every rule and number has an ⓘ button explaining what it does. Settings are fixed when the room is made — to change them, make a new room.</p>
                         
                         <h4 class="font-semibold mt-4">2nd Week of February</h4>
                         <p>After passing/reaching Spring planting go to 2nd week of February.</p>
@@ -278,31 +279,12 @@
         <div id="hostControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
           <button id="hostResetRoomBtn" type="button" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-bold">Reset Room (host)</button>
           <button id="hostResetGameBtn" type="button" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs">Reset My Game</button>
-          <span class="uppercase tracking-widest text-zinc-400 text-xs">Scenario:</span>
-          <button type="button" data-scenario="standard" class="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 rounded-full text-xs" title="The classic game">Standard</button>
-          <button type="button" data-scenario="drought" class="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 rounded-full text-xs" title="Harsh harvests, tight expensive credit">Drought</button>
-          <button type="button" data-scenario="bull" class="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 rounded-full text-xs" title="Boom & bust swings rotate the best crop">Bull Market</button>
-          <button type="button" data-scenario="debtfree" class="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 rounded-full text-xs" title="No loans: 100% down, cash only">Debt-Free</button>
         </div>
-        <div id="marketRules" class="mt-2 flex flex-wrap items-center justify-center gap-3 text-xs text-zinc-600" title="Market rules — the host picks, everyone sees. Same prices on every device.">
+        <div id="marketRules" class="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-600" title="Market rules — set when the room is made, everyone sees. Same prices on every device.">
           <span class="uppercase tracking-widest text-zinc-400">Market:</span>
           <span id="scenarioBadge" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-semibold" title="Active gameplay scenario">Standard</span>
-          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="scarcity"> Scarcity</label>
-          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="seasons"> Seasons</label>
-          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="rubberband"> Rubber-band</label>
-          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="estate"> Estate</label>
-          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="balance"> Balance</label>
-          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="events"> Boom&amp;Bust</label>
-          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="customecon"> Economy</label>
-          <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="customharvest"> Harvest</label>
+          <span id="activeRulesText" class="text-zinc-500"></span>
         </div>
-        <details id="hostSettings" class="hidden mt-2 w-full max-w-lg mx-auto p-3 bg-zinc-50 border border-zinc-200 rounded-lg text-left text-xs text-zinc-600">
-          <summary class="cursor-pointer font-semibold text-zinc-700">Host settings — economy &amp; harvest numbers</summary>
-          <p class="mt-1 text-zinc-400">Each group applies only while its Market box is ticked (<strong>Economy</strong> / <strong>Harvest</strong>). Unticked = standard game. Mix and match freely.</p>
-          <h5 class="mt-2 font-semibold text-zinc-500">ECONOMY (needs Economy ☑)</h5>
-          <div id="hostSettingsRows" class="mt-1 grid grid-cols-1 gap-2"></div>
-          <p class="mt-1 text-zinc-400">Saved to the room — every player applies them.</p>
-        </details>
         <div id="guestControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
           <button id="becomeHostBtn" type="button" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-bold">Become Host</button>
         </div>
@@ -656,14 +638,20 @@
   </div>
 </div>
 
-<!-- Player Trades — inline in page flow (no popups): buy from or sell to another player -->
-<section id="playerTrades" class="w-full max-w-3xl mx-auto my-3 p-4 bg-white border border-zinc-200 rounded-lg text-left">
-  <h3 class="text-base font-bold text-gray-900">Player Trades</h3>
-  <p class="text-xs text-gray-500 mt-1">Buy property from another player at a price you set, or offer yours to them. They accept or reject — nothing moves until they accept. Outside a room, offers go to everyone online.</p>
-  <div class="grid md:grid-cols-2 gap-4 mt-3">
-    <div class="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-      <h4 class="text-sm font-bold text-purple-800">Buy from a player</h4>
-      <div class="mt-2 space-y-3">
+<!-- Player Trades — side-by-side buttons pop up the buy/sell forms -->
+<div class="text-center my-3 flex items-center justify-center gap-3 flex-wrap">
+  <button id="customBuyBtn" type="button" class="px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-base">Buy from player</button>
+  <button id="customSellBtn" type="button" class="px-5 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-base">Sell to player</button>
+</div>
+<div id="tradeInboxHint" class="text-center text-xs text-gray-500 -mt-1 mb-2">Negotiated prices — nothing moves until the other player accepts.</div>
+
+<!-- Custom Buy popup — buy property from another player at a price you set -->
+<div id="customBuyModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+  <div class="relative top-10 mx-auto p-5 border w-[92%] max-w-md shadow-lg rounded-md bg-white max-h-[88vh] overflow-y-auto">
+    <div class="mt-3 text-left">
+      <h3 class="text-lg font-bold text-purple-800">Buy from a player</h3>
+      <p class="text-xs text-gray-500 mt-1">Outside a room, requests go to everyone online.</p>
+      <div class="mt-4 space-y-3">
         <label class="block text-sm font-medium text-gray-700">Seller
           <select id="customBuySeller" class="mt-1 w-full p-2 border border-gray-300 rounded text-sm"></select>
         </label>
@@ -688,12 +676,22 @@
         </div>
         <div id="customBuyPreview" class="text-xs bg-gray-50 p-2 rounded border min-h-[48px]"></div>
         <p id="customBuyHint" class="text-sm text-red-600 hidden"></p>
-        <button id="confirmCustomBuy" type="button" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-md w-full">Send request</button>
+      </div>
+      <div class="flex items-center py-3 mt-2">
+        <button id="confirmCustomBuy" type="button" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-base font-bold rounded-md w-full">Send request</button>
+        <button id="cancelCustomBuy" type="button" class="ml-3 px-4 py-2 bg-gray-300 text-gray-900 text-base font-medium rounded-md w-full">Cancel</button>
       </div>
     </div>
-    <div class="p-3 bg-teal-50 border border-teal-200 rounded-lg">
-      <h4 class="text-sm font-bold text-teal-800">Sell to a player</h4>
-      <div class="mt-2 space-y-3">
+  </div>
+</div>
+
+<!-- Custom Sell popup — offer your property to another player -->
+<div id="customSellModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+  <div class="relative top-10 mx-auto p-5 border w-[92%] max-w-md shadow-lg rounded-md bg-white max-h-[88vh] overflow-y-auto">
+    <div class="mt-3 text-left">
+      <h3 class="text-lg font-bold text-teal-800">Sell to a player</h3>
+      <p class="text-xs text-gray-500 mt-1">They accept or reject; nothing moves until they accept. Outside a room, offers go to everyone online.</p>
+      <div class="mt-4 space-y-3">
         <label class="block text-sm font-medium text-gray-700">Buyer
           <select id="customSellBuyer" class="mt-1 w-full p-2 border border-gray-300 rounded text-sm"></select>
         </label>
@@ -718,18 +716,21 @@
         </div>
         <div id="customSellPreview" class="text-xs bg-gray-50 p-2 rounded border min-h-[48px]"></div>
         <p id="customSellHint" class="text-sm text-red-600 hidden"></p>
-        <button id="confirmCustomSell" type="button" class="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-md w-full">Send offer</button>
+      </div>
+      <div class="flex items-center py-3 mt-2">
+        <button id="confirmCustomSell" type="button" class="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-base font-bold rounded-md w-full">Send offer</button>
+        <button id="cancelCustomSell" type="button" class="ml-3 px-4 py-2 bg-gray-300 text-gray-900 text-base font-medium rounded-md w-full">Cancel</button>
       </div>
     </div>
   </div>
-</section>
+</div>
 
 <!-- Room setup screen — shown after MAKE ROOM, before the room exists -->
 <div id="roomSetupModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
   <div class="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
     <div class="mt-3 text-left">
       <h3 class="text-lg font-bold text-gray-900">Make Room — game setup</h3>
-      <p class="text-xs text-gray-500 mt-1">Pick a scenario or mix your own rules and numbers, then make the room. You can retune everything later from Host settings — the badge in the Market row always shows what's active.</p>
+      <p class="text-xs text-gray-500 mt-1">Pick a scenario or mix your own rules and numbers, then make the room. Settings are fixed when the room is made — to change them, make a new room. The badge in the Market row always shows what's active.</p>
       <h4 class="font-semibold mt-4 text-sm text-gray-800">Scenario</h4>
       <div id="setupScenarios" class="mt-1 grid sm:grid-cols-2 gap-2"></div>
       <h4 class="font-semibold mt-4 text-sm text-gray-800">Market rules</h4>
@@ -745,7 +746,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20260907m"></script>
+<script type="module" src="scripts.js?v=20260907n"></script>
 
 </body>
 </html>
