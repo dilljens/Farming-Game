@@ -2126,6 +2126,7 @@ function bindSettingsSliders(scope, onCommit) {
 
 // --- Digital dice — hidden by default, for tables without physical dice ---
 let diceHistory = [];
+let diceRolling = false;
 function setDiceDisplay(value) {
     const el = document.getElementById('diceDisplay');
     if (el) el.textContent = String(value);
@@ -2137,10 +2138,29 @@ function pushDiceHistory(text) {
     if (h) h.textContent = diceHistory.join(' • ');
 }
 function rollDice() {
+    if (diceRolling) return null;
     const roll = Math.floor(Math.random() * 6) + 1; // 1-6 only
-    setDiceDisplay(`🎲 ${roll}`);
-    pushDiceHistory(String(roll));
-    try { navigator.vibrate && navigator.vibrate(10); } catch {}
+    const el = document.getElementById('diceDisplay');
+    if (!el) { pushDiceHistory(String(roll)); return roll; }
+    // Tumble through faces before settling, so rolling the same number
+    // twice in a row still reads as a fresh roll.
+    diceRolling = true;
+    const btn = document.getElementById('rollDiceBtn');
+    if (btn) btn.disabled = true;
+    let i = 0;
+    const iv = setInterval(() => {
+        i++;
+        if (i >= 6) {
+            clearInterval(iv);
+            setDiceDisplay(`🎲 ${roll}`);
+            pushDiceHistory(String(roll));
+            try { navigator.vibrate && navigator.vibrate(10); } catch {}
+            diceRolling = false;
+            if (btn) btn.disabled = false;
+        } else {
+            setDiceDisplay(`🎲 ${Math.floor(Math.random() * 6) + 1}`);
+        }
+    }, 60);
     return roll;
 }
 function setDiceVisible(visible) {
