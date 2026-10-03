@@ -497,6 +497,12 @@ function handleTransaction(inputId, transactionClass, totalClass) {
         }
 
         shiftAndInsertTransaction(inputId,transactionClass);
+        // Manual entries (typed or quick-button) are single-leg undo actions.
+        pushUndoAction({
+            label: `Manual ${transactionClass.includes('cash') ? 'cash' : 'loan'} entry $${newValue.toLocaleString()}`,
+            cash: transactionClass.includes('cash') ? 1 : 0,
+            loan: transactionClass.includes('loan') ? 1 : 0
+        });
         // Calculate the new total
         updateTotals();
         saveQuantitiesToLocalStorage();
@@ -578,30 +584,98 @@ function addLoanTransactionValue(amount) {
     saveQuantitiesToLocalStorage();
 }
 
-function undoLastCashTransaction() {
-    if (!data.transactions || !Array.isArray(data.transactions.cash) || data.transactions.cash.length === 0) {
-        console.log('No cash transactions to undo');
-        return;
+function undoToast(msg) {
+    let toast = document.getElementById('undoToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'undoToast';
+        toast.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#1f2937;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;z-index:60;box-shadow:0 2px 8px rgba(0,0,0,.25);transition:opacity .3s;opacity:0;pointer-events:none;';
+        document.body.appendChild(toast);
     }
-
-    const removed = data.transactions.cash.shift();
-    updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
-    updateTotals();
-    saveQuantitiesToLocalStorage();
-    console.log(`Undid cash transaction ${removed}`);
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    clearTimeout(undoToast._t);
+    undoToast._t = setTimeout(() => { toast.style.opacity = '0'; }, 2200);
 }
 
-function undoLastLoanTransaction() {
-    if (!data.transactions || !Array.isArray(data.transactions.loan) || data.transactions.loan.length === 0) {
-        console.log('No loan transactions to undo');
+function ensureActionLog() {
+    if (!Array.isArray(data.actionLog)) data.actionLog = [];
+    return data.actionLog;
+}
+
+// Record one undoable action. cash/loan are COUNTS of ledger lines the
+// action added (derived from ledger lengths around the adds, so silently
+// rejected adds — cash floor, debt cap — never create phantom undo legs).
+// qty is {targetClass, delta}; ridge is {key, count} for ridge buys.
+function pushUndoAction(action) {
+    const cash = Math.max(0, Math.floor(Number(action.cash) || 0));
+    const loan = Math.max(0, Math.floor(Number(action.loan) || 0));
+    // A silently rejected add (cash floor, debt cap) leaves ledger lengths
+    // unchanged — record nothing so undo never pops a no-op.
+    if (cash === 0 && loan === 0 && !action.qty && !action.ridge) return;
+    const log = ensureActionLog();
+    log.push({
+        t: Date.now(),
+        label: String(action.label || 'action'),
+        cash,
+        loan,
+        qty: action.qty || null,
+        ridge: action.ridge || null
+    });
+    while (log.length > MAX_UNDO_ACTIONS) log.shift();
+}
+
+function ledgerLen(which) {
+    try { return data.transactions?.[which]?.length || 0; } catch { return 0; }
+}
+
+// Qty deltas apply inversely on undo (not snapshot restore) so edits made
+// between the action and its undo (steppers, hand-typing) are preserved.
+function applyQtyDelta(targetClass, delta) {
+    const cell = document.querySelector(`.${targetClass}`);
+    if (!cell || !Number.isFinite(delta) || delta === 0) return;
+    const cur = parseInt(cell.textContent || '0', 10) || 0;
+    const floor = targetClass === 'qty-cows' ? ranchBonusFloor() : 0;
+    cell.textContent = String(Math.max(floor, cur + delta));
+}
+
+// Single undo entry point — both Cash and Loan headers call this. Pops the
+// most recent ACTION (not ledger line) and reverses every leg of it: ledger
+// lines are removed head-first (the action's lines are at the head exactly
+// when it is the most recent action, which pop guarantees), then ridge
+// ownership (floor first), then qty.
+function undoLastAction() {
+    const log = ensureActionLog();
+    if (log.length === 0) {
+        undoToast('Nothing to undo');
         return;
     }
-
-    const removed = data.transactions.loan.shift();
+    const a = log.pop();
+    try {
+        if (data.transactions) {
+            if (Array.isArray(data.transactions.cash)) data.transactions.cash.splice(0, a.cash);
+            if (Array.isArray(data.transactions.loan)) data.transactions.loan.splice(0, a.loan);
+        }
+        // Ridge revert BEFORE the qty delta: the floor drops first so undoing
+        // a ridge buy lands back at the pre-buy qty instead of sticking at
+        // the (old, higher) bonus floor.
+        if (a.ridge && a.ridge.key) {
+            const counts = normalizeRidgeCounts(data.ranchRidgeSelections);
+            counts[a.ridge.key] = Math.max(0, (counts[a.ridge.key] || 0) - (Math.floor(Number(a.ridge.count) || 0)));
+            data.ranchRidgeSelections = counts;
+            data.ranchRidgeBonus = getRanchRidgeBonusFromSelections(counts);
+        }
+        if (a.qty && a.qty.targetClass) applyQtyDelta(a.qty.targetClass, -(Number(a.qty.delta) || 0));
+    } catch (err) {
+        console.warn('undoLastAction failed to fully reverse', a, err);
+    }
     updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
     updateTotals();
+    calculateNet();
+    populateRollTable();
+    updateUpgradedRidgesDisplay();
     saveQuantitiesToLocalStorage();
-    console.log(`Undid loan transaction ${removed}`);
+    undoToast(`Undid: ${a.label}`);
 }
 
 function shiftAndInsertTransaction(inputId, transactionClass) {
@@ -1861,6 +1935,7 @@ function applyLocalTrade(trade, role) {
     const targetClass = classMap[qtyKey] || 'qty-hay';
     const cell = document.querySelector(`.${targetClass}`);
     if (!cell) return false;
+    const tradeCashBefore = ledgerLen('cash');
     let cur = parseInt(cell.textContent || '0', 10) || 0;
     if (role === 'buyer') {
         if (price !== 0 && wouldGoNegativeCash(-price)) return false;
@@ -1874,6 +1949,13 @@ function applyLocalTrade(trade, role) {
         cell.textContent = String(cur - qty);
         if (price !== 0) addCashTransactionValue(price);
     }
+    // Trades settle as one undoable action (cash leg + qty move together).
+    pushUndoAction({
+        label: `Trade: ${role === 'buyer' ? 'bought' : 'sold'} ${qty} ${asset} $${price.toLocaleString()}`,
+        cash: ledgerLen('cash') - tradeCashBefore,
+        loan: 0,
+        qty: { targetClass, delta: role === 'buyer' ? qty : -qty }
+    });
     calculateNet();
     populateRollTable();
     saveQuantitiesToLocalStorage();
@@ -2430,6 +2512,11 @@ function populateRollTable() {
 // Call this function to populate the roll table when the page loads or when quantities update
 populateRollTable();
 
+// Journal-based undo: every money+qty mutation pushes ONE action entry and
+// undo reverses the whole action (all ledger legs + qty/ridge deltas), so a
+// buy can never be half-undone into free assets or forgiven debt.
+const MAX_UNDO_ACTIONS = 50;
+
 function getBaseState() {
     return {
         game: createGame(),
@@ -2453,6 +2540,10 @@ function getBaseState() {
             cash: ['5000'],
             loan: ['5000']
         },
+        // Journal-based undo: every money+qty mutation pushes ONE action;
+        // undo reverses the whole action (all ledger legs + qty/ridge
+        // deltas), never a single leg. Cleared on reset (fresh game).
+        actionLog: [],
         username: ''
     };
 }
@@ -2475,6 +2566,10 @@ function normalizeSavedState(savedData) {
                 ? saved.transactions.loan
                 : baseState.transactions.loan
         },
+        // Undo journal survives reload (capped); drop malformed entries.
+        actionLog: Array.isArray(saved.actionLog)
+            ? saved.actionLog.filter(a => a && typeof a === 'object').slice(-MAX_UNDO_ACTIONS)
+            : [],
         ranchRidgeSelections: normalizeRidgeCounts(saved.ranchRidgeSelections)
     };
 }
@@ -2873,8 +2968,15 @@ function performPayOffLoan() {
     }
     
     // Subtract from both cash and loan
+    const payoffCashBefore = ledgerLen('cash');
+    const payoffLoanBefore = ledgerLen('loan');
     addCashTransactionValue(-payoffAmount);
     addLoanTransactionValue(-payoffAmount);
+    pushUndoAction({
+        label: `Pay off loan $${payoffAmount.toLocaleString()}`,
+        cash: ledgerLen('cash') - payoffCashBefore,
+        loan: ledgerLen('loan') - payoffLoanBefore
+    });
     
     // Update button states
     updateActionButtonStates();
@@ -3066,10 +3168,15 @@ function performPayPerAcre() {
     }
     
     const currentCash = getCurrentCashTotal();
-    
+    const acreCashBefore = ledgerLen('cash');
     if (isGainMode) {
         // For gain mode, just add the amount
         addCashTransactionValue(totalPayment);
+        pushUndoAction({
+            label: `Per-acre gain $${totalPayment.toLocaleString()}`,
+            cash: ledgerLen('cash') - acreCashBefore,
+            loan: 0
+        });
     } else {
         // For pay mode, check if we have enough cash
         if (currentCash < totalPayment) {
@@ -3084,6 +3191,11 @@ function performPayPerAcre() {
         }
         // Pay the amount
         addCashTransactionValue(-totalPayment);
+        pushUndoAction({
+            label: `Per-acre pay $${totalPayment.toLocaleString()}`,
+            cash: ledgerLen('cash') - acreCashBefore,
+            loan: 0
+        });
     }
     
     // Update button states after transaction
@@ -3324,11 +3436,11 @@ window.addEventListener('DOMContentLoaded', (event) => {
     makeEditableCellsExitOnEnter();
     const cashUndoCell = document.getElementById('cashUndoCell');
     if (cashUndoCell) {
-        cashUndoCell.addEventListener('click', undoLastCashTransaction);
+        cashUndoCell.addEventListener('click', undoLastAction);
     }
     const loanUndoCell = document.getElementById('loanUndoCell');
     if (loanUndoCell) {
-        loanUndoCell.addEventListener('click', undoLastLoanTransaction);
+        loanUndoCell.addEventListener('click', undoLastAction);
     }
     const cashInput = document.getElementById('cashInput');
     if (cashInput) {
@@ -3373,7 +3485,13 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 }
 
                 // Sandbox preview blocks confirm(), so just add automatically.
+                const rollCashBefore = ledgerLen('cash');
                 addCashTransactionValue(value);
+                pushUndoAction({
+                    label: `Roll payout $${value.toLocaleString()}`,
+                    cash: ledgerLen('cash') - rollCashBefore,
+                    loan: 0
+                });
                 console.log(`Roll payout ${text} added to cash transactions`);
             });
         }
@@ -3449,7 +3567,13 @@ window.addEventListener('DOMContentLoaded', (event) => {
             }
 
             // Pay the interest
+            const interestCashBefore = ledgerLen('cash');
             addCashTransactionValue(-interest);
+            pushUndoAction({
+                label: `Pay interest $${interest.toLocaleString()}`,
+                cash: ledgerLen('cash') - interestCashBefore,
+                loan: 0
+            });
             
             // Update button states after payment
             updateActionButtonStates();
@@ -3785,6 +3909,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
         // The borrowed shortfall lands first so the down payment can never
         // trip the cash floor; net effect: buyer spends all available cash
         // and debts the rest.
+        const buyCashBefore = ledgerLen('cash');
+        const buyLoanBefore = ledgerLen('loan');
         if (shortfall > 0) {
             addCashTransactionValue(shortfall);
             addLoanTransactionValue(shortfall);
@@ -3797,6 +3923,17 @@ window.addEventListener('DOMContentLoaded', (event) => {
         addCashTransactionValue(-downPayment);
         // Add loan transaction (positive for loan)
         addLoanTransactionValue(loanAmount);
+        // One undoable action: every ledger leg plus the qty/ridge gains, so
+        // undo can never refund the money while keeping the asset.
+        pushUndoAction({
+            label: `Buy ${qtyIncrease} ${currentAsset}${ridgeMsg} $${currentTotalCost.toLocaleString()}`,
+            cash: ledgerLen('cash') - buyCashBefore,
+            loan: ledgerLen('loan') - buyLoanBefore,
+            qty: { targetClass: `qty-${currentAsset}`, delta: qtyIncrease },
+            ridge: pendingRidgeSelection !== null
+                ? { key: pendingRidgeSelection, count: pendingRidgeCount }
+                : null
+        });
 
         if (pendingRidgeSelection !== null) {
             const counts = normalizeRidgeCounts(data.ranchRidgeSelections);
