@@ -395,8 +395,15 @@ input, .editable {
 #payPerAcreBtn, #payInterestBtn, #payOffLoanBtn {
     background-color: #dc2626;
 }
-#payPerAcreBtn:hover, #payInterestBtn:hover, #payOffLoanBtn:hover {
-    background-color: #b91c1c;
+#payPerAcreBtn:hover, #payInterestBtn:hover, #payOffLoanBtn:hover {    background-color: #b91c1c;
+}
+
+/* Borrow buttons — amber */
+#shortOnCashBtn, #borrowInterestBtn {
+    background-color: #f59e0b;
+}
+#shortOnCashBtn:hover, #borrowInterestBtn:hover {
+    background-color: #d97706;
 }
 
 .buy-btn.is-disabled {

@@ -903,6 +903,28 @@ function updateActionButtonStates() {
         setButtonDisabled(payPerAcreBtn, disabled);
     }
 
+    // Short on cash — sits left of Pay Per Acre: borrows the current
+    // pay-mode total plus $1,000 extra and pays it in one tap. When cash
+    // covers, it just opens the pay modal instead.
+    const shortOnCashBtn = document.getElementById('shortOnCashBtn');
+    if (shortOnCashBtn) {
+        const total = currentPayPerAcreTotal();
+        if (!(total > 0)) {
+            shortOnCashBtn.title = 'Pick a pay option first (open Pay Per Acre)';
+            setButtonDisabled(shortOnCashBtn, true);
+        } else if (cashTotal >= total) {
+            shortOnCashBtn.title = `Cash covers the $${total.toLocaleString()} — opens Pay Per Acre`;
+            setButtonDisabled(shortOnCashBtn, false);
+        } else {
+            const loan = total + EXPENSE_LOAN_EXTRA;
+            const capOk = getCurrentLoanTotal() + loan <= debtCap();
+            shortOnCashBtn.title = capOk
+                ? `Borrows $${total.toLocaleString()} + $1,000 extra (loan $${loan.toLocaleString()}) and pays it — you keep $1,000 cash`
+                : `Debt cap $${debtCap().toLocaleString()} blocks this loan`;
+            setButtonDisabled(shortOnCashBtn, !capOk);
+        }
+    }
+
     // Gain Per Acre
     const gainPerAcreBtn = document.getElementById('gainPerAcreBtn');
     if (gainPerAcreBtn) {
@@ -918,10 +940,6 @@ function updateActionButtonStates() {
         const disabled = cashTotal <= 0 || currentLoan <= 0;
         setButtonDisabled(payOffLoanBtn, disabled);
     }
-
-    // Card-expense borrow widget: type any card-drawn expense, borrow it
-    // plus $1,000 extra. Label tracks the typed amount; debt cap disables.
-    updateBorrowExpenseWidget();
 
     // Buy buttons: disabled unless the player can afford the true minimum
     // down payment (20% of cost, or more when near the $50k debt cap),
@@ -1871,10 +1889,56 @@ function readSetupRules() {
     return normalizeRules(rules);
 }
 
+let roomSetupMode = 'create'; // 'create' (Make Room) or 'edit' (host retunes live)
+function setRoomSetupChrome() {
+    const edit = roomSetupMode === 'edit';
+    const title = document.getElementById('roomSetupTitle');
+    const sub = document.getElementById('roomSetupSub');
+    const confirm = document.getElementById('confirmRoomSetup');
+    if (title) title.textContent = edit ? 'Room Settings' : 'Make Room — game setup';
+    if (sub) sub.textContent = edit
+        ? 'Saving applies to everyone in the room immediately — prices, interest, and payouts re-derive on every device.'
+        : "Pick a scenario or mix your own rules and numbers, then make the room. The badge in the Market row always shows what's active.";
+    if (confirm) confirm.textContent = edit ? 'Save Settings' : 'Make Room';
+}
 function openRoomSetup() {
+    roomSetupMode = 'create';
     renderSetupForm();
     applySetupScenario('standard');
+    setRoomSetupChrome();
     document.getElementById('roomSetupModal')?.classList.remove('hidden');
+}
+// Host mid-game retune: prefill the same form from the live room rules and
+// save back to the room doc — the room-doc listener pushes them to guests.
+function openRoomSettings() {
+    if (!currentRoomCode || !isHost) return;
+    roomSetupMode = 'edit';
+    renderSetupForm();
+    const r = normalizeRules(currentRoomRules);
+    setupScenarioKey = (r.scenario && SCENARIOS[r.scenario]) ? r.scenario : 'custom';
+    const radio = setupScenarioRadio(setupScenarioKey);
+    if (radio) radio.checked = true;
+    document.querySelectorAll('input[data-setup-rule]').forEach((box) => {
+        box.checked = !!r[box.dataset.setupRule];
+    });
+    syncSettingsInputs('setup', r);
+    syncSetupTuning(r);
+    setRoomSetupChrome();
+    document.getElementById('roomSetupModal')?.classList.remove('hidden');
+}
+async function saveRoomSettings(rules) {
+    const status = document.getElementById('roomStatus');
+    if (status) status.textContent = 'Saving settings…';
+    try {
+        await setDoc(doc(db, 'rooms', currentRoomCode), {
+            rules: normalizeRules(rules),
+            last_activity_at: new Date().toISOString(),
+        }, { merge: true });
+        if (status) status.textContent = `Room ${currentRoomCode} settings saved — everyone follows`;
+    } catch (e) {
+        console.error(e);
+        if (status) status.textContent = roomErrorMessage(e);
+    }
 }
 function hideRoomSetup() {
     document.getElementById('roomSetupModal')?.classList.add('hidden');
@@ -1885,8 +1949,10 @@ document.getElementById('roomSetupModal')?.addEventListener('click', (e) => { if
 document.getElementById('confirmRoomSetup')?.addEventListener('click', async () => {
     const rules = readSetupRules();
     hideRoomSetup();
-    await finishMakeRoom(rules);
+    if (roomSetupMode === 'edit' && currentRoomCode && isHost) await saveRoomSettings(rules);
+    else await finishMakeRoom(rules);
 });
+document.getElementById('roomSettingsBtn')?.addEventListener('click', () => openRoomSettings());
 
 document.getElementById('joinRoomBtn')?.addEventListener('click', async () => {
     const input = document.getElementById('roomCodeInput');
@@ -3457,6 +3523,22 @@ document.getElementById('payPerAcreBtn').addEventListener('click', (event) => {
     showPayPerAcreModal();
 });
 
+// Short on cash button (cell, left of Pay Per Acre): cash covers it → open
+// the pay modal; cash short → borrow the total + $1,000 extra and pay it.
+document.getElementById('shortOnCashBtn')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    const total = currentPayPerAcreTotal();
+    if (!(total > 0)) return;
+    updateTotals();
+    if (getCurrentCashTotal() >= total) {
+        isGainMode = false;
+        updateModalForMode();
+        showPayPerAcreModal();
+    } else {
+        borrowForExpense(total, 'Per-acre pay');
+    }
+});
+
 // Event listener for the gain per acre button
 document.getElementById('gainPerAcreBtn').addEventListener('click', (event) => {
     event.preventDefault();
@@ -3664,6 +3746,12 @@ function performPayPerAcre() {
     updateActionButtonStates();
 }
 
+// Current pay-mode total from the stored selection (what the modal opens
+// with), so the cell button can act without opening the modal.
+function currentPayPerAcreTotal() {
+    const perAcre = parseFloat(payModeSelection.perAcre) || 0;
+    return (getAcresForType(payModeSelection.payType) || 0) * perAcre;
+}
 // Short on cash for a mandatory expense (per-acre pay, interest)? Borrow
 // the full expense plus $1,000 extra: the loan lands as cash first (like
 // the buy flow's shortfall) so the cash floor can't block the payment.
@@ -3689,46 +3777,6 @@ function borrowForExpense(expense, label) {
     updateActionButtonStates();
     return true;
 }
-
-// Card-expense borrow widget (standalone button under the quick cash
-// buttons): any card-drawn expense the player can't cover borrows the
-// expense plus $1,000 extra through the shared borrowForExpense terms.
-function borrowExpenseWidgetAmount() {
-    const input = document.getElementById('borrowExpenseAmount');
-    return Math.round(Number(input?.value) || 0);
-}
-function updateBorrowExpenseWidget() {
-    const btn = document.getElementById('borrowExpenseBtn');
-    const hint = document.getElementById('borrowExpenseHint');
-    if (!btn) return;
-    const amount = borrowExpenseWidgetAmount();
-    const loan = amount + EXPENSE_LOAN_EXTRA;
-    if (!(amount > 0)) {
-        btn.textContent = 'Borrow + $1k';
-        setButtonDisabled(btn, true);
-        if (hint) hint.textContent = 'Short on cash for a card? Borrow the expense + $1,000 extra.';
-        return;
-    }
-    const capOk = getCurrentLoanTotal() + loan <= debtCap();
-    btn.textContent = `Borrow $${amount.toLocaleString()} + $1k (loan $${loan.toLocaleString()})`;
-    setButtonDisabled(btn, !capOk);
-    if (hint) {
-        hint.textContent = capOk
-            ? 'Pays the card now; you keep $1,000 cash.'
-            : `Debt cap $${debtCap().toLocaleString()} blocks this loan.`;
-    }
-}
-document.getElementById('borrowExpenseAmount')?.addEventListener('input', updateBorrowExpenseWidget);
-document.getElementById('borrowExpenseBtn')?.addEventListener('click', (event) => {
-    event.preventDefault();
-    const amount = borrowExpenseWidgetAmount();
-    if (!(amount > 0)) return;
-    if (borrowForExpense(amount, 'Card expense')) {
-        const input = document.getElementById('borrowExpenseAmount');
-        if (input) input.value = '';
-        updateBorrowExpenseWidget();
-    }
-});
 
 async function resetRoomForHost() {
     if (!currentRoomCode || !isHost) {
