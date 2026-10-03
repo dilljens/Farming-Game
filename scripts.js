@@ -18,7 +18,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907e';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20260907o';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20260907p';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -1593,11 +1593,11 @@ async function finishMakeRoom(rules) {
 // + number sliders/boxes, all rendering from the pricing.js sources of truth.
 // A preset fills the whole form; any hand edit flips the scenario to Custom.
 const RULE_LABELS = {
-    scarcity: 'Scarcity', seasons: 'Seasons', rubberband: 'Rubber-band', estate: 'Estate',
+    market: 'Market Adjusted', seasons: 'Seasons', rubberband: 'Rubber-band', estate: 'Estate',
     balance: 'Balance', events: 'Boom&Bust', customecon: 'Economy', customharvest: 'Harvest'
 };
 const RULE_DESCRIPTIONS = {
-    scarcity: 'Crop prices follow room abundance: scarce costs up to 2×, gluts drop to half.',
+    market: 'Prices adjust to the room and its players: scarce crops cost up to 2×, gluts drop to half.',
     seasons: 'Prices ride the game year: harvest gluts are cheap, winter is dear.',
     rubberband: 'Room leader pays +10%, trailer pays −10% on everything.',
     estate: 'Your Nth farm, harvester, or tractor costs +10% per unit you own.',
@@ -1609,12 +1609,12 @@ const RULE_DESCRIPTIONS = {
 let setupScenarioKey = 'standard';
 
 // One slider per market rule, set at room creation. Strengths scale how
-// hard scarcity/seasons/balance bite (100% = classic); rubberband sets the
+// hard market/seasons/balance bite (100% = classic); rubberband sets the
 // leader tax / trailer aid %; estate sets the extra cost per owned unit;
 // events sets the max season swing %. Economy/Harvest have no row — their
 // number groups below are the tuning.
 const RULE_TUNING_SPECS = {
-    scarcity: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard scarcity bites. 100% is the classic rule; 200% doubles every markup and discount; 0% silences it without unticking.' },
+    market: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard market-adjusted pricing bites. 100% is the classic rule; 200% doubles every markup and discount; 0% silences it without unticking.' },
     seasons: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard the seasonal wave swings prices. 100% is classic; 0% flattens the year.' },
     rubberband: { label: 'Leader tax / trailer aid', min: 0, max: 30, step: 1, def: 10, suffix: '%', desc: 'What the room leader extra-pays and the trailer saves on everything.' },
     estate: { label: 'Extra cost per unit', min: 0, max: 50, step: 5, def: 10, suffix: '%', desc: 'How much dearer your Nth farm, harvester, or tractor gets per unit you own.' },
@@ -4193,7 +4193,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const perUnitBonus = RIDGE_BONUS_BY_KEY[selectedRidge] || 0;
         if (!(perUnitBonus > 0)) return; // unknown selection — price nothing
         // Cost = bonus * 10000 * multiplier, with the rubberband rule applied
-        // (it prices everything; scarcity/seasons/estate leave ridges alone).
+        // (it prices everything; market/seasons/estate leave ridges alone).
         const unitBase = perUnitBonus * 10000;
         const unit = computeMarketPrice(unitBase, 'cows', currentMarketCtx('cows')).price;
         const ridgeCost = unit * multiplier;

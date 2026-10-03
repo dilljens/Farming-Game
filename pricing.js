@@ -6,7 +6,8 @@
 // so no server or schema changes beyond the rules JSONB column itself.
 //
 // Rules:
-//   scarcity   crop price follows room abundance: avg owned per player maps
+//   market     market-adjusted: crop prices follow room abundance relative
+//              to the baseline and player count: avg owned per player maps
 //              to mult = clamp(2 - avg, 0.5, 2). Nobody owns any => 2x
 //              (land-grab opener); glut => 0.5x floor. Hay/Grain/Fruit only.
 //   seasons    game-year quarters (elapsed / duration) wave crop prices:
@@ -35,7 +36,7 @@
 // The numbers only apply when their checkbox is on: customecon enables the
 // econ numbers, customharvest enables the harvest numbers. Everything off
 // (or no room doc) plays exactly today's game — hosts mix and match freely.
-// Per-rule tuning (stored in rooms.rules.tuning): scarcity/seasons/balance
+// Per-rule tuning (stored in rooms.rules.tuning): market/seasons/balance
 // effect strength 0–200% (100 = classic), rubberband tax/aid 0–30%,
 // estate 0–50% per unit, events max swing 0–50%. Set once at room creation
 // beside the flags. Missing tuning normalizes to classic values, so older
@@ -45,11 +46,11 @@
 // hay only ever discounts. Every other asset may rise above base.
 // Player-to-player trades are negotiated and never adjusted.
 
-export const RULE_KEYS = ['scarcity', 'seasons', 'rubberband', 'estate', 'balance', 'events', 'customecon', 'customharvest'];
+export const RULE_KEYS = ['market', 'seasons', 'rubberband', 'estate', 'balance', 'events', 'customecon', 'customharvest'];
 
 // Assets each rule touches. Cows/ridges: cost is bonus-driven in the modal;
 // rubberband still applies there, the rest leave ridges alone.
-export const SCARCITY_ASSETS = ['hay', 'grain', 'fruit'];
+export const MARKET_ASSETS = ['hay', 'grain', 'fruit'];
 export const SEASON_ASSETS = ['hay', 'grain', 'fruit'];
 export const ESTATE_ASSETS = ['farm', 'harvester', 'tractor'];
 // Auto balancer scope: the three buyable crop properties.
@@ -64,7 +65,10 @@ export const MAX_MULT = 3;
 export const ROUND_TO = 500;
 
 export function normalizeRules(rules) {
-    const src = rules && typeof rules === 'object' ? rules : {};
+    let src = rules && typeof rules === 'object' ? rules : {};
+    // Legacy alias: the market rule used to be called scarcity — old room
+    // docs keep pricing identically.
+    if (src.market !== true && src.scarcity === true) src = { ...src, market: true };
     const out = {};
     for (const key of RULE_KEYS) out[key] = src[key] === true;
     out.econ = normalizeEcon(src.econ);
@@ -121,14 +125,15 @@ export function activeHarvest(rules) {
 // are the tuning. Absent tuning (older rooms) normalizes to defaults, so
 // existing rooms price exactly as before.
 export const DEFAULT_TUNING = {
-    scarcity: 100, seasons: 100, balance: 100,
+    market: 100, seasons: 100, balance: 100,
     rubberband: 10, estate: 10, events: 50
 };
 
 export function normalizeTuning(tuning) {
     const src = tuning && typeof tuning === 'object' ? tuning : {};
     return {
-        scarcity: clampNum(src.scarcity, 0, 200, DEFAULT_TUNING.scarcity),
+        // Legacy alias alongside the market rename.
+        market: clampNum(src.market ?? src.scarcity, 0, 200, DEFAULT_TUNING.market),
         seasons: clampNum(src.seasons, 0, 200, DEFAULT_TUNING.seasons),
         balance: clampNum(src.balance, 0, 200, DEFAULT_TUNING.balance),
         rubberband: clampNum(src.rubberband, 0, 30, DEFAULT_TUNING.rubberband),
@@ -157,14 +162,14 @@ export const SCENARIOS = {
     drought: {
         label: 'Drought',
         blurb: 'Harsh harvests, tight expensive credit. Hoard cash, buy only what pays.',
-        flags: { scarcity: true, seasons: true, customecon: true, customharvest: true },
+        flags: { market: true, seasons: true, customecon: true, customharvest: true },
         econ: { debtCap: 25000, interestPct: 25, downPct: 40 },
         harvest: { hayMidQty: 8, hayMidMult: 1.25, hayHighQty: 15, hayHighMult: 1.5, equipRate: 0.1, equipCap: 3 }
     },
     bull: {
         label: 'Bull Market',
         blurb: 'Boom & bust swings rotate the best crop every season. Chase the boom.',
-        flags: { scarcity: true, balance: true, events: true },
+        flags: { market: true, balance: true, events: true },
         econ: { ...DEFAULT_ECON },
         harvest: { ...DEFAULT_HARVEST }
     },
@@ -262,7 +267,7 @@ export function normalizeHarvest(harvest) {
 }
 
 // avg = room total owned / players. players == 0 => no market, base price.
-export function scarcityMult(avgOwned, players) {
+export function marketMult(avgOwned, players) {
     if (!Number.isFinite(avgOwned) || !Number.isFinite(players) || players <= 0) return 1;
     return Math.min(2, Math.max(0.5, 2 - avgOwned));
 }
@@ -275,7 +280,7 @@ export function seasonIndex(progressFrac) {
     return Math.min(3, Math.floor(f * 4));
 }
 
-// [spring, summer, fall, winter] per crop. Fall harvest gluts, winter scarcity.
+// [spring, summer, fall, winter] per crop. Fall harvest gluts, winter shortage.
 const SEASON_TABLE = {
     hay: [1.0, 0.9, 0.8, 1.25],
     grain: [1.0, 0.9, 0.8, 1.25],
@@ -390,8 +395,8 @@ export function computeMarketPrice(base, asset, ctx = {}) {
         else if (m < 1) notes.push('low demand');
     }
 
-    if (rules.scarcity && SCARCITY_ASSETS.includes(key)) {
-        const m = scaleStrength(scarcityMult(ctx.avgOwned, ctx.players), tuning.scarcity);
+    if (rules.market && MARKET_ASSETS.includes(key)) {
+        const m = scaleStrength(marketMult(ctx.avgOwned, ctx.players), tuning.market);
         mults.push(m);
         if (m > 1) notes.push('scarce');
         else if (m < 1) notes.push('glut');

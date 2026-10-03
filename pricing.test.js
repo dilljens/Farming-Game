@@ -23,23 +23,23 @@ import {
     normalizeTuning,
     rubberbandMult,
     scenarioName,
-    scarcityMult,
+    marketMult,
     seasonIndex,
     seasonMult
 } from './pricing.js';
 
 test('rules default off and ignore unknown keys', () => {
-    const off = { scarcity: false, seasons: false, rubberband: false, estate: false, balance: false, events: false, customecon: false, customharvest: false };
+    const off = { market: false, seasons: false, rubberband: false, estate: false, balance: false, events: false, customecon: false, customharvest: false };
     assert.deepEqual(normalizeRules(undefined), { ...off, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, tuning: DEFAULT_TUNING });
-    assert.deepEqual(normalizeRules({ scarcity: true, bogus: true }), { ...off, scarcity: true, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, tuning: DEFAULT_TUNING });
+    assert.deepEqual(normalizeRules({ market: true, bogus: true }), { ...off, market: true, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, tuning: DEFAULT_TUNING });
 });
 
-test('scarcity: avg 1 => base, glut floors, empty room neutral', () => {
-    assert.equal(scarcityMult(1, 6), 1);
-    assert.equal(scarcityMult(3, 6), 0.5); // avg 3 => 2-3 floored
-    assert.equal(scarcityMult(0, 6), 2); // nobody owns any => land-grab opener
-    assert.equal(scarcityMult(0, 0), 1); // no market yet
-    assert.equal(scarcityMult(NaN, 6), 1);
+test('market adjusted: avg 1 => base, glut floors, empty room neutral', () => {
+    assert.equal(marketMult(1, 6), 1);
+    assert.equal(marketMult(3, 6), 0.5); // avg 3 => 2-3 floored
+    assert.equal(marketMult(0, 6), 2); // nobody owns any => land-grab opener
+    assert.equal(marketMult(0, 0), 1); // no market yet
+    assert.equal(marketMult(NaN, 6), 1);
 });
 
 test('season quarters from progress fraction', () => {
@@ -79,8 +79,8 @@ test('all rules off => base price, no notes', () => {
     assert.deepEqual(r, { price: 20000, mult: 1, notes: [] });
 });
 
-test('scarcity-only example: avg 0.5 => 1.5x, rounded to $500', () => {
-    const r = computeMarketPrice(20000, 'grain', { rules: { scarcity: true }, avgOwned: 0.5, players: 6 });
+test('market-adjusted-only example: avg 0.5 => 1.5x, rounded to $500', () => {
+    const r = computeMarketPrice(20000, 'grain', { rules: { market: true }, avgOwned: 0.5, players: 6 });
     assert.equal(r.mult, 1.5);
     assert.equal(r.price, 30000);
     assert.deepEqual(r.notes, ['scarce']);
@@ -96,7 +96,7 @@ test('combined mults multiply then round: 1.1 tax x 1.1 estate on 25k', () => {
 
 test('combined mult clamps to [0.25, 3]', () => {
     const hi = computeMarketPrice(20000, 'grain', {
-        rules: { scarcity: true, seasons: true, rubberband: true }, avgOwned: 0, players: 2, progress: 0.99, rank: 0
+        rules: { market: true, seasons: true, rubberband: true }, avgOwned: 0, players: 2, progress: 0.99, rank: 0
     });
     // 2 * 1.25 * 1.1 = 2.75 => 55000
     assert.equal(hi.price, 55000);
@@ -187,7 +187,7 @@ test('custom numbers apply only when their checkbox is on', () => {
 test('mix-and-match: every rule combo prices every asset sanely', () => {
     // Buying must never NaN, go negative, or escape the clamps — whatever
     // the host ticks. Hay additionally never rises above base.
-    const flags = ['scarcity', 'seasons', 'rubberband', 'estate', 'balance', 'events'];
+    const flags = ['market', 'seasons', 'rubberband', 'estate', 'balance', 'events'];
     const assets = ['hay', 'grain', 'fruit', 'farm', 'harvester', 'tractor', 'cows'];
     const bases = { hay: 15000 };
     const ctxs = [
@@ -210,9 +210,9 @@ test('mix-and-match: every rule combo prices every asset sanely', () => {
 });
 
 test('hay ceiling: hay never prices above base', () => {
-    // Scarcity opener alone would 2x hay; the ceiling holds it at base.
+    // Market-adjusted opener alone would 2x hay; the ceiling holds it at base.
     const r = computeMarketPrice(15000, 'hay', {
-        rules: { scarcity: true }, avgOwned: 0, players: 4
+        rules: { market: true }, avgOwned: 0, players: 4
     });
     assert.equal(r.mult, 1);
     assert.equal(r.price, 15000);
@@ -256,7 +256,7 @@ test('scenarios: drought is harsher than standard', () => {
 
 test('scenarios: bull market is boom/bust with standard money', () => {
     const bull = applyScenario('bull');
-    assert.ok(bull.events && bull.balance && bull.scarcity, 'bull enables rotation rules');
+    assert.ok(bull.events && bull.balance && bull.market, 'bull enables rotation rules');
     assert.ok(!bull.customecon && !bull.customharvest, 'money/harvest stay standard');
     assert.deepEqual(activeEcon(bull), DEFAULT_ECON);
     assert.deepEqual(activeHarvest(bull), DEFAULT_HARVEST);
@@ -274,7 +274,7 @@ test('scenarios: badge names presets, standard, and custom', () => {
     assert.equal(scenarioName({}), 'Standard');
     assert.equal(scenarioName(applyScenario('drought')), 'Drought');
     assert.equal(scenarioName(applyScenario('bull')), 'Bull Market');
-    assert.equal(scenarioName({ scarcity: true }), 'Custom', 'hand-mixed rules show Custom');
+    assert.equal(scenarioName({ market: true }), 'Custom', 'hand-mixed rules show Custom');
     assert.equal(scenarioName({ scenario: 'bogus' }), 'Standard', 'forged stamp falls back');
     assert.equal(scenarioName({ scenario: 'bull', events: false }), 'Bull Market', 'stamp wins while present');
 });
@@ -330,26 +330,37 @@ test('board max: highest net worth wins, empty/junk is zero', () => {
 test('tuning defaults to classic values and clamps into range', () => {
     assert.deepEqual(normalizeTuning(undefined), DEFAULT_TUNING);
     assert.deepEqual(normalizeTuning({}), DEFAULT_TUNING);
-    const t = normalizeTuning({ scarcity: 200, seasons: 0, balance: 999, rubberband: 30, estate: 50, events: 0 });
-    assert.deepEqual(t, { scarcity: 200, seasons: 0, balance: 200, rubberband: 30, estate: 50, events: 0 });
+    const t = normalizeTuning({ market: 200, seasons: 0, balance: 999, rubberband: 30, estate: 50, events: 0 });
+    assert.deepEqual(t, { market: 200, seasons: 0, balance: 200, rubberband: 30, estate: 50, events: 0 });
     assert.deepEqual(normalizeTuning({ rubberband: -5, estate: 'bogus', events: 51 }),
         { ...DEFAULT_TUNING, rubberband: 0, estate: 10, events: 50 });
 });
 
 test('missing tuning prices exactly like the classic rules (old rooms safe)', () => {
     const ctx = { avgOwned: 0, players: 2, progress: 0.99, rank: 0, myOwned: 2, totals: { hay: 1, grain: 1, fruit: 28 }, roomCode: 'AB' };
-    const flags = { scarcity: true, seasons: true, rubberband: true, estate: true, balance: true, events: true };
+    const flags = { market: true, seasons: true, rubberband: true, estate: true, balance: true, events: true };
     const legacy = computeMarketPrice(20000, 'grain', { ...ctx, rules: flags });
     const tuned = computeMarketPrice(20000, 'grain', { ...ctx, rules: { ...flags, tuning: { ...DEFAULT_TUNING } } });
     assert.deepEqual(tuned, legacy);
 });
 
-test('strength sliders scale scarcity/seasons/balance around 1x', () => {
-    const base = { rules: { scarcity: true }, avgOwned: 0.5, players: 6 }; // classic 1.5x
+test('legacy scarcity rooms keep pricing under the market rename', () => {
+    const legacy = normalizeRules({ scarcity: true, tuning: { scarcity: 200 } });
+    assert.equal(legacy.market, true);
+    assert.equal(legacy.tuning.market, 200);
+    assert.ok(!('scarcity' in legacy), 'old key drops off after aliasing');
+    const price = computeMarketPrice(20000, 'grain', {
+        rules: { scarcity: true, tuning: { scarcity: 200 } }, avgOwned: 0.5, players: 6
+    });
+    assert.equal(price.mult, 2, 'old docs price like market at 200%');
+});
+
+test('strength sliders scale market-adjusted/seasons/balance around 1x', () => {
+    const base = { rules: { market: true }, avgOwned: 0.5, players: 6 }; // classic 1.5x
     assert.equal(computeMarketPrice(20000, 'grain', base).mult, 1.5);
-    const double = computeMarketPrice(20000, 'grain', { ...base, rules: { scarcity: true, tuning: { scarcity: 200 } } });
+    const double = computeMarketPrice(20000, 'grain', { ...base, rules: { market: true, tuning: { market: 200 } } });
     assert.equal(double.mult, 2); // 1 + 0.5*2
-    const off = computeMarketPrice(20000, 'grain', { ...base, rules: { scarcity: true, tuning: { scarcity: 0 } } });
+    const off = computeMarketPrice(20000, 'grain', { ...base, rules: { market: true, tuning: { market: 0 } } });
     assert.deepEqual(off, { price: 20000, mult: 1, notes: [] });
     // Winter hay (classic 1.25x, hay ceiling keeps base) at half strength.
     const winter = computeMarketPrice(15000, 'hay', { rules: { seasons: true, tuning: { seasons: 50 } }, progress: 0.99 });

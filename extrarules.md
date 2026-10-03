@@ -21,9 +21,9 @@ Able to buy in bulk once any one player reaches these net-worth benchmarks (buy 
 
 ## Market Rules (room host picks per room, same prices on every device)
 
-Each rule has its own slider in the Make Room popup — tune how hard it bites. Strength sliders (Scarcity, Seasons, Balance) run 0–200% where 100% is the classic rule; Rubber-band sets the leader tax / trailer aid %; Estate sets the extra cost per owned unit %; Boom&Bust sets the max season swing % (still zero-sum). Economy/Harvest boxes enable the number groups instead of scaling anything.
+Each rule has its own slider in the Make Room popup — tune how hard it bites. Strength sliders (Market Adjusted, Seasons, Balance) run 0–200% where 100% is the classic rule; Rubber-band sets the leader tax / trailer aid %; Estate sets the extra cost per owned unit %; Boom&Bust sets the max season swing % (still zero-sum). Economy/Harvest boxes enable the number groups instead of scaling anything.
 
-- **Scarcity** — Hay/Grain/Fruit price follows room abundance: scarce costs up to 2×, gluts drop to half.
+- **Market Adjusted** — Hay/Grain/Fruit price adjusts to the room and its players: scarce costs up to 2×, gluts drop to half.
 - **Seasons** — crop prices ride the game year: harvest gluts are cheap, winter is dear.
 - **Rubber-band** — room leader pays +10%, trailer pays −10% on everything.
 - **Estate** — your Nth Farm/Harvester/Tractor costs +10% per unit you own.
@@ -40,7 +40,7 @@ A scenario is a shortcut for ticking boxes and typing numbers — same room-doc 
 
 - **Standard** — the classic game: all boxes off, standard money and harvests.
 - **Drought** — harsh harvests (tiers harder to reach, lower mults, weak equipment bonus) plus tight expensive credit ($25k cap, 25% interest, 40% down). Hoard cash, buy only what pays.
-- **Bull Market** — Scarcity + Balance + Boom&Bust with standard money. Swings rotate the best crop every season — chase the boom.
+- **Bull Market** — Market Adjusted + Balance + Boom&Bust with standard money. Swings rotate the best crop every season — chase the boom.
 - **Debt-Free** — no loans at all: 100% down, cash only. Slow and steady wins.
 
 ## Host Settings (set once in the Make Room popup, everyone applies)
