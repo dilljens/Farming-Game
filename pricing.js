@@ -64,6 +64,11 @@ export function normalizeRules(rules) {
     for (const key of RULE_KEYS) out[key] = src[key] === true;
     out.econ = normalizeEcon(src.econ);
     out.harvest = normalizeHarvest(src.harvest);
+    // Scenario stamp survives only when it names a real preset — a stale or
+    // forged name drops off and the badge falls back to Standard/Custom.
+    if (typeof src.scenario === 'string' && Object.prototype.hasOwnProperty.call(SCENARIOS, src.scenario)) {
+        out.scenario = src.scenario;
+    }
     return out;
 }
 
@@ -100,6 +105,59 @@ export function activeEcon(rules) {
 export function activeHarvest(rules) {
     const r = rules && typeof rules === 'object' ? rules : {};
     return r.customharvest === true ? normalizeHarvest(r.harvest) : { ...DEFAULT_HARVEST };
+}
+
+// --- Scenarios: one-tap gameplay presets over the flag + number systems ---
+// A scenario is just flags + tuned numbers, so applying one is identical to
+// ticking the boxes and typing the numbers by hand — same room-doc path,
+// same deterministic pricing, no special cases. Guests need no new sync.
+export const SCENARIOS = {
+    standard: {
+        label: 'Standard',
+        blurb: 'The classic game: $50k loans, 10% interest, 20% down, standard harvests.',
+        flags: {},
+        econ: { ...DEFAULT_ECON },
+        harvest: { ...DEFAULT_HARVEST }
+    },
+    drought: {
+        label: 'Drought',
+        blurb: 'Harsh harvests, tight expensive credit. Hoard cash, buy only what pays.',
+        flags: { scarcity: true, seasons: true, customecon: true, customharvest: true },
+        econ: { debtCap: 25000, interestPct: 25, downPct: 40 },
+        harvest: { hayMidQty: 8, hayMidMult: 1.25, hayHighQty: 15, hayHighMult: 1.5, equipRate: 0.1, equipCap: 3 }
+    },
+    bull: {
+        label: 'Bull Market',
+        blurb: 'Boom & bust swings rotate the best crop every season. Chase the boom.',
+        flags: { scarcity: true, balance: true, events: true },
+        econ: { ...DEFAULT_ECON },
+        harvest: { ...DEFAULT_HARVEST }
+    },
+    debtfree: {
+        label: 'Debt-Free',
+        blurb: 'No loans at all: 100% down, cash only. Slow and steady wins.',
+        flags: { customecon: true },
+        econ: { debtCap: 0, interestPct: 0, downPct: 100 },
+        harvest: { ...DEFAULT_HARVEST }
+    }
+};
+export const SCENARIO_KEYS = Object.keys(SCENARIOS);
+
+// Rules-plus-scenario-name: applying a preset stamps its key; any hand edit
+// clears it (scripts.js deletes it) so the badge falls back to Custom.
+export function applyScenario(key) {
+    const preset = SCENARIOS[key];
+    if (!preset) return normalizeRules({});
+    return normalizeRules({ ...preset.flags, econ: preset.econ, harvest: preset.harvest, scenario: key });
+}
+
+// Display name for the room badge: preset label, Standard when nothing is
+// on, Custom for hand-mixed rules.
+export function scenarioName(rules) {
+    const r = rules && typeof rules === 'object' ? rules : {};
+    if (typeof r.scenario === 'string' && SCENARIOS[r.scenario]) return SCENARIOS[r.scenario].label;
+    const anyFlag = RULE_KEYS.some((k) => r[k] === true);
+    return anyFlag ? 'Custom' : SCENARIOS.standard.label;
 }
 
 export function normalizeHarvest(harvest) {

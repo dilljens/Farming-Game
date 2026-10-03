@@ -7,6 +7,7 @@ import {
     DEFAULT_HARVEST,
     activeEcon,
     activeHarvest,
+    applyScenario,
     balanceMult,
     computeMarketPrice,
     estateMult,
@@ -16,6 +17,7 @@ import {
     normalizeHarvest,
     normalizeRules,
     rubberbandMult,
+    scenarioName,
     scarcityMult,
     seasonIndex,
     seasonMult
@@ -215,4 +217,59 @@ test('hay ceiling: hay never prices above base', () => {
     });
     assert.ok(cheap.mult < 1);
     assert.ok(cheap.price < 15000);
+});
+
+test('scenarios: every preset normalizes to playable rules', () => {
+    for (const key of ['standard', 'drought', 'bull', 'debtfree']) {
+        const r = applyScenario(key);
+        assert.equal(r.scenario, key, `${key} stamps its name`);
+        // Every scenario prices every asset sanely for a mid-size room.
+        for (const asset of ['hay', 'grain', 'fruit', 'farm', 'cows', 'harvester', 'tractor']) {
+            const out = computeMarketPrice(20000, asset, {
+                rules: r, players: 4, rank: 1, progress: 0.3,
+                avgOwned: 2, myOwned: 2, totals: { hay: 8, grain: 8, fruit: 8 }, roomCode: 'AB'
+            });
+            assert.ok(Number.isFinite(out.price) && out.price > 0, `${key}/${asset} sane price`);
+        }
+    }
+    assert.equal(applyScenario('bogus').scenario, undefined, 'unknown preset => no stamp');
+});
+
+test('scenarios: drought is harsher than standard', () => {
+    const dry = applyScenario('drought');
+    const econ = activeEcon(dry);
+    const harvest = activeHarvest(dry);
+    assert.ok(dry.customecon && dry.customharvest, 'drought enables both number groups');
+    assert.ok(econ.debtCap < DEFAULT_ECON.debtCap, 'tighter credit');
+    assert.ok(econ.interestPct > DEFAULT_ECON.interestPct, 'pricier debt');
+    assert.ok(econ.downPct > DEFAULT_ECON.downPct, 'bigger down payments');
+    assert.ok(harvest.hayMidQty > DEFAULT_HARVEST.hayMidQty, 'mid tier harder to reach');
+    assert.ok(harvest.hayMidMult < DEFAULT_HARVEST.hayMidMult, 'mid tier pays less');
+    assert.ok(harvest.hayHighMult < DEFAULT_HARVEST.hayHighMult, 'high tier pays less');
+    assert.ok(harvest.equipRate < DEFAULT_HARVEST.equipRate, 'weaker equipment bonus');
+});
+
+test('scenarios: bull market is boom/bust with standard money', () => {
+    const bull = applyScenario('bull');
+    assert.ok(bull.events && bull.balance && bull.scarcity, 'bull enables rotation rules');
+    assert.ok(!bull.customecon && !bull.customharvest, 'money/harvest stay standard');
+    assert.deepEqual(activeEcon(bull), DEFAULT_ECON);
+    assert.deepEqual(activeHarvest(bull), DEFAULT_HARVEST);
+});
+
+test('scenarios: debt-free means cash only', () => {
+    const free = applyScenario('debtfree');
+    const econ = activeEcon(free);
+    assert.equal(econ.debtCap, 0, 'no borrowing room');
+    assert.equal(econ.downPct, 100, 'everything is full down payment');
+});
+
+test('scenarios: badge names presets, standard, and custom', () => {
+    assert.equal(scenarioName(undefined), 'Standard');
+    assert.equal(scenarioName({}), 'Standard');
+    assert.equal(scenarioName(applyScenario('drought')), 'Drought');
+    assert.equal(scenarioName(applyScenario('bull')), 'Bull Market');
+    assert.equal(scenarioName({ scarcity: true }), 'Custom', 'hand-mixed rules show Custom');
+    assert.equal(scenarioName({ scenario: 'bogus' }), 'Standard', 'forged stamp falls back');
+    assert.equal(scenarioName({ scenario: 'bull', events: false }), 'Bull Market', 'stamp wins while present');
 });

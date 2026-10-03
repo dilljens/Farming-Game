@@ -107,6 +107,14 @@
                           <li><strong>Harvest</strong> — enables the host's harvest numbers below (unticked = standard hay tiers and equipment bonuses).</li>
                         </ul>
                         <p class="mt-2">Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted. All eight boxes mix and match.</p>
+                        <h4 class="font-semibold mt-4">Scenarios (host one-tap presets)</h4>
+                        <ul class="list-disc list-inside">
+                          <li><strong>Standard</strong> — the classic game: all boxes off, standard money and harvests.</li>
+                          <li><strong>Drought</strong> — harsh harvests plus tight expensive credit ($25k cap, 25% interest, 40% down).</li>
+                          <li><strong>Bull Market</strong> — Scarcity + Balance + Boom&amp;Bust with standard money; the best crop rotates every season.</li>
+                          <li><strong>Debt-Free</strong> — no loans: 100% down, cash only.</li>
+                        </ul>
+                        <p class="mt-2">A scenario just ticks the boxes and fills the numbers below — hand-tweaking anything after flips the badge to Custom.</p>
                         <h4 class="font-semibold mt-4">Host settings (host tunes per room, everyone applies)</h4>
                         <ul class="list-disc list-inside">
                           <li><strong>Economy</strong> numbers (need Economy ☑) — max loan $, loan interest %, minimum down-payment %.</li>
@@ -270,9 +278,15 @@
         <div id="hostControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
           <button id="hostResetRoomBtn" type="button" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-bold">Reset Room (host)</button>
           <button id="hostResetGameBtn" type="button" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs">Reset My Game</button>
+          <span class="uppercase tracking-widest text-zinc-400 text-xs">Scenario:</span>
+          <button type="button" data-scenario="standard" class="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 rounded-full text-xs" title="The classic game">Standard</button>
+          <button type="button" data-scenario="drought" class="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 rounded-full text-xs" title="Harsh harvests, tight expensive credit">Drought</button>
+          <button type="button" data-scenario="bull" class="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 rounded-full text-xs" title="Boom & bust swings rotate the best crop">Bull Market</button>
+          <button type="button" data-scenario="debtfree" class="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 rounded-full text-xs" title="No loans: 100% down, cash only">Debt-Free</button>
         </div>
         <div id="marketRules" class="mt-2 flex flex-wrap items-center justify-center gap-3 text-xs text-zinc-600" title="Market rules — the host picks, everyone sees. Same prices on every device.">
           <span class="uppercase tracking-widest text-zinc-400">Market:</span>
+          <span id="scenarioBadge" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-semibold" title="Active gameplay scenario">Standard</span>
           <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="scarcity"> Scarcity</label>
           <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="seasons"> Seasons</label>
           <label class="inline-flex items-center gap-1"><input type="checkbox" data-rule="rubberband"> Rubber-band</label>
@@ -737,7 +751,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20260907k"></script>
+<script type="module" src="scripts.js?v=20260907l"></script>
 
 </body>
 </html>

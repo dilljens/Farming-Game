@@ -30,6 +30,15 @@ Able to buy 2x of an OTB after one person reaches a networth of $250,000.
 
 Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted.
 
+## Scenarios (host one-tap presets, badge shows for everyone)
+
+A scenario is a shortcut for ticking boxes and typing numbers — same room-doc path, so guests follow automatically. Hand-tweaking anything after a preset flips the badge to Custom.
+
+- **Standard** — the classic game: all boxes off, standard money and harvests.
+- **Drought** — harsh harvests (tiers harder to reach, lower mults, weak equipment bonus) plus tight expensive credit ($25k cap, 25% interest, 40% down). Hoard cash, buy only what pays.
+- **Bull Market** — Scarcity + Balance + Boom&Bust with standard money. Swings rotate the best crop every season — chase the boom.
+- **Debt-Free** — no loans at all: 100% down, cash only. Slow and steady wins.
+
 ## Host Settings (host tunes per room, everyone applies)
 
 All boxes mix and match. Each number group applies only while its box is ticked — unticked groups play standard values.

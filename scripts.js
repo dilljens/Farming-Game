@@ -18,7 +18,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907e';
-import { activeEcon, activeHarvest, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules } from './pricing.js?v=20260907g';
+import { activeEcon, activeHarvest, applyScenario, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, scenarioName } from './pricing.js?v=20260907h';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -305,10 +305,9 @@ function startRoomDocListener() {
         updateRoomUi();
         // Market rules ride the room doc: host writes, everyone applies.
         currentRoomRules = normalizeRules(data.rules);
-        document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
-            el.checked = !!currentRoomRules[el.dataset.rule];
-        });
+        syncRuleCheckboxes();
         try { syncHostSettingsInputs(); } catch {}
+        try { updateScenarioBadge(); } catch {}
         refreshPriceCells();
         // Number settings (econ/harvest) also ride the room doc: re-derive
         // interest, buy bounds, and roll payouts so guests follow the host.
@@ -1653,6 +1652,26 @@ document.getElementById('becomeHostBtn')?.addEventListener('click', async () => 
 // client (including the host) applies them via the room-doc listener.
 // Number settings (econ/harvest) ride alongside — spread them back in so a
 // checkbox flip never resets the host's tuned numbers.
+// Any hand edit clears the scenario stamp (back to Standard/Custom badge).
+function syncRuleCheckboxes() {
+    document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
+        el.checked = !!currentRoomRules[el.dataset.rule];
+    });
+}
+
+function updateScenarioBadge() {
+    const badge = document.getElementById('scenarioBadge');
+    if (badge) badge.textContent = scenarioName(currentRoomRules);
+    document.querySelectorAll('#hostControls [data-scenario]').forEach((btn) => {
+        const active = currentRoomRules.scenario === btn.dataset.scenario ||
+            (!currentRoomRules.scenario && btn.dataset.scenario === 'standard' && scenarioName(currentRoomRules) === 'Standard');
+        btn.classList.toggle('bg-emerald-500', !!active);
+        btn.classList.toggle('text-white', !!active);
+        btn.classList.toggle('bg-zinc-200', !active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+}
+
 document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
     el.addEventListener('change', async () => {
         if (!currentRoomCode || !isHost) {
@@ -1668,9 +1687,29 @@ document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
             await setDoc(doc(db, 'rooms', currentRoomCode), { rules: currentRoomRules }, { merge: true });
         } catch (e) { console.error('rule save failed', e); }
         try { syncHostSettingsInputs(); } catch {}
+        updateScenarioBadge();
         refreshPriceCells();
         // Flag flips can retune the economy/harvest too (Economy/Harvest
         // checkboxes gate the number groups), so re-derive everything.
+        try { updateTotals(); } catch {}
+        try { populateRollTable(); } catch {}
+    });
+});
+
+// Scenarios: one-tap presets for the host. Applying one is identical to
+// ticking the boxes + typing the numbers by hand — same room-doc path, so
+// guests follow with no new sync.
+document.querySelectorAll('#hostControls [data-scenario]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+        if (!currentRoomCode || !isHost) return;
+        currentRoomRules = applyScenario(btn.dataset.scenario);
+        try {
+            await setDoc(doc(db, 'rooms', currentRoomCode), { rules: currentRoomRules }, { merge: true });
+        } catch (e) { console.error('scenario save failed', e); }
+        syncRuleCheckboxes();
+        try { syncHostSettingsInputs(); } catch {}
+        updateScenarioBadge();
+        refreshPriceCells();
         try { updateTotals(); } catch {}
         try { populateRollTable(); } catch {}
     });
@@ -1728,6 +1767,9 @@ document.querySelectorAll('#hostSettings input[data-setting]').forEach((el) => {
         }
         const tuned = readHostSettingsInputs();
         const rules = { ...currentRoomRules, econ: tuned.econ, harvest: tuned.harvest };
+        // Hand-tuned numbers are no longer the preset — drop the stamp so
+        // the badge falls back to Custom.
+        delete rules.scenario;
         document.querySelectorAll('#marketRules input[data-rule]').forEach((box) => {
             rules[box.dataset.rule] = !!box.checked;
         });
@@ -3437,8 +3479,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     const cashUndoCell = document.getElementById('cashUndoCell');
     if (cashUndoCell) {
         cashUndoCell.addEventListener('click', undoLastAction);
-    }
-    const loanUndoCell = document.getElementById('loanUndoCell');
+    }    const loanUndoCell = document.getElementById('loanUndoCell');
     if (loanUndoCell) {
         loanUndoCell.addEventListener('click', undoLastAction);
     }
