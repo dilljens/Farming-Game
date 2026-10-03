@@ -525,22 +525,26 @@ input[type="range"]::-moz-range-thumb {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    flex-wrap: wrap;
+    gap: 8px 12px;
 }
 
 .lb-view-toggle {
     display: inline-flex;
+    flex-shrink: 0;
     border: 1px solid #d1d5db;
     border-radius: 9999px;
     overflow: hidden;
 }
 
 .lb-toggle-btn {
-    padding: 8px 20px;
-    font-size: 13px;
+    padding: 6px 12px;
+    font-size: 11px;
     font-weight: 700;
     line-height: 1.4;
     min-height: 44px;
+    white-space: nowrap;
+    flex-shrink: 0;
     background-color: #f9fafb;
     color: #374151;
     border: 0;
