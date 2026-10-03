@@ -18,7 +18,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907e';
-import { computeMarketPrice, normalizeRules } from './pricing.js?v=20260907g';
+import { activeEcon, activeHarvest, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules } from './pricing.js?v=20260907g';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -165,6 +165,9 @@ function updateRoomUi() {
     }
     if (hostBadge) hostBadge.classList.toggle('hidden', !isHost || !currentRoomCode);
     if (hostControls) hostControls.classList.toggle('hidden', !isHost || !currentRoomCode);
+    // Number tuning (economy + harvest) is host-only, like the rule flags.
+    const hostSettings = document.getElementById('hostSettings');
+    if (hostSettings) hostSettings.classList.toggle('hidden', !isHost || !currentRoomCode);
     // Guests in a room get a visible way to become the host (take over / make the game theirs)
     const guestControls = document.getElementById('guestControls');
     if (guestControls) guestControls.classList.toggle('hidden', isHost || !currentRoomCode);
@@ -305,7 +308,12 @@ function startRoomDocListener() {
         document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
             el.checked = !!currentRoomRules[el.dataset.rule];
         });
+        try { syncHostSettingsInputs(); } catch {}
         refreshPriceCells();
+        // Number settings (econ/harvest) also ride the room doc: re-derive
+        // interest, buy bounds, and roll payouts so guests follow the host.
+        try { updateTotals(); } catch {}
+        try { populateRollTable(); } catch {}
         // host reset signal — mirror imposterirl resetGameForNewRound via room doc
         const resetAt = data.lastHostResetAt;
         if (resetAt && !isHost) {
@@ -452,8 +460,8 @@ function handleTransaction(inputId, transactionClass, totalClass) {
         if (transactionClass.includes('loan') && newValue > 0) {
             updateTotals();
             const currentLoanTotal = getCurrentLoanTotal();
-            if (currentLoanTotal + newValue > 50000) {
-                // alert('Loan transaction would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + newValue.toLocaleString() + '.');
+            if (currentLoanTotal + newValue > debtCap()) {
+                // alert('Loan transaction would exceed the debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + newValue.toLocaleString() + '.');
                 inputElement.value = '';
                 return;
             }
@@ -558,8 +566,8 @@ function addLoanTransactionValue(amount) {
     if (numericValue > 0) {
         updateTotals();
         const currentLoanTotal = getCurrentLoanTotal();
-        if (currentLoanTotal + numericValue > 50000) {
-            console.warn('Loan transaction would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + numericValue.toLocaleString() + '.');
+        if (currentLoanTotal + numericValue > debtCap()) {
+            console.warn('Loan transaction would exceed the debt limit (cap $' + debtCap().toLocaleString() + '). Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + numericValue.toLocaleString() + '.');
             return; // Silently fail for programmatic calls
         }
     }
@@ -750,18 +758,17 @@ function getCurrentLoanTotal() {
     return loanTotalCell ? (parseTransactionValue(loanTotalCell.textContent) || 0) : 0;
 }
 
-const MAX_DEBT = 50000;
-
-// Buying power: cash on hand plus unused debt room. A down payment may be
-// funded partly by fresh borrowing (auto-added as debt at confirm), so the
-// slider range and Buy-button gating use effective cash, not cash alone.
+// Debt ceiling, interest, and minimum down payment are host settings on the
+// room doc (see roomEcon()); debtCap() is the live value, not a constant.
 function getBuyBounds(totalCost) {
     const total = Number(totalCost) || 0;
     const cash = getCurrentCashTotal();
-    const debtRoom = Math.max(0, MAX_DEBT - getCurrentLoanTotal());
+    const cap = debtCap();
+    const debtRoom = Math.max(0, cap - getCurrentLoanTotal());
     const effective = cash + debtRoom;
-    // Minimum down payment: max of 20% of cost or amount needed to keep loan <= $50,000
-    let min = Math.ceil(Math.max(total * 0.2, Math.max(0, total - debtRoom)) / 100) * 100;
+    const downPct = roomEcon().downPct / 100;
+    // Minimum down payment: max of host-set % of cost or amount needed to keep loan <= cap
+    let min = Math.ceil(Math.max(total * downPct, Math.max(0, total - debtRoom)) / 100) * 100;
     min = Math.min(min, total);
     let max;
     let feasible;
@@ -931,8 +938,8 @@ function updateInterest() {
     // Convert to float and handle potential NaN if the text can't be converted
     const loanTotalValue = parseFloat(loanTotalText) || 0;
     
-    // Calculate interest (10% of loan total), whole dollars — the game has no cents.
-    const interestValue = Math.round(loanTotalValue * 0.1);
+    // Calculate interest (host-set % of loan total), whole dollars — the game has no cents.
+    const interestValue = Math.round(loanTotalValue * (roomEcon().interestPct / 100));
 
     // Update the interest cell with formatted value
     const interestCell = document.querySelector('.interest');
@@ -1259,6 +1266,19 @@ function updateProgressChart(data) {
 // stay negotiated and are never adjusted.
 let currentRoomRules = {};
 
+// Host-tunable numbers ride the same room doc as the rule flags. Each group
+// only applies when its checkbox is on (customecon/customharvest) —
+// otherwise today's defaults, so unticked rooms play the standard game.
+function roomEcon() {
+    return activeEcon(currentRoomRules);
+}
+function roomHarvest() {
+    return activeHarvest(currentRoomRules);
+}
+function debtCap() {
+    return roomEcon().debtCap;
+}
+
 function marketBoard() {
     const rows = Array.isArray(latestLeaderboardData) ? latestLeaderboardData : [];
     if (currentRoomCode) return rows.filter((d) => (d.roomCode || '').toUpperCase() === currentRoomCode);
@@ -1277,6 +1297,14 @@ function currentMarketCtx(asset) {
     const key = String(asset || '').toLowerCase();
     let total = 0;
     for (const d of board) total += Number(d[key] ?? 0) || 0;
+    // Room crop totals feed the always-on demand balancer (same snapshot on
+    // every client, so every device prices identically).
+    const cropTotals = {};
+    for (const k of ['hay', 'grain', 'fruit']) {
+        let t = 0;
+        for (const d of board) t += Number(d[k] ?? 0) || 0;
+        cropTotals[k] = t;
+    }
     const myOwned = parseInt(document.querySelector(`.qty-${key}`)?.textContent) || 0;
     return {
         rules: normalizeRules(currentRoomRules),
@@ -1284,7 +1312,9 @@ function currentMarketCtx(asset) {
         rank: idx < 0 ? undefined : idx,
         progress,
         avgOwned: players > 0 ? total / players : NaN,
-        myOwned
+        myOwned,
+        totals: cropTotals,
+        roomCode: currentRoomCode || ''
     };
 }
 
@@ -1547,13 +1577,15 @@ document.getElementById('becomeHostBtn')?.addEventListener('click', async () => 
 
 // Market rules: host-only checkboxes, persisted on the room doc; every
 // client (including the host) applies them via the room-doc listener.
+// Number settings (econ/harvest) ride alongside — spread them back in so a
+// checkbox flip never resets the host's tuned numbers.
 document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
     el.addEventListener('change', async () => {
         if (!currentRoomCode || !isHost) {
             el.checked = !!currentRoomRules[el.dataset.rule];
             return;
         }
-        const rules = {};
+        const rules = { econ: currentRoomRules.econ, harvest: currentRoomRules.harvest };
         document.querySelectorAll('#marketRules input[data-rule]').forEach((box) => {
             rules[box.dataset.rule] = !!box.checked;
         });
@@ -1561,7 +1593,78 @@ document.querySelectorAll('#marketRules input[data-rule]').forEach((el) => {
         try {
             await setDoc(doc(db, 'rooms', currentRoomCode), { rules: currentRoomRules }, { merge: true });
         } catch (e) { console.error('rule save failed', e); }
+        try { syncHostSettingsInputs(); } catch {}
         refreshPriceCells();
+        // Flag flips can retune the economy/harvest too (Economy/Harvest
+        // checkboxes gate the number groups), so re-derive everything.
+        try { updateTotals(); } catch {}
+        try { populateRollTable(); } catch {}
+    });
+});
+
+// Host number settings (economy + harvest tuning): host-only inputs under
+// the rule checkboxes, persisted on the same room doc. updateRoomUi shows
+// the panel to the host only; every client applies the numbers via the
+// room-doc listener.
+const HOST_SETTING_FIELDS = [
+    ['econ', 'debtCap'], ['econ', 'interestPct'], ['econ', 'downPct'],
+    ['harvest', 'hayMidQty'], ['harvest', 'hayMidMult'],
+    ['harvest', 'hayHighQty'], ['harvest', 'hayHighMult'],
+    ['harvest', 'equipRate'], ['harvest', 'equipCap']
+];
+
+function hostSettingInput(group, key) {
+    return document.querySelector(`#hostSettings input[data-setting="${group}.${key}"]`);
+}
+
+function syncHostSettingsInputs() {
+    // Show the host's stored draft (clamped), and grey the group out while
+    // its checkbox is off — unticked groups play standard values.
+    const econ = normalizeEcon(currentRoomRules.econ);
+    const harvest = normalizeHarvest(currentRoomRules.harvest);
+    const groups = { econ, harvest };
+    const enabled = { econ: !!currentRoomRules.customecon, harvest: !!currentRoomRules.customharvest };
+    for (const [group, key] of HOST_SETTING_FIELDS) {
+        const el = hostSettingInput(group, key);
+        if (!el) continue;
+        // Equipment rate shows as a friendly percent (20 = +20%/unit).
+        el.value = (group === 'harvest' && key === 'equipRate') ? Math.round(groups[group][key] * 100) : groups[group][key];
+        el.disabled = !enabled[group];
+    }
+}
+
+function readHostSettingsInputs() {
+    const out = { econ: {}, harvest: {} };
+    for (const [group, key] of HOST_SETTING_FIELDS) {
+        const el = hostSettingInput(group, key);
+        if (!el) continue;
+        // Cleared input means 0 (typed 0 works too); normalizeRules clamps
+        // each field into its valid range from there.
+        const n = el.value === '' ? 0 : Number(el.value);
+        out[group][key] = (group === 'harvest' && key === 'equipRate') ? n / 100 : n;
+    }
+    return out;
+}
+
+document.querySelectorAll('#hostSettings input[data-setting]').forEach((el) => {
+    el.addEventListener('change', async () => {
+        if (!currentRoomCode || !isHost) {
+            syncHostSettingsInputs();
+            return;
+        }
+        const tuned = readHostSettingsInputs();
+        const rules = { ...currentRoomRules, econ: tuned.econ, harvest: tuned.harvest };
+        document.querySelectorAll('#marketRules input[data-rule]').forEach((box) => {
+            rules[box.dataset.rule] = !!box.checked;
+        });
+        currentRoomRules = normalizeRules(rules);
+        try {
+            await setDoc(doc(db, 'rooms', currentRoomCode), { rules: currentRoomRules }, { merge: true });
+        } catch (e) { console.error('settings save failed', e); }
+        syncHostSettingsInputs(); // show clamped values
+        refreshPriceCells();
+        updateTotals();
+        populateRollTable();
     });
 });
 
@@ -1764,8 +1867,10 @@ function applyLocalTrade(trade, role) {
         if (price !== 0) addCashTransactionValue(-price);
         cell.textContent = String(cur + qty);
     } else {
-        // seller: ensure enough qty locally, otherwise clamp
-        if (cur < qty) return false;
+        // seller: bonus cows aren't sellable stock — only qty above the
+        // ridge-bonus floor can go (farm cows and everything else: all of it).
+        const floor = isRanchCowsAsset(asset) ? ranchBonusFloor() : 0;
+        if (cur - floor < qty) return false;
         cell.textContent = String(cur - qty);
         if (price !== 0) addCashTransactionValue(price);
     }
@@ -1889,9 +1994,11 @@ async function acceptTrade(tradeId) {
             return;
         }
     } else {
-        // Seller accepting a buy offer: must hold the qty right now.
-        if (myAssetQty(t.asset) < Number(t.qty || 0)) {
-            alert(`You only have ${myAssetQty(t.asset)} ${t.asset}, need ${t.qty}`);
+        // Seller accepting a buy offer: must hold the qty right now, not
+        // counting ridge-bonus cows (they're earned property, never sellable).
+        const available = isRanchCowsAsset(t.asset) ? sellableRanchCows() : myAssetQty(t.asset);
+        if (available < Number(t.qty || 0)) {
+            alert(`You only have ${available} sellable ${t.asset}, need ${t.qty}`);
             return;
         }
     }
@@ -2033,13 +2140,20 @@ function updateCustomSellPreview() {
     const price = Math.round(parseFloat(String(document.getElementById('customSellPrice')?.value || '0').replace(/,/g, '')) || 0);
     const opt = buyerSel?.selectedOptions?.[0];
     const buyerName = opt?.dataset?.username || opt?.textContent?.split(' (')[0] || 'buyer';
+    // Ranch cows: only qty above the ridge-bonus floor can be sold.
+    const locked = isRanchCowsAsset(asset) ? ranchBonusFloor() : 0;
     const myQty = myAssetQty(asset);
-    preview.innerHTML = `You: ${asset} ${myQty} → ${myQty - qty} after sale<br>${buyerName} pays $${price.toLocaleString()} for ${qty} × ${asset}`;
+    const sellable = Math.max(0, myQty - locked);
+    preview.innerHTML = `You: ${asset} ${myQty} → ${myQty - qty} after sale` +
+        (locked > 0 ? ` (${locked} ridge bonus locked)` : '') +
+        `<br>${buyerName} pays $${price.toLocaleString()} for ${qty} × ${asset}`;
     let err = '';
     if (!buyerSel || !buyerSel.value) err = 'Pick a buyer.';
     else if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
     else if (!Number.isFinite(price) || price < 0) err = 'Price must be ≥0.';
-    else if (myQty < qty) err = `You only have ${myQty} ${asset}.`;
+    else if (sellable < qty) err = locked > 0
+        ? `Only ${sellable} sellable (${locked} ridge bonus locked).`
+        : `You only have ${myQty} ${asset}.`;
     if (hint) { hint.textContent = err; hint.classList.toggle('hidden', !err); }
     const confirm = document.getElementById('confirmCustomSell');
     if (confirm) confirm.disabled = !!err;
@@ -2065,7 +2179,8 @@ async function performCustomSell() {
     if (document.getElementById('confirmCustomSell')?.disabled) return;
     if (!buyerUid) { if (hint){hint.textContent='Buyer not found (no UID).'; hint.classList.remove('hidden');} return; }
     if (buyerUid === auth.currentUser?.uid) { if (hint){hint.textContent='Cannot sell to yourself.'; hint.classList.remove('hidden');} return; }
-    if (myAssetQty(asset) < qty) { if (hint){hint.textContent=`You only have ${myAssetQty(asset)} ${asset}.`; hint.classList.remove('hidden');} return; }
+    const sellableNow = isRanchCowsAsset(asset) ? sellableRanchCows() : myAssetQty(asset);
+    if (sellableNow < qty) { if (hint){hint.textContent=`Only ${sellableNow} sellable ${asset} (ridge bonus can't be sold).`; hint.classList.remove('hidden');} return; }
     // Roomless trades go through the shared lobby room (created on demand).
     const tRoom = tradeRoomCode();
     if (!currentRoomCode) {
@@ -2230,12 +2345,14 @@ function numberWithCommasAndDecimals(x) {
 //console.log(numberWithCommasAndDecimals('1107.1')); // Should log '1,107'
 
 function populateRollTable() {
-    // Define the base monetary values for each roll and item type
+    // Define the base monetary values for each roll and item type.
+    // Rolls are inverted on purpose: roll 1 pays best, roll 6 pays worst
+    // (1<->6, 2<->5, 3<->4), so low dice are the exciting ones.
     const baseValues = {
-      Hay: [400, 600, 1000, 1500, 2200, 3000],
-      Grain: [800, 1500, 2500, 3800, 5300, 7000],
-      Fruit: [2000, 3500, 6000, 9000, 13000, 17500],
-      Cows: [1400, 2000, 2800, 3800, 5000, 7500]
+      Hay: [3000, 2200, 1500, 1000, 600, 400],
+      Grain: [7000, 5300, 3800, 2500, 1500, 800],
+      Fruit: [17500, 13000, 9000, 6000, 3500, 2000],
+      Cows: [7500, 5000, 3800, 2800, 2000, 1400]
     };
     
     // Get the quantities from the contenteditable cells
@@ -2257,13 +2374,16 @@ function populateRollTable() {
       const assetType = row.cells[0].textContent.split(' ')[0]; // Get the asset type (Hay, Grain, etc.) without suffix
       const quantity = quantities[assetType] || 0; // Get the quantity for this asset type
 
+            // Hay tiers + equipment bonuses are host settings (room doc);
+            // defaults reproduce today's game (5+ => 1.5x, 10+ => 2x, +20%/unit cap 5).
+            const harvestRules = roomHarvest();
             let multiplier = 1;
             if (assetType === 'Hay') {
-                if (quantity >= 10) multiplier = 2;
-                else if (quantity >= 5) multiplier = 1.5;
-                multiplier += Math.min(quantities.Tractor, 5) * 0.2;
+                if (quantity >= harvestRules.hayHighQty) multiplier = harvestRules.hayHighMult;
+                else if (quantity >= harvestRules.hayMidQty) multiplier = harvestRules.hayMidMult;
+                multiplier += Math.min(quantities.Tractor, harvestRules.equipCap) * harvestRules.equipRate;
             } else if (assetType === 'Grain') {
-                multiplier += Math.min(quantities.Harvester, 5) * 0.2;
+                multiplier += Math.min(quantities.Harvester, harvestRules.equipCap) * harvestRules.equipRate;
             }
 
             // Manual multiplier from tapping
@@ -2300,6 +2420,11 @@ function populateRollTable() {
   // Attach an input event listener to each editable quantity cell to update the roll table on change
   document.querySelectorAll('#spreadsheet .editable').forEach(cell => {
     cell.addEventListener('input', populateRollTable);
+  });
+  // Hand-typed ranch cows snap back to the ridge-bonus floor on blur
+  // (clamping mid-keystroke would fight the edit, so wait for blur).
+  document.querySelector('.qty-cows')?.addEventListener('blur', () => {
+      clampRanchCowsToFloor();
   });
 
 // Call this function to populate the roll table when the page loads or when quantities update
@@ -2388,6 +2513,42 @@ function getRanchRidgeBonusFromSelections(selections) {
     }, 0);
 }
 
+// Ridge bonus cows are earned property, not sellable stock: the ranch-cows
+// cell (and every path that lowers it) may never drop below this floor.
+// Bonus cows settle last — only qty above the floor can be sold or stepped
+// away. `data` may still be seeding on first paint, so default to 0.
+function ranchBonusFloor() {
+    try {
+        return Math.max(0, Math.floor(Number(data.ranchRidgeBonus) || 0));
+    } catch { return 0; }
+}
+
+function ranchCowsQty() {
+    return parseInt(document.querySelector('.qty-cows')?.textContent || '0', 10) || 0;
+}
+
+function sellableRanchCows() {
+    return Math.max(0, ranchCowsQty() - ranchBonusFloor());
+}
+
+// Snap the ranch-cows cell back up to the floor (used after hand-edits and
+// legacy loads that predate the floor). No-op when already above it.
+function clampRanchCowsToFloor() {
+    const cell = document.querySelector('.qty-cows');
+    if (!cell) return;
+    const floor = ranchBonusFloor();
+    if ((parseInt(cell.textContent || '0', 10) || 0) < floor) {
+        cell.textContent = String(floor);
+        calculateNet();
+        populateRollTable();
+        saveQuantitiesToLocalStorage();
+    }
+}
+
+function isRanchCowsAsset(asset) {
+    return String(asset || '').toLowerCase() === 'cows';
+}
+
 // Ridges are multi-buy property: selections hold OWNED COUNTS, not flags.
 // Legacy saves stored booleans (true = owned once) — coerced on load.
 function normalizeRidgeCounts(saved) {
@@ -2417,12 +2578,19 @@ function updateUpgradedRidgesDisplay() {
 
 function saveQuantitiesToLocalStorage() {
     // Update quantities from the page
+    const cowsCell = document.querySelector('.qty-cows');
+    // Never persist ranch cows below the ridge-bonus floor. Don't fight an
+    // in-progress hand-edit (blur snaps it back); just save the floor value.
+    const cowsQty = Math.max(parseInt(cowsCell?.textContent || '0', 10) || 0, ranchBonusFloor());
+    if (cowsCell && document.activeElement !== cowsCell && cowsCell.textContent !== String(cowsQty)) {
+        cowsCell.textContent = String(cowsQty);
+    }
     data.qty = {
         Hay: parseInt(document.querySelector('.qty-hay').textContent) || 0,
         Grain: parseInt(document.querySelector('.qty-grain').textContent) || 0,
         Fruit: parseInt(document.querySelector('.qty-fruit').textContent) || 0,
         Farm: parseInt(document.querySelector('.qty-farm').textContent) || 0,
-        Cows: parseInt(document.querySelector('.qty-cows').textContent) || 0,
+        Cows: cowsQty,
         Harvester: parseInt(document.querySelector('.qty-harvester').textContent) || 0,
         Tractor: parseInt(document.querySelector('.qty-tractor').textContent) || 0
     };
@@ -2476,6 +2644,15 @@ function loadFromLocalStorage() {
         data.ranchRidgeBonus = typeof loadedData.ranchRidgeBonus === 'number'
             ? loadedData.ranchRidgeBonus
             : getRanchRidgeBonusFromSelections(data.ranchRidgeSelections);
+        // Pre-floor saves may hold fewer cows than the owned bonus (bonus
+        // cows were sellable then). Restore the floor — the bonus is paid
+        // property and can never be sold away.
+        const floor = ranchBonusFloor();
+        if ((Number(data.qty.Cows) || 0) < floor) {
+            data.qty.Cows = floor;
+            document.querySelector('.qty-cows').textContent = String(floor);
+            localStorage.setItem('farmingGameData', JSON.stringify(data));
+        }
 
         // Ridge ownership restores from data; the menu shows owned counts
         // (refreshed by updateUpgradedRidgesDisplay below).
@@ -3289,7 +3466,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 if (this.classList.contains('qty-plus')) {
                     currentQty++;
                 } else if (this.classList.contains('qty-minus')) {
-                    currentQty = Math.max(0, currentQty - 1); // Don't go below 0
+                    // Ranch cows stop at the ridge-bonus floor (bonus cows
+                    // aren't sellable/steppable stock); everything else at 0.
+                    const floor = targetClass === 'qty-cows' ? ranchBonusFloor() : 0;
+                    currentQty = Math.max(floor, currentQty - 1);
                 }
                 qtyCell.textContent = currentQty;
                 calculateNet();
@@ -3398,7 +3578,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         downPaymentSlider.value = chosen;
 
         const shortfall = Math.max(0, chosen - bounds.cash);
-        const loanOk = currentLoanTotal + Math.round(currentTotalCost - chosen) + shortfall <= MAX_DEBT;
+        const loanOk = currentLoanTotal + Math.round(currentTotalCost - chosen) + shortfall <= debtCap();
         setButtonDisabled(confirmBuy, !(bounds.feasible && loanOk));
 
         const hint = document.getElementById('buyCashHint');
@@ -3420,7 +3600,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 hint.classList.add(...errorClasses);
                 hint.classList.remove('hidden');
             } else {
-                hint.textContent = 'Loan would exceed the $50,000 debt limit';
+                hint.textContent = `Loan would exceed the $${debtCap().toLocaleString()} debt limit`;
                 hint.classList.remove(...infoClasses);
                 hint.classList.add(...errorClasses);
                 hint.classList.remove('hidden');
@@ -3448,7 +3628,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         document.getElementById('doublePurchaseCheckbox').checked = isDoublePurchase;
         if (asset === 'cows') {
             ridgeDiv.classList.remove('hidden');
-            ridgeSelect.value = 'none'; // Reset to none
+            ridgeSelect.value = 'ahtanum'; // Default to the first named ridge
             updateRidgeCost(isDoublePurchase ? 2 : 1);
             // Unaffordable double falls back to single. Probes the already-
             // scaled cost (probing x2 again would price 4x and overcharge).
@@ -3475,9 +3655,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
     function updateRidgeCost(multiplier = 1) {
         const ridgeSelect = document.getElementById('ridgeSelect');
         const selectedRidge = ridgeSelect.value;
-        // Expand Ridge counts as a 1-cow unit; named ridges grant their bonus
-        // per unit bought (ridges are repeat-buyable).
-        const perUnitBonus = selectedRidge === 'none' ? 1 : (RIDGE_BONUS_BY_KEY[selectedRidge] || 0);
+        // Named ridges grant their bonus per unit bought, and are
+        // repeat-buyable: each purchase adds more of the same ridge.
+        const perUnitBonus = RIDGE_BONUS_BY_KEY[selectedRidge] || 0;
+        if (!(perUnitBonus > 0)) return; // unknown selection — price nothing
         // Cost = bonus * 10000 * multiplier, with the rubberband rule applied
         // (it prices everything; scarcity/seasons/estate leave ridges alone).
         const unitBase = perUnitBonus * 10000;
@@ -3485,9 +3666,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const ridgeCost = unit * multiplier;
         currentCost = ridgeCost;
         currentTotalCost = ridgeCost;
-        const ridgeName = selectedRidge === 'none'
-            ? 'Expand Ridge (+1)'
-            : (ridgeSelect.options[ridgeSelect.selectedIndex]?.text || selectedRidge);
+        const ridgeName = ridgeSelect.options[ridgeSelect.selectedIndex]?.text || selectedRidge;
         document.getElementById('assetInfo').textContent = `Buying ${multiplier}x ${ridgeName} at $${unit.toLocaleString()} each.` + marketNote('cows');
         document.getElementById('totalCost').textContent = ridgeCost.toLocaleString();
 
@@ -3565,9 +3744,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const shortfall = Math.max(0, downPayment - currentCash);
         const currentLoanTotal = getCurrentLoanTotal();
 
-        // Check if loan would exceed $50,000 debt limit (remainder + borrowed down payment)
-        if (currentLoanTotal + loanAmount + shortfall > MAX_DEBT) {
-            // alert('Loan would exceed the $50,000 debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + loanAmount.toLocaleString() + '.');
+        // Check if loan would exceed the debt limit (remainder + borrowed down payment)
+        if (currentLoanTotal + loanAmount + shortfall > debtCap()) {
+            // alert('Loan would exceed the debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + loanAmount.toLocaleString() + '.');
             return;
         }
 
@@ -3588,29 +3767,16 @@ window.addEventListener('DOMContentLoaded', (event) => {
         if (currentAsset === 'cows') {
             const ridgeSelect = document.getElementById('ridgeSelect');
             const selectedRidge = ridgeSelect.value;
-
-            if (selectedRidge === 'none') {
-                // Expand Ridge (+1): only allowed after owning at least one ridge
-                const hasAnyRidge = (data.ranchRidgeBonus || 0) > 0;
-                if (!hasAnyRidge) {
-                    // alert('You must buy a ridge before purchasing an expansion.');
-                    return;
-                }
-
-                qtyIncrease = 1;
-                ridgeMsg = ' (Expand Ridge (+1))';
-            } else {
-                // Ridges are repeat-buyable property: each purchase adds
-                // more of them (and their bonus cows), charged per unit.
-                // qtyIncrease is single-unit here; the shared multiplier
-                // below scales it for 2x, matching currentTotalCost.
-                const perUnitBonus = RIDGE_BONUS_BY_KEY[selectedRidge] || 0;
-                if (!(perUnitBonus > 0)) return;
-                qtyIncrease = perUnitBonus;
-                ridgeMsg = ` (${ridgeSelect.options[ridgeSelect.selectedIndex].text} x${isDoublePurchase ? 2 : 1})`;
-                pendingRidgeSelection = selectedRidge;
-                pendingRidgeCount = isDoublePurchase ? 2 : 1;
-            }
+            // Ridges are repeat-buyable property: each purchase adds more of
+            // the same ridge (and its bonus cows), charged per unit.
+            // qtyIncrease is single-unit here; the shared multiplier below
+            // scales it for 2x, matching currentTotalCost.
+            const perUnitBonus = RIDGE_BONUS_BY_KEY[selectedRidge] || 0;
+            if (!(perUnitBonus > 0)) return;
+            qtyIncrease = perUnitBonus;
+            ridgeMsg = ` (${ridgeSelect.options[ridgeSelect.selectedIndex].text} x${isDoublePurchase ? 2 : 1})`;
+            pendingRidgeSelection = selectedRidge;
+            pendingRidgeCount = isDoublePurchase ? 2 : 1;
         }
 
         qtyIncrease *= (isDoublePurchase ? 2 : 1);

@@ -25,6 +25,17 @@ Able to buy 2x of an OTB after one person reaches a networth of $250,000.
 - **Seasons** — crop prices ride the game year: harvest gluts are cheap, winter is dear.
 - **Rubber-band** — room leader pays +10%, trailer pays −10% on everything.
 - **Estate** — your Nth Farm/Harvester/Tractor costs +10% per unit you own.
+- **Balance** — the crop everyone piles into gets dear (up to 2×), the ignored ones go cheap (down to half). Hay (base $15,000) only ever discounts, never rises above base.
+- **Boom&Bust** — each season every crop swings up to ±50%, normalized zero-sum (one crop's boom is funded by the others' busts) so the best crop rotates. Same swings on every device.
+
+Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted.
+
+## Host Settings (host tunes per room, everyone applies)
+
+All boxes mix and match. Each number group applies only while its box is ticked — unticked groups play standard values.
+
+- **Economy** ☑ — max loan $ (default 50,000), loan interest % (10), minimum down-payment % (20).
+- **Harvest** ☑ — hay bonus tiers: mid qty ×mult (5 → 1.5×), high qty ×mult (10 → 2×); equipment bonus +%/unit and unit cap (20%, 5).
 
 Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted.
 
