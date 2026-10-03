@@ -871,12 +871,28 @@ function setButtonDisabled(button, disabled) {
 function updateActionButtonStates() {
     const cashTotal = getCurrentCashTotal();
 
-    // Pay Interest
+    // Pay Interest — when cash can't cover it, swap in the borrow button:
+    // same expense plus $1,000 extra on the loan.
     const payInterestBtn = document.getElementById('payInterestBtn');
+    const borrowInterestBtn = document.getElementById('borrowInterestBtn');
     if (payInterestBtn) {
         const interest = getCurrentInterestValue();
+        const short = interest > 0 && cashTotal < interest;
+        payInterestBtn.classList.toggle('hidden', short && !!borrowInterestBtn);
         const disabled = !(interest > 0) || cashTotal < interest;
         setButtonDisabled(payInterestBtn, disabled);
+        if (borrowInterestBtn) {
+            borrowInterestBtn.classList.toggle('hidden', !short);
+            if (short) {
+                const loan = interest + EXPENSE_LOAN_EXTRA;
+                const capOk = getCurrentLoanTotal() + loan <= debtCap();
+                borrowInterestBtn.textContent = `Borrow $${interest.toLocaleString()} + $1k`;
+                borrowInterestBtn.title = capOk
+                    ? `Pays $${interest.toLocaleString()} interest now; loan $${loan.toLocaleString()}, you keep $1,000 cash`
+                    : `Debt cap $${debtCap().toLocaleString()} blocks this loan`;
+                setButtonDisabled(borrowInterestBtn, !capOk);
+            }
+        }
     }
 
     // Pay Per Acre
@@ -3452,6 +3468,17 @@ document.getElementById('confirmPayPerAcre').addEventListener('click', (event) =
     hidePayPerAcreModal();
 });
 
+// Event listener for the borrow-for-expense button (pay mode, cash short:
+// borrows the expense plus $1,000 extra, pays, closes on success)
+document.getElementById('borrowPayPerAcreBtn')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    const selectedButton = document.querySelector('.pay-acre-button.selected');
+    if (!selectedButton || isGainMode) return;
+    const totalPayment = (getAcresForType(selectedButton.getAttribute('data-pay-type')) || 0)
+        * (parseFloat(selectedButton.getAttribute('data-per-acre')) || 0);
+    if (borrowForExpense(totalPayment, 'Per-acre pay')) hidePayPerAcreModal();
+});
+
 // Event listener for the cancel pay per acre button
 document.getElementById('cancelPayPerAcre').addEventListener('click', (event) => {
     event.preventDefault();
@@ -3501,6 +3528,30 @@ function updatePayPerAcreDisplay() {
     }
     if (paymentDisplay) {
         paymentDisplay.textContent = `Total Payment: $${totalPayment.toLocaleString()}`;
+    }
+
+    // Short on cash in pay mode? Offer the borrow button: full expense plus
+    // $1,000 extra on the loan. Hidden in gain mode and when cash covers.
+    const borrowBtn = document.getElementById('borrowPayPerAcreBtn');
+    const borrowHint = document.getElementById('borrowPayPerAcreHint');
+    if (borrowBtn) {
+        updateTotals();
+        const loan = totalPayment + EXPENSE_LOAN_EXTRA;
+        const show = !isGainMode && totalPayment > 0 && getCurrentCashTotal() < totalPayment;
+        borrowBtn.classList.toggle('hidden', !show);
+        borrowBtn.classList.toggle('inline-flex', show);
+        if (borrowHint) borrowHint.classList.toggle('hidden', true);
+        if (show) {
+            const capOk = getCurrentLoanTotal() + loan <= debtCap();
+            borrowBtn.textContent = `Borrow $${totalPayment.toLocaleString()} + $1,000 extra (loan $${loan.toLocaleString()})`;
+            setButtonDisabled(borrowBtn, !capOk);
+            if (borrowHint) {
+                borrowHint.textContent = capOk
+                    ? 'Pays the expense now; you keep $1,000 cash.'
+                    : `Debt cap $${debtCap().toLocaleString()} blocks this loan.`;
+                borrowHint.classList.toggle('hidden', false);
+            }
+        }
     }
 }
 
@@ -3607,6 +3658,32 @@ function performPayPerAcre() {
     
     // Update button states after transaction
     updateActionButtonStates();
+}
+
+// Short on cash for a mandatory expense (per-acre pay, interest)? Borrow
+// the full expense plus $1,000 extra: the loan lands as cash first (like
+// the buy flow's shortfall) so the cash floor can't block the payment.
+// Net effect: +$1,000 cash, +(expense + $1,000) loan. Blocked by the debt
+// cap. One undoable action covering every leg.
+const EXPENSE_LOAN_EXTRA = 1000;
+function borrowForExpense(expense, label) {
+    const amount = Math.round(Number(expense) || 0);
+    if (!(amount > 0)) return false;
+    updateTotals();
+    const loan = amount + EXPENSE_LOAN_EXTRA;
+    if (getCurrentLoanTotal() + loan > debtCap()) return false;
+    const cashBefore = ledgerLen('cash');
+    const loanBefore = ledgerLen('loan');
+    addLoanTransactionValue(loan);
+    addCashTransactionValue(loan);
+    addCashTransactionValue(-amount);
+    pushUndoAction({
+        label: `${label} $${amount.toLocaleString()} — borrowed $${loan.toLocaleString()}`,
+        cash: ledgerLen('cash') - cashBefore,
+        loan: ledgerLen('loan') - loanBefore
+    });
+    updateActionButtonStates();
+    return true;
 }
 
 async function resetRoomForHost() {
@@ -3985,6 +4062,13 @@ window.addEventListener('DOMContentLoaded', (event) => {
             updateActionButtonStates();
         });
     }
+
+    // Borrow-for-expense button (shown instead of Pay Interest when cash is
+    // short: borrows the interest plus $1,000 extra, then pays it).
+    document.getElementById('borrowInterestBtn')?.addEventListener('click', (event) => {
+        event.preventDefault();
+        borrowForExpense(getCurrentInterestValue(), 'Pay interest');
+    });
 
     // Add event listeners for quantity +/- buttons
     document.querySelectorAll('.qty-btn').forEach(button => {
