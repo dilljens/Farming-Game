@@ -97,21 +97,20 @@
 
                         <h4 class="font-semibold mt-4">Market Rules (host picks per room)</h4>
                         <ul class="list-disc list-inside">
-                          <li><strong>Market Adjusted</strong> — Hay/Grain/Fruit price adjusts to the room and its players: scarce costs up to 2×, gluts drop to half.</li>
-                          <li><strong>Seasons</strong> — crop prices ride the game year: harvest gluts are cheap, winter is dear.</li>
+                          <li><strong>Seasons</strong> — prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.</li>
                           <li><strong>Rubber-band</strong> — room leader pays +10%, trailer pays −10% on everything.</li>
                           <li><strong>Estate</strong> — your Nth Farm/Harvester/Tractor costs +10% per unit you own.</li>
                           <li><strong>Balance</strong> — the crop everyone piles into gets dear (up to 2×), the ignored ones go cheap (down to half). Hay (base $15,000) only ever discounts, never rises above base.</li>
-                          <li><strong>Boom&amp;Bust</strong> — each season every crop swings up to ±50%, normalized zero-sum so the best crop rotates. Same swings on every device.</li>
+                          <li><strong>Boom&amp;Bust</strong> — each crop walks its own random path: every room harvest moves a crop ±1%, zero-sum across crops and capped at ±50%. Same walk on every device.</li>
                           <li><strong>Economy</strong> — enables the host's economy numbers below (unticked = standard $50k loan cap, 10% interest, 20% min down).</li>
                           <li><strong>Harvest</strong> — enables the host's harvest numbers below (unticked = standard hay tiers and equipment bonuses).</li>
                         </ul>
-                        <p class="mt-2">Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted — the Buy/Sell to player buttons pop up the trade forms. All eight boxes mix and match.</p>
+                        <p class="mt-2">Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted — the Buy/Sell to player buttons pop up the trade forms. All seven boxes mix and match.</p>
                         <h4 class="font-semibold mt-4">Scenarios (one-tap presets in the Make Room popup)</h4>
                         <ul class="list-disc list-inside">
                           <li><strong>Standard</strong> — the classic game: all boxes off, standard money and harvests.</li>
                           <li><strong>Drought</strong> — harsh harvests plus tight expensive credit ($25k cap, 25% interest, 40% down).</li>
-                          <li><strong>Bull Market</strong> — Market Adjusted + Balance + Boom&amp;Bust with standard money; the best crop rotates every season.</li>
+                          <li><strong>Bull Market</strong> — Balance + Boom&amp;Bust with standard money; the best crop rotates as the walks move.</li>
                           <li><strong>Debt-Free</strong> — no loans: 100% down, cash only.</li>
                         </ul>
                         <p class="mt-2">A scenario just fills the popup form — hand-tweaking anything after flips the badge to Custom.</p>
@@ -747,7 +746,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20260907q"></script>
+<script type="module" src="scripts.js?v=20260907r"></script>
 
 </body>
 </html>

@@ -6,12 +6,11 @@
 // so no server or schema changes beyond the rules JSONB column itself.
 //
 // Rules:
-//   market     market-adjusted: crop prices follow room abundance relative
-//              to the baseline and player count: avg owned per player maps
-//              to mult = clamp(2 - avg, 0.5, 2). Nobody owns any => 2x
-//              (land-grab opener); glut => 0.5x floor. Hay/Grain/Fruit only.
-//   seasons    game-year quarters (elapsed / duration) wave crop prices:
-//              harvest is cheap, winter is dear. Hay/Grain/Fruit only.
+//   seasons    harvest-clock wave: prices start at base and walk up and down
+//              as the room's total harvests grow. Each crop rides its own
+//              cycle whose length is a multiple of the player count
+//              (hay 4x, grain 5x, fruit 6x players), so the dear crop keeps
+//              rotating. Peaks at +25%, never below base. Hay/Grain/Fruit.
 //   rubberband room leader pays 1.1x, trailer pays 0.9x. Everything.
 //   estate     your Nth unit costs base * (1 + 0.1 * owned).
 //              Farm/Harvester/Tractor only (ridges already scale per unit).
@@ -19,10 +18,12 @@
 //              total room crop holdings vs an even split maps to
 //              mult = clamp(share * 3, 0.5, 2). The crop everyone piles into
 //              gets dear (up to 2x); the ignored ones go cheap (down to 0.5x).
-//   events     boom & bust: each game season every crop swings up to ±50%,
+//   events     boom & bust: each crop walks its own random path — every
+//              room harvest moves a crop ±1%. Walk deviations are
 //              normalized zero-sum (swings add to 0) so the meta rotates
-//              instead of inflating. Deterministic per room + season — same
-//              prices on every device, no server round trip.
+//              instead of inflating, capped at ±50%. Deterministic per
+//              room + harvest count — same prices on every device, no
+//              server round trip.
 // Hay never prices above base: its final multiplier always clamps to
 // [0.25, 1], so hay only ever discounts. Every other asset may rise above
 // base. (Standing hay property — applies no matter which rules are on.)
@@ -36,21 +37,20 @@
 // The numbers only apply when their checkbox is on: customecon enables the
 // econ numbers, customharvest enables the harvest numbers. Everything off
 // (or no room doc) plays exactly today's game — hosts mix and match freely.
-// Per-rule tuning (stored in rooms.rules.tuning): market/seasons/balance
-// effect strength 0–200% (100 = classic), rubberband tax/aid 0–30%,
-// estate 0–50% per unit, events max swing 0–50%. Set once at room creation
-// beside the flags. Missing tuning normalizes to classic values, so older
-// rooms price exactly as before.
+// Per-rule tuning (stored in rooms.rules.tuning): seasons/balance effect
+// strength 0–200% (100 = classic), rubberband tax/aid 0–30%, estate 0–50%
+// per unit, events max swing 0–50%. Set once at room creation beside the
+// flags. Missing tuning normalizes to classic values, so older rooms price
+// exactly as before. (Retired keys like market/scarcity are ignored.)
 // Combined multiplier clamps to [0.25, 3], then rounds to the nearest $500.
 // Hay never prices above base: its final multiplier clamps to [0.25, 1], so
 // hay only ever discounts. Every other asset may rise above base.
 // Player-to-player trades are negotiated and never adjusted.
 
-export const RULE_KEYS = ['market', 'seasons', 'rubberband', 'estate', 'balance', 'events', 'customecon', 'customharvest'];
+export const RULE_KEYS = ['seasons', 'rubberband', 'estate', 'balance', 'events', 'customecon', 'customharvest'];
 
 // Assets each rule touches. Cows/ridges: cost is bonus-driven in the modal;
 // rubberband still applies there, the rest leave ridges alone.
-export const MARKET_ASSETS = ['hay', 'grain', 'fruit'];
 export const SEASON_ASSETS = ['hay', 'grain', 'fruit'];
 export const ESTATE_ASSETS = ['farm', 'harvester', 'tractor'];
 // Auto balancer scope: the three buyable crop properties.
@@ -65,10 +65,9 @@ export const MAX_MULT = 3;
 export const ROUND_TO = 500;
 
 export function normalizeRules(rules) {
-    let src = rules && typeof rules === 'object' ? rules : {};
-    // Legacy alias: the market rule used to be called scarcity — old room
-    // docs keep pricing identically.
-    if (src.market !== true && src.scarcity === true) src = { ...src, market: true };
+    // Retired keys (market/scarcity) fall off here: only RULE_KEYS survive,
+    // so old rooms simply stop applying the removed rule.
+    const src = rules && typeof rules === 'object' ? rules : {};
     const out = {};
     for (const key of RULE_KEYS) out[key] = src[key] === true;
     out.econ = normalizeEcon(src.econ);
@@ -121,19 +120,17 @@ export function activeHarvest(rules) {
 // Strengths scale how hard a rule bites (100 = the classic rule, 200 =
 // double, 0 = no effect without unticking). Rubber-band sets the leader
 // tax / trailer aid %, estate sets the % per owned unit, events sets the
-// max season swing %. Economy/Harvest have no slider — their numbers below
+// max walk swing %. Economy/Harvest have no slider — their numbers below
 // are the tuning. Absent tuning (older rooms) normalizes to defaults, so
 // existing rooms price exactly as before.
 export const DEFAULT_TUNING = {
-    market: 100, seasons: 100, balance: 100,
+    seasons: 100, balance: 100,
     rubberband: 10, estate: 10, events: 50
 };
 
 export function normalizeTuning(tuning) {
     const src = tuning && typeof tuning === 'object' ? tuning : {};
     return {
-        // Legacy alias alongside the market rename.
-        market: clampNum(src.market ?? src.scarcity, 0, 200, DEFAULT_TUNING.market),
         seasons: clampNum(src.seasons, 0, 200, DEFAULT_TUNING.seasons),
         balance: clampNum(src.balance, 0, 200, DEFAULT_TUNING.balance),
         rubberband: clampNum(src.rubberband, 0, 30, DEFAULT_TUNING.rubberband),
@@ -162,14 +159,14 @@ export const SCENARIOS = {
     drought: {
         label: 'Drought',
         blurb: 'Harsh harvests, tight expensive credit. Hoard cash, buy only what pays.',
-        flags: { market: true, seasons: true, customecon: true, customharvest: true },
+        flags: { seasons: true, customecon: true, customharvest: true },
         econ: { debtCap: 25000, interestPct: 25, downPct: 40 },
         harvest: { hayMidQty: 8, hayMidMult: 1.25, hayHighQty: 15, hayHighMult: 1.5, equipRate: 0.1, equipCap: 3 }
     },
     bull: {
         label: 'Bull Market',
-        blurb: 'Boom & bust swings rotate the best crop every season. Chase the boom.',
-        flags: { market: true, balance: true, events: true },
+        blurb: 'Boom & bust walks rotate the best crop every harvest. Chase the boom.',
+        flags: { balance: true, events: true },
         econ: { ...DEFAULT_ECON },
         harvest: { ...DEFAULT_HARVEST }
     },
@@ -266,31 +263,31 @@ export function normalizeHarvest(harvest) {
     };
 }
 
-// avg = room total owned / players. players == 0 => no market, base price.
-export function marketMult(avgOwned, players) {
-    if (!Number.isFinite(avgOwned) || !Number.isFinite(players) || players <= 0) return 1;
-    return Math.min(2, Math.max(0.5, 2 - avgOwned));
+// Harvest clock: total room crop holdings stand in for how many harvests
+// have happened (same leaderboard snapshot on every device, so every
+// device walks the same wave).
+export function harvestClock(totals) {
+    const t = totals && typeof totals === 'object' ? totals : {};
+    return ['hay', 'grain', 'fruit'].reduce((s, k) => s + Math.max(0, Number(t[k]) || 0), 0);
 }
 
-// Game-year quarter from progress fraction 0..1 (clamped).
-export function seasonIndex(progressFrac) {
-    const f = Number(progressFrac);
-    if (!Number.isFinite(f) || f <= 0) return 0;
-    if (f >= 1) return 3;
-    return Math.min(3, Math.floor(f * 4));
-}
+// Seasons ride the harvest clock, not the wall clock. Each crop walks a
+// triangle wave from base up to +25% and back: a full up-down cycle takes
+// 4/5/6 harvests per player (hay/grain/fruit), so bigger rooms swing
+// slower and the dear crop rotates. Pure integer-ratio arithmetic — no
+// transcendentals — so every device lands on the exact same price.
+export const SEASON_PERIODS = { hay: 4, grain: 5, fruit: 6 }; // x players
+export const SEASON_AMPLITUDE = 0.25;
 
-// [spring, summer, fall, winter] per crop. Fall harvest gluts, winter shortage.
-const SEASON_TABLE = {
-    hay: [1.0, 0.9, 0.8, 1.25],
-    grain: [1.0, 0.9, 0.8, 1.25],
-    fruit: [1.1, 0.85, 1.0, 1.3]
-};
-
-export function seasonMult(asset, season) {
-    const row = SEASON_TABLE[String(asset || '').toLowerCase()];
-    if (!row || !Number.isInteger(season) || season < 0 || season > 3) return 1;
-    return row[season];
+export function seasonMult(asset, harvests, players) {
+    const key = String(asset || '').toLowerCase();
+    const per = SEASON_PERIODS[key];
+    const P = Math.floor(Number(players) || 0);
+    const H = Math.max(0, Number(harvests) || 0);
+    if (!per || P <= 0) return 1;
+    const L = per * P;
+    const f = (H % L) / L;
+    return 1 + SEASON_AMPLITUDE * (1 - Math.abs(2 * f - 1));
 }
 
 // rank = 0-based position in networth-desc board. Unknown/solo => neutral.
@@ -308,9 +305,15 @@ export function estateMult(owned, pct = DEFAULT_TUNING.estate) {
     return 1 + (clampNum(pct, 0, 50, DEFAULT_TUNING.estate) / 100) * n;
 }
 
-// --- Boom & bust: deterministic per room + season, zero-sum across crops ---
+// --- Boom & bust: per-crop random walks stepped by room harvests ---
+// Each crop walks its own path: every room harvest multiplies that crop by
+// 1.01 or 0.99, the sign drawn deterministically from (room, crop, harvest
+// index) so every device walks the same path. Walk deviations are
+// mean-subtracted so the three sum to ~0 (one crop's boom is funded by the
+// others' busts) and rescaled — not clipped — past the cap.
 export const EVENT_ASSETS = ['hay', 'grain', 'fruit'];
-export const EVENT_MAX_SWING = 0.5; // no crop ever swings more than ±50%
+export const EVENT_MAX_SWING = 0.5; // no crop ever walks past ±50%
+export const EVENT_STEP = 0.01; // each harvest moves a crop ±1%
 
 function hashSeed(str) {
     let h = 1779033703 ^ str.length;
@@ -321,24 +324,31 @@ function hashSeed(str) {
     return h >>> 0;
 }
 
-function mulberry32(seed) {
-    let a = seed >>> 0;
-    return function () {
-        a |= 0; a = (a + 0x6D2B79F5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
+// One deterministic ±1 step per (room, crop, harvest index): same inputs
+// => same step on every device.
+function walkStep(room, cropIdx, i) {
+    return (hashSeed(`${room}|${cropIdx}|${i}`) & 1) ? 1 : -1;
 }
 
-// Raw draws in [-swing, +swing], mean-subtracted so the three swings sum
-// to ~0 (one crop's boom is funded by the others' busts). If centering
-// pushes a swing past ±swing, everything rescales (not clips) so the
-// zero-sum survives and the cap still holds.
-export function eventSwings(roomCode, season, maxSwing = EVENT_MAX_SWING) {
+// Raw walk multiplier for one crop after H room harvests. Non-crops and
+// negative counts stay at 1.
+export function eventWalk(asset, roomCode, harvests) {
+    const idx = EVENT_ASSETS.indexOf(String(asset || '').toLowerCase());
+    if (idx < 0) return 1;
+    const H = Math.max(0, Math.floor(Number(harvests) || 0));
+    const room = String(roomCode || '').toUpperCase();
+    let mult = 1;
+    for (let i = 1; i <= H; i++) mult *= 1 + EVENT_STEP * walkStep(room, idx, i);
+    return mult;
+}
+
+// Raw walk deviations in [-swing, +swing], mean-subtracted so the three
+// swings sum to ~0. If centering pushes a swing past ±swing, everything
+// rescales (not clips) so the zero-sum survives and the cap still holds.
+export function eventSwings(roomCode, harvests, maxSwing = EVENT_MAX_SWING) {
     const cap = clampNum(maxSwing, 0, EVENT_MAX_SWING, EVENT_MAX_SWING);
-    const rand = mulberry32(hashSeed(`${String(roomCode || '').toUpperCase()}|${Number(season) || 0}`));
-    const raw = [0, 1, 2].map(() => (rand() * 2 - 1) * cap);
+    if (cap === 0) return [0, 0, 0]; // silenced rule: flat, no walk to run
+    const raw = EVENT_ASSETS.map((_, i) => eventWalk(EVENT_ASSETS[i], roomCode, harvests) - 1);
     const mean = (raw[0] + raw[1] + raw[2]) / 3;
     const centered = raw.map((v) => v - mean);
     const peak = Math.max(Math.abs(centered[0]), Math.abs(centered[1]), Math.abs(centered[2]));
@@ -347,11 +357,11 @@ export function eventSwings(roomCode, season, maxSwing = EVENT_MAX_SWING) {
     return centered.map((v) => v * k);
 }
 
-export function eventMult(asset, roomCode, season, maxSwing = EVENT_MAX_SWING) {
+export function eventMult(asset, roomCode, harvests, maxSwing = EVENT_MAX_SWING) {
     const key = String(asset || '').toLowerCase();
     const i = EVENT_ASSETS.indexOf(key);
     if (i < 0) return 1;
-    return 1 + eventSwings(roomCode, season, maxSwing)[i];
+    return 1 + eventSwings(roomCode, harvests, maxSwing)[i];
 }
 
 // Demand balancer: the crop everyone piles into gets dear, the ignored
@@ -374,9 +384,10 @@ function roundPrice(value) {
     return Math.max(ROUND_TO, Math.round(value / ROUND_TO) * ROUND_TO);
 }
 
-// ctx: { rules, avgOwned, myOwned, rank, players, progress, totals, roomCode }.
-// totals = { hay, grain, fruit } room holdings; feeds the demand balancer.
-// roomCode + progress season feed boom & bust (deterministic per room).
+// ctx: { rules, avgOwned, myOwned, rank, players, totals, roomCode }.
+// totals = { hay, grain, fruit } room holdings; feeds the demand balancer,
+// the seasons harvest clock, and the boom & bust random walks
+// (deterministic per room + harvest count).
 // Returns { price, mult, notes } — notes is a short human breakdown for the modal.
 export function computeMarketPrice(base, asset, ctx = {}) {
     const rules = normalizeRules(ctx.rules);
@@ -395,17 +406,10 @@ export function computeMarketPrice(base, asset, ctx = {}) {
         else if (m < 1) notes.push('low demand');
     }
 
-    if (rules.market && MARKET_ASSETS.includes(key)) {
-        const m = scaleStrength(marketMult(ctx.avgOwned, ctx.players), tuning.market);
-        mults.push(m);
-        if (m > 1) notes.push('scarce');
-        else if (m < 1) notes.push('glut');
-    }
     if (rules.seasons && SEASON_ASSETS.includes(key)) {
-        const season = seasonIndex(ctx.progress);
-        const m = scaleStrength(seasonMult(key, season), tuning.seasons);
+        const m = scaleStrength(seasonMult(key, harvestClock(ctx.totals), ctx.players), tuning.seasons);
         mults.push(m);
-        if (m !== 1) notes.push(['spring', 'summer', 'fall', 'winter'][season]);
+        if (m > 1.01) notes.push('high season');
     }
     if (rules.rubberband) {
         const m = rubberbandMult(ctx.rank, ctx.players, tuning.rubberband);
@@ -419,7 +423,7 @@ export function computeMarketPrice(base, asset, ctx = {}) {
         if (m > 1) notes.push(`estate x${m.toFixed(1)}`);
     }
     if (rules.events && EVENT_ASSETS.includes(key)) {
-        let m = eventMult(key, ctx.roomCode, seasonIndex(ctx.progress), tuning.events / 100);
+        let m = eventMult(key, ctx.roomCode, harvestClock(ctx.totals), tuning.events / 100);
         // Hay discounts only — a hay boom clips at base, busts still bite.
         if (key === 'hay') m = Math.min(m, HAY_MAX_MULT);
         mults.push(m);

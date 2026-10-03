@@ -17,47 +17,73 @@ import {
     estateMult,
     eventMult,
     eventSwings,
+    eventWalk,
+    harvestClock,
     normalizeEcon,
     normalizeHarvest,
     normalizeRules,
     normalizeTuning,
     rubberbandMult,
     scenarioName,
-    marketMult,
-    seasonIndex,
     seasonMult
 } from './pricing.js';
 
 test('rules default off and ignore unknown keys', () => {
-    const off = { market: false, seasons: false, rubberband: false, estate: false, balance: false, events: false, customecon: false, customharvest: false };
+    const off = { seasons: false, rubberband: false, estate: false, balance: false, events: false, customecon: false, customharvest: false };
     assert.deepEqual(normalizeRules(undefined), { ...off, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, tuning: DEFAULT_TUNING });
-    assert.deepEqual(normalizeRules({ market: true, bogus: true }), { ...off, market: true, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, tuning: DEFAULT_TUNING });
+    assert.deepEqual(normalizeRules({ seasons: true, bogus: true }), { ...off, seasons: true, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, tuning: DEFAULT_TUNING });
 });
 
-test('market adjusted: avg 1 => base, glut floors, empty room neutral', () => {
-    assert.equal(marketMult(1, 6), 1);
-    assert.equal(marketMult(3, 6), 0.5); // avg 3 => 2-3 floored
-    assert.equal(marketMult(0, 6), 2); // nobody owns any => land-grab opener
-    assert.equal(marketMult(0, 0), 1); // no market yet
-    assert.equal(marketMult(NaN, 6), 1);
+test('retired market/scarcity keys are ignored, old rooms just lose the rule', () => {
+    const off = { seasons: false, rubberband: false, estate: false, balance: false, events: false, customecon: false, customharvest: false };
+    assert.deepEqual(normalizeRules({ market: true, scarcity: true, tuning: { market: 200, scarcity: 200 } }),
+        { ...off, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, tuning: DEFAULT_TUNING });
 });
 
-test('season quarters from progress fraction', () => {
-    assert.equal(seasonIndex(0), 0);
-    assert.equal(seasonIndex(0.24), 0);
-    assert.equal(seasonIndex(0.25), 1);
-    assert.equal(seasonIndex(0.5), 2);
-    assert.equal(seasonIndex(0.99), 3);
-    assert.equal(seasonIndex(5), 3);
-    assert.equal(seasonIndex(-1), 0);
+test('seasons: harvest clock starts normal, walks up and back, scales with players', () => {
+    for (const crop of ['hay', 'grain', 'fruit']) {
+        assert.equal(seasonMult(crop, 0, 4), 1, `${crop} starts at base`);
+        assert.equal(seasonMult(crop, 0, 0), 1, 'no players => no market');
+        assert.equal(seasonMult(crop, -5, 4), 1, 'negative harvests clamp to start');
+    }
+    assert.equal(seasonMult('tractor', 10, 4), 1, 'equipment untouched');
+    assert.equal(seasonMult('weeds', 10, 4), 1, 'unknown asset neutral');
+    assert.equal(harvestClock({ hay: 2, grain: 3, fruit: 5 }), 10);
+    assert.equal(harvestClock({}), 0);
+    assert.equal(harvestClock(undefined), 0);
+    // Full cycle returns to normal: hay period is 4 harvests per player.
+    assert.equal(seasonMult('hay', 16, 4), 1, 'hay cycle is 16 harvests for 4 players');
+    assert.equal(seasonMult('hay', 8, 4), 1.25, 'mid-cycle peak');
+    // Bigger rooms swing slower: same harvest count, earlier phase.
+    assert.ok(seasonMult('hay', 4, 2) > seasonMult('hay', 4, 4), 'more players, slower walk');
+    // Crops desync so the dear crop rotates.
+    assert.notEqual(seasonMult('hay', 4, 2), seasonMult('fruit', 4, 2));
+    // Bounds hold across rooms and harvest counts.
+    for (let p = 1; p <= 8; p++) {
+        for (let h = 0; h < 200; h++) {
+            for (const crop of ['hay', 'grain', 'fruit']) {
+                const m = seasonMult(crop, h, p);
+                assert.ok(m >= 1 && m <= 1.25, `${crop} H=${h} P=${p} in [1, 1.25]`);
+            }
+        }
+    }
 });
 
-test('season table: fall harvest cheap, winter dear', () => {
-    assert.equal(seasonMult('hay', 2), 0.8);
-    assert.equal(seasonMult('hay', 3), 1.25);
-    assert.equal(seasonMult('fruit', 1), 0.85);
-    assert.equal(seasonMult('tractor', 3), 1); // equipment untouched
-    assert.equal(seasonMult('hay', 9), 1);
+test('seasons: mid-cycle peaks carry a high-season note, hay ceiling holds', () => {
+    // Hay, 2 players: cycle 8 harvests; H=4 is mid-cycle => seasons pushes
+    // 1.25x but the hay ceiling clips it back to base (the note survives,
+    // same as balance pressure — it names the rule, not the final price).
+    const r = computeMarketPrice(15000, 'hay', {
+        rules: { seasons: true }, totals: { hay: 2, grain: 1, fruit: 1 }, players: 2
+    });
+    assert.equal(r.mult, 1);
+    assert.equal(r.price, 15000);
+    assert.deepEqual(r.notes, ['high season']);
+    const grain = computeMarketPrice(20000, 'grain', {
+        rules: { seasons: true }, totals: { hay: 2, grain: 1, fruit: 1 }, players: 2
+    });
+    assert.ok(grain.mult > 1 && grain.mult <= 1.25);
+    assert.deepEqual(grain.notes, ['high season']);
 });
 
 test('rubberband: leader taxed, trailer aided, middle neutral', () => {
@@ -79,13 +105,6 @@ test('all rules off => base price, no notes', () => {
     assert.deepEqual(r, { price: 20000, mult: 1, notes: [] });
 });
 
-test('market-adjusted-only example: avg 0.5 => 1.5x, rounded to $500', () => {
-    const r = computeMarketPrice(20000, 'grain', { rules: { market: true }, avgOwned: 0.5, players: 6 });
-    assert.equal(r.mult, 1.5);
-    assert.equal(r.price, 30000);
-    assert.deepEqual(r.notes, ['scarce']);
-});
-
 test('combined mults multiply then round: 1.1 tax x 1.1 estate on 25k', () => {
     const r = computeMarketPrice(25000, 'farm', {
         rules: { rubberband: true, estate: true }, rank: 0, players: 4, myOwned: 1
@@ -95,12 +114,12 @@ test('combined mults multiply then round: 1.1 tax x 1.1 estate on 25k', () => {
 });
 
 test('combined mult clamps to [0.25, 3]', () => {
-    const hi = computeMarketPrice(20000, 'grain', {
-        rules: { market: true, seasons: true, rubberband: true }, avgOwned: 0, players: 2, progress: 0.99, rank: 0
+    const hi = computeMarketPrice(20000, 'tractor', {
+        rules: { rubberband: true, estate: true }, rank: 0, players: 4, myOwned: 25
     });
-    // 2 * 1.25 * 1.1 = 2.75 => 55000
-    assert.equal(hi.price, 55000);
-    assert.ok(hi.mult <= 3);
+    // 1.1 x 3.5 = 3.85 => clamped to 3 => 60000
+    assert.equal(hi.mult, 3);
+    assert.equal(hi.price, 60000);
 });
 
 test('balance: hot crop dear, ignored crops cheap', () => {
@@ -126,37 +145,63 @@ test('balance is a host rule: hot fruit costs more only when enabled', () => {
     assert.deepEqual(off, { price: 25000, mult: 1, notes: [] });
 });
 
+test('events: each crop walks ±1% a harvest, deterministic per room', () => {
+    // No harvests => flat; junk counts clamp to flat; non-crops never walk.
+    assert.equal(eventWalk('grain', 'AB', 0), 1);
+    assert.equal(eventWalk('grain', 'AB', -5), 1);
+    assert.equal(eventWalk('tractor', 'AB', 50), 1);
+    assert.equal(eventWalk('weeds', 'AB', 50), 1);
+    // Every single step is exactly ±1%.
+    for (const crop of ['hay', 'grain', 'fruit']) {
+        for (let h = 0; h < 200; h++) {
+            const ratio = eventWalk(crop, 'AB', h + 1) / eventWalk(crop, 'AB', h);
+            assert.ok(Math.abs(ratio - 1.01) < 1e-12 || Math.abs(ratio - 0.99) < 1e-12,
+                `${crop} harvest ${h} steps x${ratio}`);
+        }
+    }
+    // Crops walk separately — same room and harvest count, different paths.
+    const paths = ['hay', 'grain', 'fruit'].map((c) => eventWalk(c, 'AB', 50));
+    assert.ok(new Set(paths).size > 1, 'walks diverge across crops');
+    // More harvests keep walking (path extends, never restarts).
+    assert.notEqual(eventWalk('grain', 'AB', 50), eventWalk('grain', 'AB', 51));
+});
+
 test('events: deterministic, bounded ±50%, zero-sum across crops', () => {
-    const a = eventSwings('AB', 2);
-    const b = eventSwings('AB', 2);
-    assert.deepEqual(a, b); // same room + season => same swings, every device
+    const a = eventSwings('AB', 25);
+    const b = eventSwings('AB', 25);
+    assert.deepEqual(a, b); // same room + harvest count => same swings, every device
     for (const v of a) assert.ok(v >= -0.5 && v <= 0.5, `swing ${v} in range`);
     const sum = a[0] + a[1] + a[2];
     assert.ok(Math.abs(sum) < 1e-9, `swings sum to ~0 (got ${sum})`);
-    // Different season (usually) reshuffles the meta.
-    assert.notDeepEqual(eventSwings('AB', 2), eventSwings('AB', 3));
-    // Zero-sum + bounds hold across thousands of room/season combos
+    // Zero harvests => flat walk.
+    assert.deepEqual(eventSwings('AB', 0), [0, 0, 0]);
+    // More harvests move the walk.
+    assert.notDeepEqual(eventSwings('AB', 25), eventSwings('AB', 26));
+    // A tighter host cap holds: custom 10% ceiling on a 100-harvest walk.
+    for (const v of eventSwings('AB', 100, 0.1)) assert.ok(v >= -0.1 && v <= 0.1, `swing ${v} in cap`);
+    // Zero-sum + bounds hold across hundreds of rooms and walk lengths
     // (rescale, not clip, keeps the sum exact when centering overshoots).
-    for (let i = 0; i < 2000; i++) {
-        for (let s = 0; s < 4; s++) {
-            const w = eventSwings('R' + i, s);
+    for (let i = 0; i < 500; i++) {
+        for (const h of [1, 7, 25, 100, 300]) {
+            const w = eventSwings('R' + i, h);
             for (const v of w) assert.ok(v >= -0.5 && v <= 0.5, `swing ${v} in range`);
             assert.ok(Math.abs(w[0] + w[1] + w[2]) < 1e-9, `swings sum to ~0 (got ${w})`);
         }
     }
     // Non-crops never swing.
-    assert.equal(eventMult('tractor', 'AB', 2), 1);
+    assert.equal(eventMult('tractor', 'AB', 25), 1);
 });
 
 test('events is a host rule with boom/bust notes', () => {
-    const ctx = { rules: { events: true }, roomCode: 'AB', progress: 0.6 };
+    // 15 room harvests: grain busts, fruit booms, hay holds near flat.
+    const ctx = { rules: { events: true }, roomCode: 'AB', totals: { hay: 5, grain: 5, fruit: 5 } };
     const seen = new Set();
     for (const crop of ['hay', 'grain', 'fruit']) {
         const r = computeMarketPrice(20000, crop, ctx);
         seen.add(r.notes[0] || 'flat');
     }
-    assert.ok(seen.size > 1, 'a season mixes booms, busts and flats');
-    const off = computeMarketPrice(20000, 'fruit', { rules: {}, roomCode: 'AB', progress: 0.6 });
+    assert.ok(seen.size > 1, 'a walk mixes booms, busts and flats');
+    const off = computeMarketPrice(20000, 'fruit', { rules: {}, roomCode: 'AB', totals: { hay: 5, grain: 5, fruit: 5 } });
     assert.deepEqual(off, { price: 20000, mult: 1, notes: [] });
 });
 
@@ -187,15 +232,15 @@ test('custom numbers apply only when their checkbox is on', () => {
 test('mix-and-match: every rule combo prices every asset sanely', () => {
     // Buying must never NaN, go negative, or escape the clamps — whatever
     // the host ticks. Hay additionally never rises above base.
-    const flags = ['market', 'seasons', 'rubberband', 'estate', 'balance', 'events'];
+    const flags = ['seasons', 'rubberband', 'estate', 'balance', 'events'];
     const assets = ['hay', 'grain', 'fruit', 'farm', 'harvester', 'tractor', 'cows'];
     const bases = { hay: 15000 };
     const ctxs = [
-        { avgOwned: 0, players: 4, rank: 0, progress: 0.6, myOwned: 2, totals: { hay: 1, grain: 1, fruit: 28 }, roomCode: 'AB' },
-        { avgOwned: 2.5, players: 6, rank: 5, progress: 0.1, myOwned: 0, totals: { hay: 0, grain: 0, fruit: 0 }, roomCode: '' },
+        { avgOwned: 0, players: 4, rank: 0, myOwned: 2, totals: { hay: 1, grain: 1, fruit: 28 }, roomCode: 'AB' },
+        { avgOwned: 2.5, players: 6, rank: 5, myOwned: 0, totals: { hay: 0, grain: 0, fruit: 0 }, roomCode: '' },
         { players: 0 } // empty room, bare ctx
     ];
-    for (let mask = 0; mask < 64; mask++) {
+    for (let mask = 0; mask < 32; mask++) {
         const rules = {};
         flags.forEach((f, i) => { if (mask & (1 << i)) rules[f] = true; });
         for (const asset of assets) {
@@ -210,9 +255,9 @@ test('mix-and-match: every rule combo prices every asset sanely', () => {
 });
 
 test('hay ceiling: hay never prices above base', () => {
-    // Market-adjusted opener alone would 2x hay; the ceiling holds it at base.
+    // Balance alone would 2x hay when the room piles in; the ceiling holds it.
     const r = computeMarketPrice(15000, 'hay', {
-        rules: { market: true }, avgOwned: 0, players: 4
+        rules: { balance: true }, totals: { hay: 28, grain: 1, fruit: 1 }
     });
     assert.equal(r.mult, 1);
     assert.equal(r.price, 15000);
@@ -231,7 +276,7 @@ test('scenarios: every preset normalizes to playable rules', () => {
         // Every scenario prices every asset sanely for a mid-size room.
         for (const asset of ['hay', 'grain', 'fruit', 'farm', 'cows', 'harvester', 'tractor']) {
             const out = computeMarketPrice(20000, asset, {
-                rules: r, players: 4, rank: 1, progress: 0.3,
+                rules: r, players: 4, rank: 1,
                 avgOwned: 2, myOwned: 2, totals: { hay: 8, grain: 8, fruit: 8 }, roomCode: 'AB'
             });
             assert.ok(Number.isFinite(out.price) && out.price > 0, `${key}/${asset} sane price`);
@@ -256,7 +301,7 @@ test('scenarios: drought is harsher than standard', () => {
 
 test('scenarios: bull market is boom/bust with standard money', () => {
     const bull = applyScenario('bull');
-    assert.ok(bull.events && bull.balance && bull.market, 'bull enables rotation rules');
+    assert.ok(bull.events && bull.balance, 'bull enables rotation rules');
     assert.ok(!bull.customecon && !bull.customharvest, 'money/harvest stay standard');
     assert.deepEqual(activeEcon(bull), DEFAULT_ECON);
     assert.deepEqual(activeHarvest(bull), DEFAULT_HARVEST);
@@ -274,7 +319,7 @@ test('scenarios: badge names presets, standard, and custom', () => {
     assert.equal(scenarioName({}), 'Standard');
     assert.equal(scenarioName(applyScenario('drought')), 'Drought');
     assert.equal(scenarioName(applyScenario('bull')), 'Bull Market');
-    assert.equal(scenarioName({ market: true }), 'Custom', 'hand-mixed rules show Custom');
+    assert.equal(scenarioName({ seasons: true }), 'Custom', 'hand-mixed rules show Custom');
     assert.equal(scenarioName({ scenario: 'bogus' }), 'Standard', 'forged stamp falls back');
     assert.equal(scenarioName({ scenario: 'bull', events: false }), 'Bull Market', 'stamp wins while present');
 });
@@ -330,43 +375,33 @@ test('board max: highest net worth wins, empty/junk is zero', () => {
 test('tuning defaults to classic values and clamps into range', () => {
     assert.deepEqual(normalizeTuning(undefined), DEFAULT_TUNING);
     assert.deepEqual(normalizeTuning({}), DEFAULT_TUNING);
-    const t = normalizeTuning({ market: 200, seasons: 0, balance: 999, rubberband: 30, estate: 50, events: 0 });
-    assert.deepEqual(t, { market: 200, seasons: 0, balance: 200, rubberband: 30, estate: 50, events: 0 });
+    const t = normalizeTuning({ seasons: 0, balance: 999, rubberband: 30, estate: 50, events: 0 });
+    assert.deepEqual(t, { seasons: 0, balance: 200, rubberband: 30, estate: 50, events: 0 });
     assert.deepEqual(normalizeTuning({ rubberband: -5, estate: 'bogus', events: 51 }),
         { ...DEFAULT_TUNING, rubberband: 0, estate: 10, events: 50 });
 });
 
 test('missing tuning prices exactly like the classic rules (old rooms safe)', () => {
-    const ctx = { avgOwned: 0, players: 2, progress: 0.99, rank: 0, myOwned: 2, totals: { hay: 1, grain: 1, fruit: 28 }, roomCode: 'AB' };
-    const flags = { market: true, seasons: true, rubberband: true, estate: true, balance: true, events: true };
+    const ctx = { players: 4, rank: 0, myOwned: 2, totals: { hay: 8, grain: 8, fruit: 8 }, roomCode: 'AB' };
+    const flags = { seasons: true, rubberband: true, estate: true, balance: true, events: true };
     const legacy = computeMarketPrice(20000, 'grain', { ...ctx, rules: flags });
     const tuned = computeMarketPrice(20000, 'grain', { ...ctx, rules: { ...flags, tuning: { ...DEFAULT_TUNING } } });
     assert.deepEqual(tuned, legacy);
 });
 
-test('legacy scarcity rooms keep pricing under the market rename', () => {
-    const legacy = normalizeRules({ scarcity: true, tuning: { scarcity: 200 } });
-    assert.equal(legacy.market, true);
-    assert.equal(legacy.tuning.market, 200);
-    assert.ok(!('scarcity' in legacy), 'old key drops off after aliasing');
-    const price = computeMarketPrice(20000, 'grain', {
-        rules: { scarcity: true, tuning: { scarcity: 200 } }, avgOwned: 0.5, players: 6
-    });
-    assert.equal(price.mult, 2, 'old docs price like market at 200%');
-});
-
-test('strength sliders scale market-adjusted/seasons/balance around 1x', () => {
-    const base = { rules: { market: true }, avgOwned: 0.5, players: 6 }; // classic 1.5x
-    assert.equal(computeMarketPrice(20000, 'grain', base).mult, 1.5);
-    const double = computeMarketPrice(20000, 'grain', { ...base, rules: { market: true, tuning: { market: 200 } } });
-    assert.equal(double.mult, 2); // 1 + 0.5*2
-    const off = computeMarketPrice(20000, 'grain', { ...base, rules: { market: true, tuning: { market: 0 } } });
+test('strength sliders scale seasons/balance around 1x', () => {
+    // Grain, 2 players: cycle 10 harvests; H=5 is mid-cycle => classic 1.25x.
+    const base = { rules: { seasons: true }, totals: { hay: 2, grain: 2, fruit: 1 }, players: 2 };
+    assert.equal(computeMarketPrice(20000, 'grain', base).mult, 1.25);
+    const double = computeMarketPrice(20000, 'grain', { ...base, rules: { seasons: true, tuning: { seasons: 200 } } });
+    assert.ok(Math.abs(double.mult - 1.5) < 1e-9, 'peak doubled: 1 + 0.25*2');
+    const off = computeMarketPrice(20000, 'grain', { ...base, rules: { seasons: true, tuning: { seasons: 0 } } });
     assert.deepEqual(off, { price: 20000, mult: 1, notes: [] });
-    // Winter hay (classic 1.25x, hay ceiling keeps base) at half strength.
-    const winter = computeMarketPrice(15000, 'hay', { rules: { seasons: true, tuning: { seasons: 50 } }, progress: 0.99 });
-    assert.ok(Math.abs(winter.mult - 1) < 1e-9, 'hay ceiling still caps at base');
-    const glut = computeMarketPrice(20000, 'grain', { rules: { seasons: true, tuning: { seasons: 200 } }, progress: 0.6 });
-    assert.ok(Math.abs(glut.mult - 0.6) < 1e-9, 'fall glut doubled: 1 + (0.8-1)*2');
+    // Balance still scales the same way (hot fruit 2x at full strength).
+    const hot = computeMarketPrice(20000, 'fruit', {
+        rules: { balance: true, tuning: { balance: 50 } }, totals: { hay: 1, grain: 1, fruit: 28 }
+    });
+    assert.ok(Math.abs(hot.mult - 1.5) < 1e-9, 'half strength: 1 + (2-1)*0.5');
 });
 
 test('rubberband slider sets the leader tax / trailer aid', () => {
@@ -389,21 +424,21 @@ test('estate slider sets the extra cost per owned unit', () => {
     assert.equal(r.mult, 2);
 });
 
-test('events slider caps the season swing, zero-sum survives', () => {
+test('events slider caps the walk swing, zero-sum survives', () => {
     for (let i = 0; i < 500; i++) {
-        for (let s = 0; s < 4; s++) {
-            const w = eventSwings('R' + i, s, 0.2);
+        for (const h of [1, 10, 60]) {
+            const w = eventSwings('R' + i, h, 0.2);
             for (const v of w) assert.ok(v >= -0.2 && v <= 0.2, `swing ${v} respects the 20% cap`);
             assert.ok(Math.abs(w[0] + w[1] + w[2]) < 1e-9, 'still zero-sum');
         }
     }
-    assert.deepEqual(eventSwings('AB', 2, 0), [0, 0, 0], '0% swing is flat');
-    const m = eventMult('grain', 'AB', 2, 0.1);
+    assert.deepEqual(eventSwings('AB', 25, 0), [0, 0, 0], '0% swing is flat');
+    const m = eventMult('grain', 'AB', 25, 0.1);
     assert.ok(m >= 0.9 && m <= 1.1, 'mult respects the 10% cap');
-    // Same seed, smaller cap => same direction, never bigger.
+    // Same walk, smaller cap => same direction, never bigger.
     for (let i = 0; i < 200; i++) {
-        const full = eventSwings('Q' + i, 1);
-        const small = eventSwings('Q' + i, 1, 0.1);
+        const full = eventSwings('Q' + i, 40);
+        const small = eventSwings('Q' + i, 40, 0.1);
         for (let k = 0; k < 3; k++) {
             assert.ok(Math.abs(small[k]) <= Math.abs(full[k]) + 1e-12, 'smaller cap never overshoots');
         }

@@ -19,7 +19,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907f';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20260907p';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20260907q';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -1377,14 +1377,12 @@ function currentMarketCtx(asset) {
     const uid = (typeof auth !== 'undefined' && auth.currentUser) ? auth.currentUser.uid : null;
     const sorted = [...board].sort((a, b) => (Number(b.networth) || 0) - (Number(a.networth) || 0));
     const idx = uid ? sorted.findIndex((d) => d._id === uid) : -1;
-    const g = (typeof data !== 'undefined' && data && data.game) || {};
-    const dur = Number(g.durationMs) || 0;
-    const progress = dur > 0 ? roomGameElapsed(Date.now()) / dur : 0;
     const key = String(asset || '').toLowerCase();
     let total = 0;
     for (const d of board) total += Number(d[key] ?? 0) || 0;
-    // Room crop totals feed the always-on demand balancer (same snapshot on
-    // every client, so every device prices identically).
+    // Room crop totals feed the demand balancer, the seasons clock, and
+    // the boom & bust walks (same snapshot on every client, so every
+    // device prices identically).
     const cropTotals = {};
     for (const k of ['hay', 'grain', 'fruit']) {
         let t = 0;
@@ -1396,7 +1394,6 @@ function currentMarketCtx(asset) {
         rules: normalizeRules(currentRoomRules),
         players,
         rank: idx < 0 ? undefined : idx,
-        progress,
         avgOwned: players > 0 ? total / players : NaN,
         myOwned,
         totals: cropTotals,
@@ -1607,33 +1604,31 @@ async function finishMakeRoom(rules) {
 // + number sliders/boxes, all rendering from the pricing.js sources of truth.
 // A preset fills the whole form; any hand edit flips the scenario to Custom.
 const RULE_LABELS = {
-    market: 'Market Adjusted', seasons: 'Seasons', rubberband: 'Rubber-band', estate: 'Estate',
+    seasons: 'Seasons', rubberband: 'Rubber-band', estate: 'Estate',
     balance: 'Balance', events: 'Boom&Bust', customecon: 'Economy', customharvest: 'Harvest'
 };
 const RULE_DESCRIPTIONS = {
-    market: 'Prices adjust to the room and its players: scarce crops cost up to 2×, gluts drop to half.',
-    seasons: 'Prices ride the game year: harvest gluts are cheap, winter is dear.',
+    seasons: 'Prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.',
     rubberband: 'Room leader pays +10%, trailer pays −10% on everything.',
     estate: 'Your Nth farm, harvester, or tractor costs +10% per unit you own.',
     balance: 'The crop everyone piles into goes dear (up to 2×); ignored ones go cheap (down to half). Hay only ever discounts.',
-    events: 'Each season every crop swings up to ±50%, normalized zero-sum so the best crop rotates.',
+    events: 'Each crop walks its own random path: every room harvest moves a crop ±1%, zero-sum across crops and capped.',
     customecon: 'Enables your economy numbers below (unticked = $50k cap, 10% interest, 20% down).',
     customharvest: 'Enables your harvest numbers below (unticked = standard hay tiers and equipment bonus).'
 };
 let setupScenarioKey = 'standard';
 
 // One slider per market rule, set at room creation. Strengths scale how
-// hard market/seasons/balance bite (100% = classic); rubberband sets the
+// hard seasons/balance bite (100% = classic); rubberband sets the
 // leader tax / trailer aid %; estate sets the extra cost per owned unit;
-// events sets the max season swing %. Economy/Harvest have no row — their
+// events sets the max walk swing %. Economy/Harvest have no row — their
 // number groups below are the tuning.
 const RULE_TUNING_SPECS = {
-    market: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard market-adjusted pricing bites. 100% is the classic rule; 200% doubles every markup and discount; 0% silences it without unticking.' },
-    seasons: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard the seasonal wave swings prices. 100% is classic; 0% flattens the year.' },
+    seasons: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard the harvest wave swings prices. 100% is classic; 0% holds everything at base.' },
     rubberband: { label: 'Leader tax / trailer aid', min: 0, max: 30, step: 1, def: 10, suffix: '%', desc: 'What the room leader extra-pays and the trailer saves on everything.' },
     estate: { label: 'Extra cost per unit', min: 0, max: 50, step: 5, def: 10, suffix: '%', desc: 'How much dearer your Nth farm, harvester, or tractor gets per unit you own.' },
     balance: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard the demand balancer pushes the popular crop up and the ignored ones down.' },
-    events: { label: 'Max season swing', min: 0, max: 50, step: 5, def: 50, suffix: '%', desc: 'Biggest boom or bust per season. Still zero-sum — one crop\u2019s boom is funded by the others\u2019 busts.' }
+    events: { label: 'Max walk swing', min: 0, max: 50, step: 5, def: 50, suffix: '%', desc: 'Farthest a crop\u2019s walk may stray from base. Still zero-sum — one crop\u2019s boom is funded by the others\u2019 busts.' }
 };
 
 function tuningSlider(key) {
@@ -4207,7 +4202,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const perUnitBonus = RIDGE_BONUS_BY_KEY[selectedRidge] || 0;
         if (!(perUnitBonus > 0)) return; // unknown selection — price nothing
         // Cost = bonus * 10000 * multiplier, with the rubberband rule applied
-        // (it prices everything; market/seasons/estate leave ridges alone).
+        // (it prices everything; seasons/estate leave ridges alone).
         const unitBase = perUnitBonus * 10000;
         const unit = computeMarketPrice(unitBase, 'cows', currentMarketCtx('cows')).price;
         const ridgeCost = unit * multiplier;

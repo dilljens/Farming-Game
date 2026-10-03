@@ -21,14 +21,13 @@ Able to buy in bulk once any one player reaches these net-worth benchmarks (buy 
 
 ## Market Rules (room host picks per room, same prices on every device)
 
-Each rule has its own slider in the Make Room popup — tune how hard it bites. Strength sliders (Market Adjusted, Seasons, Balance) run 0–200% where 100% is the classic rule; Rubber-band sets the leader tax / trailer aid %; Estate sets the extra cost per owned unit %; Boom&Bust sets the max season swing % (still zero-sum). Economy/Harvest boxes enable the number groups instead of scaling anything.
+Each rule has its own slider in the Make Room popup — tune how hard it bites. Strength sliders (Seasons, Balance) run 0–200% where 100% is the classic rule; Rubber-band sets the leader tax / trailer aid %; Estate sets the extra cost per owned unit %; Boom&Bust sets the max walk swing % (still zero-sum). Economy/Harvest boxes enable the number groups instead of scaling anything.
 
-- **Market Adjusted** — Hay/Grain/Fruit price adjusts to the room and its players: scarce costs up to 2×, gluts drop to half.
-- **Seasons** — crop prices ride the game year: harvest gluts are cheap, winter is dear.
+- **Seasons** — prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.
 - **Rubber-band** — room leader pays +10%, trailer pays −10% on everything.
 - **Estate** — your Nth Farm/Harvester/Tractor costs +10% per unit you own.
 - **Balance** — the crop everyone piles into gets dear (up to 2×), the ignored ones go cheap (down to half). Hay (base $15,000) only ever discounts, never rises above base.
-- **Boom&Bust** — each season every crop swings up to ±50%, normalized zero-sum (one crop's boom is funded by the others' busts) so the best crop rotates. Same swings on every device.
+- **Boom&Bust** — each crop walks its own random path: every room harvest moves a crop ±1%, zero-sum across crops and capped at ±50% (host slider lowers the cap). Same walk on every device.
 
 Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted — tap the Buy/Sell to player buttons to pop up the trade forms; nothing moves until the other player accepts.
 
@@ -40,7 +39,7 @@ A scenario is a shortcut for ticking boxes and typing numbers — same room-doc 
 
 - **Standard** — the classic game: all boxes off, standard money and harvests.
 - **Drought** — harsh harvests (tiers harder to reach, lower mults, weak equipment bonus) plus tight expensive credit ($25k cap, 25% interest, 40% down). Hoard cash, buy only what pays.
-- **Bull Market** — Market Adjusted + Balance + Boom&Bust with standard money. Swings rotate the best crop every season — chase the boom.
+- **Bull Market** — Balance + Boom&Bust with standard money. Walks rotate the best crop as the room harvests — chase the boom.
 - **Debt-Free** — no loans at all: 100% down, cash only. Slow and steady wins.
 
 ## Host Settings (set once in the Make Room popup, everyone applies)
