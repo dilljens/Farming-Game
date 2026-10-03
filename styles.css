@@ -537,7 +537,7 @@ input[type="range"]::-moz-range-thumb {
 
 .lb-toggle-btn {
     padding: 8px 20px;
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 700;
     line-height: 1.4;
     min-height: 44px;
