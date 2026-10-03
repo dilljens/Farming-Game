@@ -163,8 +163,8 @@ export function scenarioName(rules) {
 // --- Bulk buys: benchmark-unlocked purchase increments ---
 // Always-on, like the hay ceiling. While ANY one player holds net worth at
 // or above a benchmark, everyone may buy up to the tier multiplier in one
-// purchase. Hay and grain (bulk crops) start early and climb to 4x —
-// 2x at $150k, 3x at $250k, 4x at $500k; everything else unlocks 2x at
+// purchase. Hay and grain (bulk crops) start early and climb to 5x —
+// 2x at $150k, 3x at $250k, 5x at $500k; everything else unlocks 2x at
 // $250k and caps there. Evaluated live off the leaderboard snapshot, so
 // every device agrees with no extra state — dip back below and the tier
 // locks again.
@@ -172,7 +172,7 @@ export const BULK_TIERS = [
     { min: 150000, mult: 2, bulkOnly: true },
     { min: 250000, mult: 2 },
     { min: 250000, mult: 3, bulkOnly: true },
-    { min: 500000, mult: 4, bulkOnly: true }
+    { min: 500000, mult: 5, bulkOnly: true }
 ];
 export const BULK_ASSETS = ['hay', 'grain'];
 
