@@ -281,33 +281,39 @@ test('bulk tiers: benchmarks unlock increments, hay/grain climb highest', () => 
     // Below the first benchmark: single only, every asset.
     for (const asset of ['hay', 'grain', 'farm', 'cows', 'tractor']) {
         assert.equal(bulkMult(0, asset), 1, `${asset} @0`);
-        assert.equal(bulkMult(249999, asset), 1, `${asset} @249999`);
+        assert.equal(bulkMult(149999, asset), 1, `${asset} @149999`);
     }
-    // $250k: everything unlocks 2x (the documented OTB rule, now enforced).
+    // $150k: hay/grain unlock 2x early; the rest wait for $250k.
+    assert.equal(bulkMult(150000, 'hay'), 2);
+    assert.equal(bulkMult(200000, 'grain'), 2);
+    assert.equal(bulkMult(200000, 'farm'), 1, 'non-bulk still single below $250k');
+    assert.equal(bulkMult(200000, 'cows'), 1, 'ridges wait for $250k');
+    // $250k: everything unlocks 2x (the documented OTB rule, now enforced),
+    // and hay/grain climb to 3x.
     for (const asset of ['hay', 'grain', 'farm', 'cows', 'harvester', 'tractor', 'fruit']) {
-        assert.equal(bulkMult(250000, asset), 2, `${asset} @250k`);
+        assert.ok(bulkMult(250000, asset) >= 2, `${asset} @250k`);
     }
-    // $500k: bulk crops go 3x, the rest stay capped at 2x.
-    assert.equal(bulkMult(500000, 'hay'), 3);
-    assert.equal(bulkMult(750000, 'grain'), 3);
-    assert.equal(bulkMult(999999, 'farm'), 2, 'non-bulk capped at 2x');
-    assert.equal(bulkMult(999999, 'cows'), 2, 'ridges capped at 2x');
-    // $1M: hay/grain reach 4x, everything else still 2x.
-    assert.equal(bulkMult(1000000, 'hay'), 4);
+    assert.equal(bulkMult(250000, 'hay'), 3);
+    assert.equal(bulkMult(300000, 'grain'), 3);
+    assert.equal(bulkMult(300000, 'farm'), 2, 'non-bulk capped at 2x');
+    // $500k: hay/grain reach 4x, everything else still 2x.
+    assert.equal(bulkMult(500000, 'hay'), 4);
     assert.equal(bulkMult(5000000, 'grain'), 4, 'never above 4x');
     assert.equal(bulkMult(5000000, 'tractor'), 2, 'never above 2x off-bulk');
     // Junk input stays safe.
     assert.equal(bulkMult(NaN, 'hay'), 1);
     assert.equal(bulkMult(-100, 'hay'), 1);
     assert.equal(bulkMult(1000000, 'weeds'), 2, 'unknown asset treated as non-bulk');
+    assert.equal(bulkMult(200000, 'weeds'), 1);
 });
 
 test('bulk next: hint line names the coming tier or null at max', () => {
-    assert.deepEqual(bulkNext(0, 'hay'), { mult: 2, min: 250000 });
-    assert.deepEqual(bulkNext(300000, 'hay'), { mult: 3, min: 500000 });
-    assert.deepEqual(bulkNext(600000, 'grain'), { mult: 4, min: 1000000 });
-    assert.equal(bulkNext(1000000, 'hay'), null, 'hay maxed at 4x');
+    assert.deepEqual(bulkNext(0, 'hay'), { mult: 2, min: 150000 });
+    assert.deepEqual(bulkNext(200000, 'hay'), { mult: 3, min: 250000 });
+    assert.deepEqual(bulkNext(300000, 'grain'), { mult: 4, min: 500000 });
+    assert.equal(bulkNext(500000, 'hay'), null, 'hay maxed at 4x');
     assert.deepEqual(bulkNext(0, 'farm'), { mult: 2, min: 250000 });
+    assert.deepEqual(bulkNext(200000, 'farm'), { mult: 2, min: 250000 });
     assert.equal(bulkNext(250000, 'farm'), null, 'non-bulk maxes at 2x');
 });
 

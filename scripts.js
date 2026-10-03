@@ -3824,7 +3824,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
         sel.value = '1';
         if (hint) {
             if (tier <= 1) {
-                hint.textContent = 'Bulk buys unlock when any player reaches $250,000 net worth.';
+                const first = bulkNext(worth, asset);
+                hint.textContent = first
+                    ? `Bulk buys unlock at $${first.min.toLocaleString()} net worth (${first.mult}x).`
+                    : 'Bulk buys unlock with room net-worth benchmarks.';
             } else {
                 const next = bulkNext(worth, asset);
                 hint.textContent = next

@@ -163,13 +163,16 @@ export function scenarioName(rules) {
 // --- Bulk buys: benchmark-unlocked purchase increments ---
 // Always-on, like the hay ceiling. While ANY one player holds net worth at
 // or above a benchmark, everyone may buy up to the tier multiplier in one
-// purchase. Hay and grain (bulk crops) climb to 4x; everything else caps
-// at 2x. Evaluated live off the leaderboard snapshot, so every device
-// agrees with no extra state — dip back below and the tier locks again.
+// purchase. Hay and grain (bulk crops) start early and climb to 4x —
+// 2x at $150k, 3x at $250k, 4x at $500k; everything else unlocks 2x at
+// $250k and caps there. Evaluated live off the leaderboard snapshot, so
+// every device agrees with no extra state — dip back below and the tier
+// locks again.
 export const BULK_TIERS = [
+    { min: 150000, mult: 2, bulkOnly: true },
     { min: 250000, mult: 2 },
-    { min: 500000, mult: 3 },
-    { min: 1000000, mult: 4 }
+    { min: 250000, mult: 3, bulkOnly: true },
+    { min: 500000, mult: 4, bulkOnly: true }
 ];
 export const BULK_ASSETS = ['hay', 'grain'];
 
@@ -183,24 +186,27 @@ export function boardMaxNetWorth(board) {
     return max;
 }
 
+function isBulkAsset(asset) {
+    return BULK_ASSETS.includes(String(asset || '').toLowerCase());
+}
+
 export function bulkMult(maxNetWorth, asset) {
-    const key = String(asset || '').toLowerCase();
-    const cap = BULK_ASSETS.includes(key) ? 4 : 2;
-    let m = 1;
+    const bulk = isBulkAsset(asset);
     const worth = Number(maxNetWorth) || 0;
+    let m = 1;
     for (const t of BULK_TIERS) {
-        if (worth >= t.min) m = Math.min(t.mult, cap);
+        if (worth >= t.min && (!t.bulkOnly || bulk)) m = Math.max(m, t.mult);
     }
     return m;
 }
 
 // Next locked tier for the hint line ({mult, min}), or null when maxed.
 export function bulkNext(maxNetWorth, asset) {
-    const key = String(asset || '').toLowerCase();
-    const cap = BULK_ASSETS.includes(key) ? 4 : 2;
+    const bulk = isBulkAsset(asset);
     const worth = Number(maxNetWorth) || 0;
+    const cur = bulkMult(worth, asset);
     for (const t of BULK_TIERS) {
-        if (t.mult <= cap && worth < t.min) return { mult: t.mult, min: t.min };
+        if ((!t.bulkOnly || bulk) && worth < t.min && t.mult > cur) return { mult: t.mult, min: t.min };
     }
     return null;
 }
