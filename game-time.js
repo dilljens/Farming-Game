@@ -139,6 +139,33 @@ export function buildElapsedHistory(points, createdAt, inactivityBuffer = INACTI
     });
 }
 
+// Pause-aware game clock. Any stretch with no recorded room activity longer
+// than an hour counts as a break: it costs only the five-minute break
+// buffer instead of wall time, so walking away mid-game doesn't burn the
+// game clock (or the boom & bust seasons riding it). Feed it the union of
+// every player's history timestamps from the same leaderboard snapshot, so
+// every device pauses identically.
+export const GAME_PAUSE_GAP_MS = 60 * 60 * 1000;
+
+export function gameElapsedMs(activityTimes, createdAt, now = Date.now()) {
+    const start = asTimestamp(createdAt);
+    const end = asTimestamp(now);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+    const times = [start];
+    for (const t of (Array.isArray(activityTimes) ? activityTimes : [])) {
+        const ts = asTimestamp(t);
+        if (Number.isFinite(ts) && ts > start && ts < end) times.push(ts);
+    }
+    times.push(end);
+    times.sort((a, b) => a - b);
+    let elapsed = 0;
+    for (let i = 1; i < times.length; i++) {
+        const gap = times[i] - times[i - 1];
+        elapsed += gap > GAME_PAUSE_GAP_MS ? INACTIVITY_BUFFER_MS : gap;
+    }
+    return elapsed;
+}
+
 // The visible window opens at the first recorded state change (not game
 // creation) and stays exactly five minutes wide until elapsed time exceeds
 // five minutes, then grows up to the five-hour cap.

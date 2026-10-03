@@ -10,6 +10,7 @@ import {
     clampGameDuration,
     createGame,
     formatGameTime,
+    gameElapsedMs,
     getTimeWindow,
     mergeHistoriesByPlayer,
     capHistoryPoints,
@@ -17,7 +18,7 @@ import {
     MIN_TIME_WINDOW_MS,
     normalizeGame,
     normalizeHistoryPoints
-} from './game-time.js?v=20260907e';
+} from './game-time.js?v=20260907f';
 import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20260907p';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
@@ -1357,6 +1358,19 @@ function marketBoard() {
     return rows;
 }
 
+// Pause-aware room clock: the union of every board doc's history
+// timestamps, so an hour-plus break with no room activity stops the game
+// clock (and boom & bust) on every device at once.
+function roomGameElapsed(now) {
+    const g = (typeof data !== 'undefined' && data && data.game) || {};
+    const times = [];
+    for (const d of marketBoard()) {
+        const h = Array.isArray(d.history) ? d.history : [];
+        for (const p of h) times.push(p && p.t);
+    }
+    return gameElapsedMs(times, Number(g.createdAt), now);
+}
+
 function currentMarketCtx(asset) {
     const board = marketBoard();
     const players = board.length;
@@ -1365,7 +1379,7 @@ function currentMarketCtx(asset) {
     const idx = uid ? sorted.findIndex((d) => d._id === uid) : -1;
     const g = (typeof data !== 'undefined' && data && data.game) || {};
     const dur = Number(g.durationMs) || 0;
-    const progress = dur > 0 ? (Date.now() - Number(g.createdAt)) / dur : 0;
+    const progress = dur > 0 ? roomGameElapsed(Date.now()) / dur : 0;
     const key = String(asset || '').toLowerCase();
     let total = 0;
     for (const d of board) total += Number(d[key] ?? 0) || 0;
@@ -2955,7 +2969,7 @@ function normalizeSavedState(savedData) {
 function updateGameClockDisplay() {
     const display = document.getElementById('gameTimeDisplay');
     if (!display || !data?.game) return;
-    const elapsed = Math.max(0, Date.now() - data.game.createdAt);
+    const elapsed = roomGameElapsed(Date.now());
     const duration = clampGameDuration(data.game.durationMs);
     display.textContent = `Game time: ${formatGameTime(Math.min(elapsed, duration))} / ${formatGameTime(duration)}`;
     display.title = `Started ${new Date(data.game.createdAt).toLocaleString()}`;

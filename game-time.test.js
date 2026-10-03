@@ -10,6 +10,7 @@ import {
     buildElapsedHistory,
     capHistoryPoints,
     clampGameDuration,
+    gameElapsedMs,
     getTimeWindow,
     mergeHistoriesByPlayer
 } from './game-time.js';
@@ -105,6 +106,27 @@ test('cap keeps short histories untouched', () => {
     const points = [{ t: 1, v: 1 }, { t: 2, v: 2 }];
     assert.deepEqual(capHistoryPoints(points, 500), points);
     assert.equal(MAX_HISTORY_POINTS, 500);
+});
+
+test('pauses the game clock across hour-plus breaks', () => {
+    const H = 60 * 60 * 1000;
+    const M = 60 * 1000;
+    // 10 min of play, 2h away, 10 min of play => 25 min on the clock.
+    assert.equal(gameElapsedMs([10 * M, 10 * M + 2 * H], 0, 20 * M + 2 * H), 25 * M);
+    // Each long break costs one buffer, however long the silence.
+    assert.equal(gameElapsedMs([], 0, 3 * H), 5 * M);
+    assert.equal(gameElapsedMs([H, 4 * H], 0, 5 * H), H + 5 * M + H);
+});
+
+test('sub-hour gaps count fully and junk timestamps are ignored', () => {
+    const H = 60 * 60 * 1000;
+    const M = 60 * 1000;
+    assert.equal(gameElapsedMs([30 * M], 0, 45 * M), 45 * M);
+    assert.equal(gameElapsedMs([], 0, H), H); // exactly an hour still counts
+    assert.equal(gameElapsedMs([], 0, H + 1), 5 * M); // a second more => break
+    assert.equal(gameElapsedMs([10 * M, 10 * M, 'bogus', -5, 0, 45 * M, 99 * H], 0, 45 * M), 45 * M);
+    assert.equal(gameElapsedMs([], 0, 0), 0);
+    assert.equal(gameElapsedMs([], 'not-a-time', 1000), 0);
 });
 
 test('cap thins instead of truncating so the full range stays visible', () => {
