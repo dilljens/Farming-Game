@@ -295,6 +295,15 @@ input, .editable {
     white-space: normal;
 }
 
+/* Room code label + code share one line when the lobby line is shown
+   (:not(.hidden) keeps the hidden-when-no-room toggle working). */
+#roomCodeDisplay:not(.hidden) {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 8px;
+}
+
 /* Quick-transaction buttons: 6 cols on desktop, reflow to 3 cols on small screens */
 @media screen and (max-width: 600px) {
     #quickTransactionButtons .grid {
