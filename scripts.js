@@ -3789,8 +3789,12 @@ window.addEventListener('DOMContentLoaded', (event) => {
             addCashTransactionValue(shortfall);
             addLoanTransactionValue(shortfall);
         }
-        // Add cash transaction (negative for payment)
-        addCashTransactionValue(-(downPayment - shortfall));
+        // Add cash transaction (negative for payment). The full down payment
+        // leaves cash — the shortfall was borrowed on top first, so this
+        // nets to spending all available cash and debting the rest.
+        // (Paying only downPayment - shortfall would hand the buyer the
+        // borrowed shortfall as free cash and disagree with the preview.)
+        addCashTransactionValue(-downPayment);
         // Add loan transaction (positive for loan)
         addLoanTransactionValue(loanAmount);
 
