@@ -21,6 +21,8 @@ Able to buy in bulk once any one player reaches these net-worth benchmarks (buy 
 
 ## Market Rules (room host picks per room, same prices on every device)
 
+Each rule has its own slider in the Make Room popup — tune how hard it bites. Strength sliders (Scarcity, Seasons, Balance) run 0–200% where 100% is the classic rule; Rubber-band sets the leader tax / trailer aid %; Estate sets the extra cost per owned unit %; Boom&Bust sets the max season swing % (still zero-sum). Economy/Harvest boxes enable the number groups instead of scaling anything.
+
 - **Scarcity** — Hay/Grain/Fruit price follows room abundance: scarce costs up to 2×, gluts drop to half.
 - **Seasons** — crop prices ride the game year: harvest gluts are cheap, winter is dear.
 - **Rubber-band** — room leader pays +10%, trailer pays −10% on everything.
@@ -43,7 +45,7 @@ A scenario is a shortcut for ticking boxes and typing numbers — same room-doc 
 
 ## Host Settings (set once in the Make Room popup, everyone applies)
 
-There are no mid-game settings — everything is chosen at room creation and the Market row shows a read-only badge of what's active. All boxes mix and match. Each number group applies only while its box is ticked — unticked groups play standard values. Every number has a slider plus a box to type an exact value (dragging previews live); every rule and number has an ⓘ button explaining what it does.
+There are no mid-game settings — everything is chosen at room creation and the Market row shows a read-only badge of what's active. All boxes mix and match. Each number group applies only while its box is ticked — unticked groups play standard values. Every number has a slider plus a box to type an exact value (dragging previews live), and every market rule has its own slider too. Rules show their descriptions; sliders and numbers have ⓘ buttons explaining what they do.
 
 - **Economy** ☑ — max loan $ (default 50,000), loan interest % (10), minimum down-payment % (20).
 - **Harvest** ☑ — hay bonus tiers: mid qty ×mult (5 → 1.5×), high qty ×mult (10 → 2×); equipment bonus +%/unit and unit cap (20%, 5).

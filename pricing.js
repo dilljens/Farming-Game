@@ -35,6 +35,11 @@
 // The numbers only apply when their checkbox is on: customecon enables the
 // econ numbers, customharvest enables the harvest numbers. Everything off
 // (or no room doc) plays exactly today's game — hosts mix and match freely.
+// Per-rule tuning (stored in rooms.rules.tuning): scarcity/seasons/balance
+// effect strength 0–200% (100 = classic), rubberband tax/aid 0–30%,
+// estate 0–50% per unit, events max swing 0–50%. Set once at room creation
+// beside the flags. Missing tuning normalizes to classic values, so older
+// rooms price exactly as before.
 // Combined multiplier clamps to [0.25, 3], then rounds to the nearest $500.
 // Hay never prices above base: its final multiplier clamps to [0.25, 1], so
 // hay only ever discounts. Every other asset may rise above base.
@@ -64,6 +69,7 @@ export function normalizeRules(rules) {
     for (const key of RULE_KEYS) out[key] = src[key] === true;
     out.econ = normalizeEcon(src.econ);
     out.harvest = normalizeHarvest(src.harvest);
+    out.tuning = normalizeTuning(src.tuning);
     // Scenario stamp survives only when it names a real preset — a stale or
     // forged name drops off and the badge falls back to Standard/Custom.
     if (typeof src.scenario === 'string' && Object.prototype.hasOwnProperty.call(SCENARIOS, src.scenario)) {
@@ -105,6 +111,35 @@ export function activeEcon(rules) {
 export function activeHarvest(rules) {
     const r = rules && typeof rules === 'object' ? rules : {};
     return r.customharvest === true ? normalizeHarvest(r.harvest) : { ...DEFAULT_HARVEST };
+}
+
+// --- Per-rule tuning: one slider per market rule, set at room creation ---
+// Strengths scale how hard a rule bites (100 = the classic rule, 200 =
+// double, 0 = no effect without unticking). Rubber-band sets the leader
+// tax / trailer aid %, estate sets the % per owned unit, events sets the
+// max season swing %. Economy/Harvest have no slider — their numbers below
+// are the tuning. Absent tuning (older rooms) normalizes to defaults, so
+// existing rooms price exactly as before.
+export const DEFAULT_TUNING = {
+    scarcity: 100, seasons: 100, balance: 100,
+    rubberband: 10, estate: 10, events: 50
+};
+
+export function normalizeTuning(tuning) {
+    const src = tuning && typeof tuning === 'object' ? tuning : {};
+    return {
+        scarcity: clampNum(src.scarcity, 0, 200, DEFAULT_TUNING.scarcity),
+        seasons: clampNum(src.seasons, 0, 200, DEFAULT_TUNING.seasons),
+        balance: clampNum(src.balance, 0, 200, DEFAULT_TUNING.balance),
+        rubberband: clampNum(src.rubberband, 0, 30, DEFAULT_TUNING.rubberband),
+        estate: clampNum(src.estate, 0, 50, DEFAULT_TUNING.estate),
+        events: clampNum(src.events, 0, 50, DEFAULT_TUNING.events)
+    };
+}
+
+// Scale a rule's deviation from 1x: 100% = full classic effect.
+function scaleStrength(mult, pct) {
+    return 1 + (mult - 1) * (clampNum(pct, 0, 200, 100) / 100);
 }
 
 // --- Scenarios: one-tap gameplay presets over the flag + number systems ---
@@ -254,16 +289,18 @@ export function seasonMult(asset, season) {
 }
 
 // rank = 0-based position in networth-desc board. Unknown/solo => neutral.
-export function rubberbandMult(rank, players) {
+// pct = leader tax / trailer aid % (default 10).
+export function rubberbandMult(rank, players, pct = DEFAULT_TUNING.rubberband) {
     if (!Number.isInteger(rank) || !Number.isFinite(players) || players < 2) return 1;
-    if (rank <= 0) return 1.1;
-    if (rank >= players - 1) return 0.9;
+    const p = clampNum(pct, 0, 30, DEFAULT_TUNING.rubberband) / 100;
+    if (rank <= 0) return 1 + p;
+    if (rank >= players - 1) return 1 - p;
     return 1;
 }
 
-export function estateMult(owned) {
+export function estateMult(owned, pct = DEFAULT_TUNING.estate) {
     const n = Math.max(0, Math.floor(Number(owned) || 0));
-    return 1 + 0.1 * n;
+    return 1 + (clampNum(pct, 0, 50, DEFAULT_TUNING.estate) / 100) * n;
 }
 
 // --- Boom & bust: deterministic per room + season, zero-sum across crops ---
@@ -289,26 +326,27 @@ function mulberry32(seed) {
     };
 }
 
-// Raw draws in [-0.5, +0.5], mean-subtracted so the three swings sum to ~0
-// (one crop's boom is funded by the others' busts). If centering pushes a
-// swing past ±50%, everything rescales (not clips) so the zero-sum survives
-// and the cap still holds.
-export function eventSwings(roomCode, season) {
+// Raw draws in [-swing, +swing], mean-subtracted so the three swings sum
+// to ~0 (one crop's boom is funded by the others' busts). If centering
+// pushes a swing past ±swing, everything rescales (not clips) so the
+// zero-sum survives and the cap still holds.
+export function eventSwings(roomCode, season, maxSwing = EVENT_MAX_SWING) {
+    const cap = clampNum(maxSwing, 0, EVENT_MAX_SWING, EVENT_MAX_SWING);
     const rand = mulberry32(hashSeed(`${String(roomCode || '').toUpperCase()}|${Number(season) || 0}`));
-    const raw = [0, 1, 2].map(() => (rand() * 2 - 1) * EVENT_MAX_SWING);
+    const raw = [0, 1, 2].map(() => (rand() * 2 - 1) * cap);
     const mean = (raw[0] + raw[1] + raw[2]) / 3;
     const centered = raw.map((v) => v - mean);
     const peak = Math.max(Math.abs(centered[0]), Math.abs(centered[1]), Math.abs(centered[2]));
-    if (peak <= EVENT_MAX_SWING) return centered;
-    const k = EVENT_MAX_SWING / peak;
+    if (peak <= cap) return centered;
+    const k = cap / peak;
     return centered.map((v) => v * k);
 }
 
-export function eventMult(asset, roomCode, season) {
+export function eventMult(asset, roomCode, season, maxSwing = EVENT_MAX_SWING) {
     const key = String(asset || '').toLowerCase();
     const i = EVENT_ASSETS.indexOf(key);
     if (i < 0) return 1;
-    return 1 + eventSwings(roomCode, season)[i];
+    return 1 + eventSwings(roomCode, season, maxSwing)[i];
 }
 
 // Demand balancer: the crop everyone piles into gets dear, the ignored
@@ -337,6 +375,7 @@ function roundPrice(value) {
 // Returns { price, mult, notes } — notes is a short human breakdown for the modal.
 export function computeMarketPrice(base, asset, ctx = {}) {
     const rules = normalizeRules(ctx.rules);
+    const tuning = rules.tuning;
     const key = String(asset || '').toLowerCase();
     const mults = [];
     const notes = [];
@@ -345,37 +384,37 @@ export function computeMarketPrice(base, asset, ctx = {}) {
     // ignored ones go cheap — keeps one dominant strategy from eating
     // the room.
     if (rules.balance && BALANCE_ASSETS.includes(key)) {
-        const m = balanceMult(key, ctx.totals);
+        const m = scaleStrength(balanceMult(key, ctx.totals), tuning.balance);
         mults.push(m);
         if (m > 1) notes.push('high demand');
         else if (m < 1) notes.push('low demand');
     }
 
     if (rules.scarcity && SCARCITY_ASSETS.includes(key)) {
-        const m = scarcityMult(ctx.avgOwned, ctx.players);
+        const m = scaleStrength(scarcityMult(ctx.avgOwned, ctx.players), tuning.scarcity);
         mults.push(m);
         if (m > 1) notes.push('scarce');
         else if (m < 1) notes.push('glut');
     }
     if (rules.seasons && SEASON_ASSETS.includes(key)) {
         const season = seasonIndex(ctx.progress);
-        const m = seasonMult(key, season);
+        const m = scaleStrength(seasonMult(key, season), tuning.seasons);
         mults.push(m);
         if (m !== 1) notes.push(['spring', 'summer', 'fall', 'winter'][season]);
     }
     if (rules.rubberband) {
-        const m = rubberbandMult(ctx.rank, ctx.players);
+        const m = rubberbandMult(ctx.rank, ctx.players, tuning.rubberband);
         mults.push(m);
         if (m > 1) notes.push('leader tax');
         else if (m < 1) notes.push('trailer aid');
     }
     if (rules.estate && ESTATE_ASSETS.includes(key)) {
-        const m = estateMult(ctx.myOwned);
+        const m = estateMult(ctx.myOwned, tuning.estate);
         mults.push(m);
         if (m > 1) notes.push(`estate x${m.toFixed(1)}`);
     }
     if (rules.events && EVENT_ASSETS.includes(key)) {
-        let m = eventMult(key, ctx.roomCode, seasonIndex(ctx.progress));
+        let m = eventMult(key, ctx.roomCode, seasonIndex(ctx.progress), tuning.events / 100);
         // Hay discounts only — a hay boom clips at base, busts still bite.
         if (key === 'hay') m = Math.min(m, HAY_MAX_MULT);
         mults.push(m);

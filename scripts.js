@@ -18,7 +18,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907e';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, scenarioName } from './pricing.js?v=20260907m';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20260907o';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -1608,6 +1608,79 @@ const RULE_DESCRIPTIONS = {
 };
 let setupScenarioKey = 'standard';
 
+// One slider per market rule, set at room creation. Strengths scale how
+// hard scarcity/seasons/balance bite (100% = classic); rubberband sets the
+// leader tax / trailer aid %; estate sets the extra cost per owned unit;
+// events sets the max season swing %. Economy/Harvest have no row — their
+// number groups below are the tuning.
+const RULE_TUNING_SPECS = {
+    scarcity: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard scarcity bites. 100% is the classic rule; 200% doubles every markup and discount; 0% silences it without unticking.' },
+    seasons: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard the seasonal wave swings prices. 100% is classic; 0% flattens the year.' },
+    rubberband: { label: 'Leader tax / trailer aid', min: 0, max: 30, step: 1, def: 10, suffix: '%', desc: 'What the room leader extra-pays and the trailer saves on everything.' },
+    estate: { label: 'Extra cost per unit', min: 0, max: 50, step: 5, def: 10, suffix: '%', desc: 'How much dearer your Nth farm, harvester, or tractor gets per unit you own.' },
+    balance: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard the demand balancer pushes the popular crop up and the ignored ones down.' },
+    events: { label: 'Max season swing', min: 0, max: 50, step: 5, def: 50, suffix: '%', desc: 'Biggest boom or bust per season. Still zero-sum — one crop\u2019s boom is funded by the others\u2019 busts.' }
+};
+
+function tuningSlider(key) {
+    return document.querySelector(`input[data-scope="setup"][data-tslider="${key}"]`);
+}
+function tuningInput(key) {
+    return document.querySelector(`input[data-scope="setup"][data-tuning="${key}"]`);
+}
+
+function readSetupTuning() {
+    const out = {};
+    for (const key of Object.keys(RULE_TUNING_SPECS)) {
+        const el = tuningInput(key);
+        if (!el) continue;
+        out[key] = el.value === '' ? 0 : Number(el.value);
+    }
+    return out;
+}
+
+function syncSetupTuning(rules) {
+    const t = normalizeTuning(rules && rules.tuning);
+    for (const key of Object.keys(RULE_TUNING_SPECS)) {
+        const num = tuningInput(key);
+        if (num) num.value = t[key];
+        const slider = tuningSlider(key);
+        if (slider) slider.value = t[key];
+    }
+    syncSetupTuningEnabled();
+}
+
+// A rule's slider only edits live while its box is ticked — unticked
+// rules do nothing, same as the number groups below.
+function syncSetupTuningEnabled() {
+    document.querySelectorAll('input[data-setup-rule]').forEach((box) => {
+        const on = !!box.checked;
+        const num = tuningInput(box.dataset.setupRule);
+        if (num) num.disabled = !on;
+        const slider = tuningSlider(box.dataset.setupRule);
+        if (slider) slider.disabled = !on;
+    });
+}
+
+function bindSetupTuning() {
+    document.querySelectorAll('input[data-scope="setup"][data-tslider]').forEach((slider) => {
+        if (slider.dataset.tsliderBound) return;
+        slider.dataset.tsliderBound = '1';
+        const pair = tuningInput(slider.dataset.tslider);
+        slider.addEventListener('input', () => { if (pair) pair.value = slider.value; });
+        slider.addEventListener('change', () => { if (pair) pair.value = slider.value; markSetupCustom(); });
+    });
+    document.querySelectorAll('input[data-scope="setup"][data-tuning]').forEach((el) => {
+        if (el.dataset.tuningBound) return;
+        el.dataset.tuningBound = '1';
+        el.addEventListener('input', () => {
+            const s = tuningSlider(el.dataset.tuning);
+            if (s && el.value !== '') s.value = el.value;
+        });
+        el.addEventListener('change', markSetupCustom);
+    });
+}
+
 function setupScenarioRadio(key) {
     return document.querySelector(`input[name="setupScenario"][value="${key}"]`);
 }
@@ -1653,33 +1726,76 @@ function renderSetupForm() {
     if (rc && !rc.dataset.rendered) {
         rc.innerHTML = '';
         for (const key of RULE_KEYS) {
-            const label = document.createElement('label');
-            label.className = 'flex items-start gap-2 p-2 border border-zinc-200 rounded-lg cursor-pointer hover:bg-zinc-50 text-xs';
+            const card = document.createElement('div');
+            card.className = 'p-2 border border-zinc-200 rounded-lg text-xs';
+            const top = document.createElement('label');
+            top.className = 'flex items-start gap-2 cursor-pointer';
             const box = document.createElement('input');
             box.type = 'checkbox';
             box.dataset.setupRule = key;
             box.className = 'mt-0.5';
             const body = document.createElement('span');
-            const nameRow = document.createElement('span');
-            nameRow.className = 'flex items-center gap-1 font-bold text-gray-800';
             const name = document.createElement('span');
+            name.className = 'block font-bold text-gray-800';
             name.textContent = RULE_LABELS[key] || key;
-            const info = makeInfoButton(RULE_LABELS[key] || key);
             const desc = document.createElement('span');
-            desc.className = 'info-tip hidden';
+            desc.className = 'block text-zinc-500';
             desc.textContent = RULE_DESCRIPTIONS[key] || '';
-            wireInfoButton(info, desc);
-            nameRow.appendChild(name);
-            nameRow.appendChild(info);
-            body.appendChild(nameRow);
+            body.appendChild(name);
             body.appendChild(desc);
-            label.appendChild(box);
-            label.appendChild(body);
-            box.addEventListener('change', markSetupCustom);
-            rc.appendChild(label);
+            top.appendChild(box);
+            top.appendChild(body);
+            card.appendChild(top);
+            const tune = RULE_TUNING_SPECS[key];
+            if (tune) {
+                const trow = document.createElement('div');
+                trow.className = 'mt-2 pl-6';
+                const head = document.createElement('span');
+                head.className = 'flex items-center gap-1 font-medium text-gray-700';
+                const tname = document.createElement('span');
+                tname.textContent = tune.suffix ? `${tune.label} (${tune.suffix})` : tune.label;
+                const info = makeInfoButton(tune.label);
+                const tip = document.createElement('span');
+                tip.className = 'info-tip hidden';
+                tip.textContent = tune.desc;
+                wireInfoButton(info, tip);
+                head.appendChild(tname);
+                head.appendChild(info);
+                trow.appendChild(head);
+                trow.appendChild(tip);
+                const srow = document.createElement('span');
+                srow.className = 'flex items-center gap-2 mt-1';
+                const slider = document.createElement('input');
+                slider.type = 'range';
+                slider.min = String(tune.min);
+                slider.max = String(tune.max);
+                slider.step = String(tune.step);
+                slider.value = String(tune.def);
+                slider.dataset.tslider = key;
+                slider.dataset.scope = 'setup';
+                slider.className = 'flex-1';
+                slider.setAttribute('aria-label', tune.label);
+                const num = document.createElement('input');
+                num.type = 'number';
+                num.min = String(tune.min);
+                num.max = String(tune.max);
+                num.step = String(tune.step);
+                num.value = String(tune.def);
+                num.dataset.tuning = key;
+                num.dataset.scope = 'setup';
+                num.className = 'w-20 border rounded px-1 py-0.5 text-xs';
+                num.setAttribute('aria-label', `${tune.label} value`);
+                srow.appendChild(slider);
+                srow.appendChild(num);
+                trow.appendChild(srow);
+                card.appendChild(trow);
+            }
+            box.addEventListener('change', () => { markSetupCustom(); syncSetupTuningEnabled(); });
+            rc.appendChild(card);
         }
         rc.dataset.rendered = '1';
     }
+    bindSetupTuning();
     renderSettingRows('setupSettingsRows', 'setup');
     bindSettingsSliders('setup', async () => { markSetupCustom(); });
     document.querySelectorAll('input[data-scope="setup"][data-setting]').forEach((el) => {
@@ -1706,6 +1822,7 @@ function applySetupScenario(key) {
         box.checked = !!r[box.dataset.setupRule];
     });
     syncSettingsInputs('setup', r);
+    syncSetupTuning(r);
 }
 
 function markSetupCustom() {
@@ -1720,7 +1837,7 @@ function readSetupRules() {
         flags[box.dataset.setupRule] = !!box.checked;
     });
     const tuned = readSettingsInputs('setup');
-    const rules = { ...flags, econ: tuned.econ, harvest: tuned.harvest };
+    const rules = { ...flags, econ: tuned.econ, harvest: tuned.harvest, tuning: readSetupTuning() };
     if (setupScenarioKey !== 'custom') rules.scenario = setupScenarioKey;
     return normalizeRules(rules);
 }
