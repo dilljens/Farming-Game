@@ -160,6 +160,51 @@ export function scenarioName(rules) {
     return anyFlag ? 'Custom' : SCENARIOS.standard.label;
 }
 
+// --- Bulk buys: benchmark-unlocked purchase increments ---
+// Always-on, like the hay ceiling. While ANY one player holds net worth at
+// or above a benchmark, everyone may buy up to the tier multiplier in one
+// purchase. Hay and grain (bulk crops) climb to 4x; everything else caps
+// at 2x. Evaluated live off the leaderboard snapshot, so every device
+// agrees with no extra state — dip back below and the tier locks again.
+export const BULK_TIERS = [
+    { min: 250000, mult: 2 },
+    { min: 500000, mult: 3 },
+    { min: 1000000, mult: 4 }
+];
+export const BULK_ASSETS = ['hay', 'grain'];
+
+export function boardMaxNetWorth(board) {
+    if (!Array.isArray(board) || board.length === 0) return 0;
+    let max = 0;
+    for (const d of board) {
+        const n = Number(d && d.networth) || 0;
+        if (n > max) max = n;
+    }
+    return max;
+}
+
+export function bulkMult(maxNetWorth, asset) {
+    const key = String(asset || '').toLowerCase();
+    const cap = BULK_ASSETS.includes(key) ? 4 : 2;
+    let m = 1;
+    const worth = Number(maxNetWorth) || 0;
+    for (const t of BULK_TIERS) {
+        if (worth >= t.min) m = Math.min(t.mult, cap);
+    }
+    return m;
+}
+
+// Next locked tier for the hint line ({mult, min}), or null when maxed.
+export function bulkNext(maxNetWorth, asset) {
+    const key = String(asset || '').toLowerCase();
+    const cap = BULK_ASSETS.includes(key) ? 4 : 2;
+    const worth = Number(maxNetWorth) || 0;
+    for (const t of BULK_TIERS) {
+        if (t.mult <= cap && worth < t.min) return { mult: t.mult, min: t.min };
+    }
+    return null;
+}
+
 export function normalizeHarvest(harvest) {
     const src = harvest && typeof harvest === 'object' ? harvest : {};
     const midQty = Math.floor(clampNum(src.hayMidQty, 2, 20, DEFAULT_HARVEST.hayMidQty));

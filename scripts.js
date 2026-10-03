@@ -18,7 +18,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907e';
-import { activeEcon, activeHarvest, applyScenario, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, scenarioName } from './pricing.js?v=20260907h';
+import { activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, scenarioName } from './pricing.js?v=20260907h';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -338,7 +338,7 @@ function restartRoomListener() {
     else { startRoomDocListener(); }
 }
 
-let isDoublePurchase = false;
+let purchaseMult = 1;
 let gameClockTimer = null;
 
 let leaderboardSaveTimer = null;
@@ -3786,35 +3786,64 @@ window.addEventListener('DOMContentLoaded', (event) => {
         currentQtyValueEl = qtySpan;
 
         document.getElementById('modalTitle').textContent = `Buy ${asset.charAt(0).toUpperCase() + asset.slice(1)}`;
-        
+
+        // Bulk tiers: benchmark-unlocked increments off the live board max
+        // (any one player crossing a benchmark unlocks it for everyone).
+        purchaseMult = 1;
+        rebuildBulkSelect(asset);
+
         // Show ridge select for Ranch Cows
         const ridgeDiv = document.getElementById('ridgeSelectDiv');
         const ridgeSelect = document.getElementById('ridgeSelect');
-        document.getElementById('doublePurchaseCheckbox').checked = isDoublePurchase;
         if (asset === 'cows') {
             ridgeDiv.classList.remove('hidden');
             ridgeSelect.value = 'ahtanum'; // Default to the first named ridge
-            updateRidgeCost(isDoublePurchase ? 2 : 1);
-            // Unaffordable double falls back to single. Probes the already-
-            // scaled cost (probing x2 again would price 4x and overcharge).
-            if (isDoublePurchase && !getBuyBounds(currentTotalCost).feasible) {
-                isDoublePurchase = false;
-                document.getElementById('doublePurchaseCheckbox').checked = false;
-                updateRidgeCost(1);
-            }
         } else {
             ridgeDiv.classList.add('hidden');
-            updateModalCosts();
         }
-        
-        // Check if double purchase is affordable (cash + debt room).
-        // Probes the already-scaled cost (see showBuyModal note).
-        if (isDoublePurchase && !getBuyBounds(currentTotalCost).feasible) {
-            isDoublePurchase = false;
-            document.getElementById('doublePurchaseCheckbox').checked = false;
-            updateModalCosts();
-        }
+        // Price at 1x, then step down from the selected mult until the debt
+        // room covers it (probes the already-scaled cost each step so a
+        // lower mult is never overcharged).
+        stepBulkToFeasible();
         buyModal.classList.remove('hidden');
+    }
+
+    // (Re)build the quantity select for the unlocked tier and hint line.
+    function rebuildBulkSelect(asset) {
+        const sel = document.getElementById('purchaseMult');
+        const hint = document.getElementById('bulkHint');
+        const worth = boardMaxNetWorth(marketBoard());
+        const tier = bulkMult(worth, asset);
+        sel.innerHTML = '';
+        for (let m = 1; m <= tier; m++) {
+            const opt = document.createElement('option');
+            opt.value = String(m);
+            opt.textContent = m === 1 ? 'Single (1x)' : `${m}x bulk`;
+            sel.appendChild(opt);
+        }
+        sel.value = '1';
+        if (hint) {
+            if (tier <= 1) {
+                hint.textContent = 'Bulk buys unlock when any player reaches $250,000 net worth.';
+            } else {
+                const next = bulkNext(worth, asset);
+                hint.textContent = next
+                    ? `Unlocked ${tier}x — next: ${next.mult}x at $${next.min.toLocaleString()}.`
+                    : `Max bulk unlocked (${tier}x).`;
+            }
+        }
+    }
+
+    // Drop the selected multiplier until cash + debt room covers the
+    // already-scaled total. Never raises — only affordability steps down.
+    function stepBulkToFeasible() {
+        const sel = document.getElementById('purchaseMult');
+        updateModalCosts();
+        while (purchaseMult > 1 && !getBuyBounds(currentTotalCost).feasible) {
+            purchaseMult--;
+            if (sel) sel.value = String(purchaseMult);
+            updateModalCosts();
+        }
     }
 
     function updateRidgeCost(multiplier = 1) {
@@ -3840,33 +3869,22 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
     // Add event listener for ridge select
     document.getElementById('ridgeSelect').addEventListener('change', () => {
-        updateRidgeCost(isDoublePurchase ? 2 : 1);
-        if (isDoublePurchase && !getBuyBounds(currentTotalCost).feasible) {
-            isDoublePurchase = false;
-            document.getElementById('doublePurchaseCheckbox').checked = false;
-            updateRidgeCost(1);
-        }
+        stepBulkToFeasible();
     });
 
-    // Add event listener for double purchase checkbox
-    document.getElementById('doublePurchaseCheckbox').addEventListener('change', function() {
-        isDoublePurchase = this.checked;
-        updateModalCosts();
-        if (isDoublePurchase && !getBuyBounds(currentTotalCost).feasible) {
-            isDoublePurchase = false;
-            this.checked = false;
-            // alert("Insufficient cash for the required down payment on double purchase.");
-            updateModalCosts();
-        }
+    // Bulk quantity select: reprice at the chosen mult, stepping down while
+    // the debt room can't cover it.
+    document.getElementById('purchaseMult').addEventListener('change', function() {
+        purchaseMult = Math.max(1, parseInt(this.value, 10) || 1);
+        stepBulkToFeasible();
     });
 
     function updateModalCosts() {
-        const multiplier = isDoublePurchase ? 2 : 1;
         if (currentAsset === 'cows') {
-            updateRidgeCost(multiplier);
+            updateRidgeCost(purchaseMult);
         } else {
-            currentTotalCost = currentBaseCost * multiplier;
-            document.getElementById('assetInfo').textContent = `Buying ${multiplier} ${currentAsset} at $${currentBaseCost.toLocaleString()} each.` + marketNote(currentAsset);
+            currentTotalCost = currentBaseCost * purchaseMult;
+            document.getElementById('assetInfo').textContent = `Buying ${purchaseMult} ${currentAsset} at $${currentBaseCost.toLocaleString()} each.` + marketNote(currentAsset);
             document.getElementById('totalCost').textContent = currentTotalCost.toLocaleString();
 
             refreshDownPaymentSlider();
@@ -3935,16 +3953,16 @@ window.addEventListener('DOMContentLoaded', (event) => {
             // Ridges are repeat-buyable property: each purchase adds more of
             // the same ridge (and its bonus cows), charged per unit.
             // qtyIncrease is single-unit here; the shared multiplier below
-            // scales it for 2x, matching currentTotalCost.
+            // scales it for bulk, matching currentTotalCost.
             const perUnitBonus = RIDGE_BONUS_BY_KEY[selectedRidge] || 0;
             if (!(perUnitBonus > 0)) return;
             qtyIncrease = perUnitBonus;
-            ridgeMsg = ` (${ridgeSelect.options[ridgeSelect.selectedIndex].text} x${isDoublePurchase ? 2 : 1})`;
+            ridgeMsg = ` (${ridgeSelect.options[ridgeSelect.selectedIndex].text} x${purchaseMult})`;
             pendingRidgeSelection = selectedRidge;
-            pendingRidgeCount = isDoublePurchase ? 2 : 1;
+            pendingRidgeCount = purchaseMult;
         }
 
-        qtyIncrease *= (isDoublePurchase ? 2 : 1);
+        qtyIncrease *= purchaseMult;
 
         // All checks passed — now move the money and apply the purchase.
         // The borrowed shortfall lands first so the down payment can never

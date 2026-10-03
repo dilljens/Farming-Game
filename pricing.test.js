@@ -9,6 +9,9 @@ import {
     activeHarvest,
     applyScenario,
     balanceMult,
+    boardMaxNetWorth,
+    bulkMult,
+    bulkNext,
     computeMarketPrice,
     estateMult,
     eventMult,
@@ -272,4 +275,46 @@ test('scenarios: badge names presets, standard, and custom', () => {
     assert.equal(scenarioName({ scarcity: true }), 'Custom', 'hand-mixed rules show Custom');
     assert.equal(scenarioName({ scenario: 'bogus' }), 'Standard', 'forged stamp falls back');
     assert.equal(scenarioName({ scenario: 'bull', events: false }), 'Bull Market', 'stamp wins while present');
+});
+
+test('bulk tiers: benchmarks unlock increments, hay/grain climb highest', () => {
+    // Below the first benchmark: single only, every asset.
+    for (const asset of ['hay', 'grain', 'farm', 'cows', 'tractor']) {
+        assert.equal(bulkMult(0, asset), 1, `${asset} @0`);
+        assert.equal(bulkMult(249999, asset), 1, `${asset} @249999`);
+    }
+    // $250k: everything unlocks 2x (the documented OTB rule, now enforced).
+    for (const asset of ['hay', 'grain', 'farm', 'cows', 'harvester', 'tractor', 'fruit']) {
+        assert.equal(bulkMult(250000, asset), 2, `${asset} @250k`);
+    }
+    // $500k: bulk crops go 3x, the rest stay capped at 2x.
+    assert.equal(bulkMult(500000, 'hay'), 3);
+    assert.equal(bulkMult(750000, 'grain'), 3);
+    assert.equal(bulkMult(999999, 'farm'), 2, 'non-bulk capped at 2x');
+    assert.equal(bulkMult(999999, 'cows'), 2, 'ridges capped at 2x');
+    // $1M: hay/grain reach 4x, everything else still 2x.
+    assert.equal(bulkMult(1000000, 'hay'), 4);
+    assert.equal(bulkMult(5000000, 'grain'), 4, 'never above 4x');
+    assert.equal(bulkMult(5000000, 'tractor'), 2, 'never above 2x off-bulk');
+    // Junk input stays safe.
+    assert.equal(bulkMult(NaN, 'hay'), 1);
+    assert.equal(bulkMult(-100, 'hay'), 1);
+    assert.equal(bulkMult(1000000, 'weeds'), 2, 'unknown asset treated as non-bulk');
+});
+
+test('bulk next: hint line names the coming tier or null at max', () => {
+    assert.deepEqual(bulkNext(0, 'hay'), { mult: 2, min: 250000 });
+    assert.deepEqual(bulkNext(300000, 'hay'), { mult: 3, min: 500000 });
+    assert.deepEqual(bulkNext(600000, 'grain'), { mult: 4, min: 1000000 });
+    assert.equal(bulkNext(1000000, 'hay'), null, 'hay maxed at 4x');
+    assert.deepEqual(bulkNext(0, 'farm'), { mult: 2, min: 250000 });
+    assert.equal(bulkNext(250000, 'farm'), null, 'non-bulk maxes at 2x');
+});
+
+test('board max: highest net worth wins, empty/junk is zero', () => {
+    assert.equal(boardMaxNetWorth([]), 0);
+    assert.equal(boardMaxNetWorth(undefined), 0);
+    assert.equal(boardMaxNetWorth([{ networth: 100 }, { networth: 300000 }, { networth: 50000 }]), 300000);
+    assert.equal(boardMaxNetWorth([{ networth: 'bogus' }, {}]), 0);
+    assert.equal(boardMaxNetWorth([{ networth: -50 }]), 0, 'debt is not a benchmark');
 });
