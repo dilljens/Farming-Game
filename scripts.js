@@ -358,6 +358,11 @@ let isGainMode = false;
 let payModeSelection = { payType: 'total', perAcre: '100' };
 let gainModeSelection = { payType: 'total', perAcre: '100' };
 
+// Manual interest override: the Interest cell is tappable — typing a custom
+// amount (card rulings, house rules) sticks until it is paid, then interest
+// snaps back to the auto calculation (loan × host interest %).
+let manualInterestOverride = null;
+
 let leaderboardSaveTimer = null;
 let leaderboardSaveGeneration = 0;
 let leaderboardWriteQueue = Promise.resolve();
@@ -1066,19 +1071,54 @@ function updateNetCash() {
 
 
 function updateInterest() {
+    const interestCell = document.querySelector('.interest');
+    if (!interestCell) return;
+    // A typed-in amount wins until it is paid — never clobber mid-keystroke.
+    if (manualInterestOverride != null) {
+        if (document.activeElement !== interestCell) {
+            interestCell.textContent = numberWithCommasAndDecimals(manualInterestOverride);
+        }
+        return;
+    }
     // Retrieve and parse the loan total value
     const loanTotalText = document.querySelector('.loan-total').textContent.replace(/,/g, '');
     // Convert to float and handle potential NaN if the text can't be converted
     const loanTotalValue = parseFloat(loanTotalText) || 0;
-    
+
     // Calculate interest (host-set % of loan total), whole dollars — the game has no cents.
     const interestValue = Math.round(loanTotalValue * (roomEcon().interestPct / 100));
 
     // Update the interest cell with formatted value
-    const interestCell = document.querySelector('.interest');
-    if (interestCell) {
-        interestCell.textContent = numberWithCommasAndDecimals(interestValue);
-    }
+    interestCell.textContent = numberWithCommasAndDecimals(interestValue);
+}
+
+// Tapping the Interest cell types a custom amount owed. It sticks (auto
+// calc pauses) until Pay/Borrow Interest pays it, then auto resumes.
+function wireManualInterestCell() {
+    const cell = document.querySelector('.interest');
+    if (!cell || cell.dataset.interestBound === '1') return;
+    cell.dataset.interestBound = '1';
+    cell.contentEditable = 'true';
+    cell.title = 'Tap to type a custom interest amount';
+    cell.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); cell.blur(); }
+    });
+    cell.addEventListener('input', () => {
+        const v = parseFloat(String(cell.textContent).replace(/,/g, '')) || 0;
+        manualInterestOverride = Math.max(0, Math.round(v));
+        updateActionButtonStates();
+    });
+    cell.addEventListener('blur', () => {
+        const v = parseFloat(String(cell.textContent).replace(/,/g, '').trim());
+        if (!Number.isFinite(v) || v < 0) {
+            manualInterestOverride = null;
+            updateInterest();
+        } else {
+            manualInterestOverride = Math.round(v);
+            cell.textContent = numberWithCommasAndDecimals(manualInterestOverride);
+        }
+        updateActionButtonStates();
+    });
 }
 
 function updateTotalWorth(sendData) {
@@ -3958,6 +3998,7 @@ async function performReset(opts = {}) {
     // Update the data object
     data = baseState;
     resetHistoryCacheForNewGame();
+    manualInterestOverride = null;
 
     // Reset quantity fields to the base state
     document.querySelector('.qty-hay').textContent = '1';
@@ -4087,6 +4128,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
     calculateNet(); // Initial calculation on page load
     updateUpgradedRidgesDisplay();
+    wireManualInterestCell();
     //console.log(document.getElementById('cashInput'));
     makeEditableCellsExitOnEnter();
     const cashUndoCell = document.getElementById('cashUndoCell');
@@ -4223,6 +4265,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
             // Pay the interest
             const interestCashBefore = ledgerLen('cash');
             addCashTransactionValue(-interest);
+            // A typed-in amount is spent — snap back to auto calc.
+            manualInterestOverride = null;
+            updateInterest();
             pushUndoAction({
                 label: `Pay interest $${interest.toLocaleString()}`,
                 cash: ledgerLen('cash') - interestCashBefore,
@@ -4238,7 +4283,11 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // short: borrows the interest plus $1,000 extra, then pays it).
     document.getElementById('borrowInterestBtn')?.addEventListener('click', (event) => {
         event.preventDefault();
-        borrowForExpense(getCurrentInterestValue(), 'Pay interest');
+        if (borrowForExpense(getCurrentInterestValue(), 'Pay interest')) {
+            // Borrowed+p paid — snap back to auto calc on the new loan total.
+            manualInterestOverride = null;
+            updateTotals();
+        }
     });
 
     // Add event listeners for quantity +/- buttons
