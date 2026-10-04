@@ -211,7 +211,7 @@
                         <div id="paymentDisplay">Total Payment: $0</div>
                       </div>
                     </div>
-                    <button id="borrowPayPerAcreBtn" type="button" class="hidden w-full justify-center rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600">Borrow</button>
+                    <button id="borrowPayPerAcreBtn" type="button" class="hidden w-full justify-center rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-yellow-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-600">Borrow</button>
                     <p id="borrowPayPerAcreHint" class="hidden text-xs text-gray-500 mt-1"></p>
                   </div>
                   <div class="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
@@ -261,37 +261,37 @@
       <!-- Room lobby — mirrors imposterirl/src/app/lobby/[room_code]/page.tsx + RoomCodeDisplay.tsx -->
       <div id="roomLobby" class="w-full text-center">
         <div id="roomCodeDisplay" class="text-center mb-4 mt-2 hidden" data-testid="lobby-room-code">
-          <p class="text-gray-400 text-sm uppercase tracking-widest">Room Code <span id="hostBadge" class="hidden ml-2 px-2 py-0.5 bg-amber-400 text-black text-xs rounded-full align-middle">HOST</span></p>
+          <p class="text-gray-400 text-sm uppercase tracking-widest">Room Code <span id="hostBadge" class="hidden ml-2 px-2 py-0.5 bg-yellow-400 text-black text-xs rounded-full align-middle">HOST</span></p>
           <h1 id="roomCodeBig" class="text-4xl font-extrabold tracking-widest text-gray-900">--</h1>
         </div>
         <div id="roomControls" class="flex flex-wrap items-center justify-center gap-2 mb-2">
-          <input id="roomCodeInput" type="text" maxlength="4" placeholder="AB" class="w-24 p-2 rounded bg-white border border-zinc-300 text-2xl tracking-widest text-center uppercase focus:outline-none focus:border-blue-500" data-testid="join-room-input" />
+          <input id="roomCodeInput" type="text" maxlength="4" placeholder="AB" class="w-24 p-2 rounded bg-white border border-gray-300 text-2xl tracking-widest text-center uppercase focus:outline-none focus:border-blue-500" data-testid="join-room-input" />
           <button id="joinRoomBtn" type="button" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold" data-testid="join-submit">JOIN ROOM</button>
           <button id="createRoomBtn" type="button" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold">MAKE ROOM</button>
           <button id="roomQrBtn" type="button" class="hidden px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold" data-testid="lobby-qr-button">📱 JOIN QR</button>
-          <button id="leaveRoomBtn" type="button" class="hidden px-3 py-2 bg-zinc-200 hover:bg-zinc-300 rounded-lg text-sm">LEAVE</button>
+          <button id="leaveRoomBtn" type="button" class="hidden px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm">LEAVE</button>
         </div>
-        <div id="roomQrWrap" class="hidden flex-col items-center gap-2 mb-3 p-4 bg-white border border-zinc-300 rounded-lg max-w-sm mx-auto">
+        <div id="roomQrWrap" class="hidden flex-col items-center gap-2 mb-3 p-4 bg-white border border-gray-300 rounded-lg max-w-sm mx-auto">
           <img id="roomQrImg" alt="QR to join room" class="w-40 h-40 bg-white p-1 rounded" />
-          <p class="text-xs text-zinc-500">Scan to join room <span id="roomQrCodeText" class="text-gray-900 font-bold"></span></p>
-          <p id="roomJoinUrl" class="text-[10px] text-zinc-400 break-all"></p>
+          <p class="text-xs text-gray-500">Scan to join room <span id="roomQrCodeText" class="text-gray-900 font-bold"></span></p>
+          <p id="roomJoinUrl" class="text-[10px] text-gray-400 break-all"></p>
         </div>
-        <p id="roomStatus" class="text-xs text-zinc-500 min-h-[16px]"></p>
+        <p id="roomStatus" class="text-xs text-gray-500 min-h-[16px]"></p>
         <div id="hostControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
           <button id="hostResetRoomBtn" type="button" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-bold">Reset Room (host)</button>
-          <button id="hostResetGameBtn" type="button" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs">Reset My Game</button>
+          <button id="hostResetGameBtn" type="button" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-full text-xs">Reset My Game</button>
         </div>
-        <div id="marketRules" class="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-600" title="Market rules — the host can change them during the game. Everyone sees the same prices.">
-          <span class="uppercase tracking-widest text-zinc-400">Market:</span>
-          <span id="scenarioBadge" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-semibold" title="Active gameplay scenario">Standard</span>
-          <span id="activeRulesText" class="text-zinc-500"></span>
+        <div id="marketRules" class="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-gray-600" title="Market rules — the host can change them during the game. Everyone sees the same prices.">
+          <span class="uppercase tracking-widest text-gray-400">Market:</span>
+          <span id="scenarioBadge" class="px-2 py-0.5 bg-green-100 text-green-800 rounded-full font-semibold" title="Active gameplay scenario">Standard</span>
+          <span id="activeRulesText" class="text-gray-500"></span>
           <button id="roomSettingsBtn" type="button" class="hidden px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-full text-xs font-bold">Room Settings</button>
         </div>
         <div id="guestControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
-          <button id="becomeHostBtn" type="button" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-bold">Become Host</button>
+          <button id="becomeHostBtn" type="button" class="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-full text-xs font-bold">Become Host</button>
         </div>
       </div>
-      <div id="tradeInbox" class="hidden w-full max-w-lg mx-auto my-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-left text-sm"></div>
+      <div id="tradeInbox" class="hidden w-full max-w-lg mx-auto my-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-left text-sm"></div>
       <div class="leaderboard-wrapper">
         <div class="leaderboard-header">
           <h2 class="text-xl font-semibold leading-tight text-gray-800">Leaderboard</h2>
@@ -333,13 +333,13 @@
       </div>
 
     <div id="diceToggleWrap" class="text-center my-2">
-      <button id="toggleDiceBtn" type="button" class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs">🎲 Show Dice</button>
+      <button id="toggleDiceBtn" type="button" class="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-white rounded-full text-xs">🎲 Show Dice</button>
     </div>
-    <div id="diceComponent" class="hidden max-w-lg mx-auto p-3 bg-white border border-zinc-300 rounded-lg text-center mb-2">
+    <div id="diceComponent" class="hidden max-w-lg mx-auto p-3 bg-white border border-gray-300 rounded-lg text-center mb-2">
       <div id="diceDisplay" class="text-5xl font-bold my-1 select-none">-</div>
       <button id="rollDiceBtn" type="button" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold text-sm">Roll 1-6</button>
-      <div id="diceHistory" class="text-xs text-zinc-500 mt-2 min-h-[14px]"></div>
-      <button id="hideDiceBtn" type="button" class="mt-2 text-xs text-zinc-400 hover:text-zinc-600">Hide Dice</button>
+      <div id="diceHistory" class="text-xs text-gray-500 mt-2 min-h-[14px]"></div>
+      <button id="hideDiceBtn" type="button" class="mt-2 text-xs text-gray-400 hover:text-gray-600">Hide Dice</button>
     </div>
     <div class="roll-help text-gray-600 text-center">Tap the names of the asset to 1/2x, 2x, or return to normal</div>
     <div class="table-wrap"><table class="roll-table">
@@ -645,7 +645,7 @@
 <!-- Player Trades — side-by-side buttons pop up the buy/sell forms -->
 <div class="text-center my-3 flex items-center justify-center gap-3 flex-wrap">
   <button id="customBuyBtn" type="button" class="px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-base">Buy from player</button>
-  <button id="customSellBtn" type="button" class="px-5 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-base">Sell to player</button>
+  <button id="customSellBtn" type="button" class="px-5 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-base">Sell to player</button>
 </div>
 <div id="tradeInboxHint" class="text-center text-xs text-gray-500 -mt-1 mb-2">Negotiated prices — nothing moves until the other player accepts.</div>
 
@@ -693,7 +693,7 @@
 <div id="customSellModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
   <div class="relative top-10 mx-auto p-5 border w-[92%] max-w-md shadow-lg rounded-md bg-white max-h-[88vh] overflow-y-auto">
     <div class="mt-3 text-left">
-      <h3 class="text-lg font-bold text-teal-800">Sell to a player</h3>
+      <h3 class="text-lg font-bold text-green-800">Sell to a player</h3>
       <p class="text-xs text-gray-500 mt-1">They accept or reject; nothing moves until they accept. Outside a room, offers go to everyone online.</p>
       <div class="mt-4 space-y-3">
         <label class="block text-sm font-medium text-gray-700">Buyer
@@ -722,7 +722,7 @@
         <p id="customSellHint" class="text-sm text-red-600 hidden"></p>
       </div>
       <div class="flex items-center py-3 mt-2">
-        <button id="confirmCustomSell" type="button" class="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-base font-bold rounded-md w-full">Send offer</button>
+        <button id="confirmCustomSell" type="button" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-base font-bold rounded-md w-full">Send offer</button>
         <button id="cancelCustomSell" type="button" class="ml-3 px-4 py-2 bg-gray-300 text-gray-900 text-base font-medium rounded-md w-full">Cancel</button>
       </div>
     </div>
@@ -751,7 +751,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20261003f"></script>
+<script type="module" src="scripts.js?v=20261003g"></script>
 
 </body>
 </html>

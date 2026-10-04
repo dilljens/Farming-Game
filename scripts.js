@@ -1129,8 +1129,9 @@ function updateInterest() {
     paintInterestCustom();
 }
 
-// A pinned custom amount gets an amber tint + title so a $0 never reads as
-// a broken calc — it reads as what it is: your override, cleared by paying.
+// A pinned custom amount gets an amber-tinted background + title so a $0
+// never reads as a broken calc — it reads as what it is: your override,
+// cleared by paying.
 function paintInterestCustom() {
     const cell = document.querySelector('.interest');
     if (!cell) return;
@@ -1867,7 +1868,7 @@ function renderSetupForm() {
         sc.innerHTML = '';
         for (const key of [...SCENARIO_KEYS, 'custom']) {
             const label = document.createElement('label');
-            label.className = 'flex items-start gap-2 p-2 border border-zinc-200 rounded-lg cursor-pointer hover:bg-zinc-50 text-xs';
+            label.className = 'flex items-start gap-2 p-2 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 text-xs';
             const radio = document.createElement('input');
             radio.type = 'radio';
             radio.name = 'setupScenario';
@@ -1878,7 +1879,7 @@ function renderSetupForm() {
             name.className = 'block font-bold text-gray-800';
             name.textContent = key === 'custom' ? 'Custom' : SCENARIOS[key].label;
             const blurb = document.createElement('span');
-            blurb.className = 'block text-zinc-500';
+            blurb.className = 'block text-gray-500';
             blurb.textContent = key === 'custom'
                 ? 'Your own mix — selected automatically when you tweak anything.'
                 : SCENARIOS[key].blurb;
@@ -1903,7 +1904,7 @@ function renderSetupForm() {
         rc.innerHTML = '';
         for (const key of RULE_KEYS) {
             const card = document.createElement('div');
-            card.className = 'p-2 border border-zinc-200 rounded-lg text-xs';
+            card.className = 'p-2 border border-gray-200 rounded-lg text-xs';
             const top = document.createElement('label');
             top.className = 'flex items-start gap-2 cursor-pointer';
             const box = document.createElement('input');
@@ -1915,7 +1916,7 @@ function renderSetupForm() {
             name.className = 'block font-bold text-gray-800';
             name.textContent = RULE_LABELS[key] || key;
             const desc = document.createElement('span');
-            desc.className = 'block text-zinc-500';
+            desc.className = 'block text-gray-500';
             desc.textContent = RULE_DESCRIPTIONS[key] || '';
             body.appendChild(name);
             body.appendChild(desc);
@@ -2260,7 +2261,7 @@ function renderSettingRows(containerId, scope) {
         if (spec.group !== lastGroup) {
             lastGroup = spec.group;
             const h = document.createElement('h5');
-            h.className = 'mt-2 font-semibold text-zinc-500';
+            h.className = 'mt-2 font-semibold text-gray-500';
             h.textContent = spec.group === 'econ' ? 'ECONOMY (needs Economy ☑)' : 'HARVEST (needs Harvest ☑)';
             box.appendChild(h);
             grid = document.createElement('div');
@@ -2662,11 +2663,11 @@ function renderTradeInbox(trades) {
             const line = t.buyerUid === myUid
                 ? `${t.sellerName} offers ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()}`
                 : `${t.buyerName} wants ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()}`;
-            html += `<div class="flex items-center justify-between gap-2 py-1 border-b border-amber-100">
+            html += `<div class="flex items-center justify-between gap-2 py-1 border-b border-yellow-100">
                 <span>${line} — you are ${t.buyerUid === myUid ? 'buyer' : 'seller'}</span>
                 <span class="flex gap-1">
                   <button data-accept="${t.id}" class="px-2 py-1 bg-green-600 text-white rounded text-xs">Accept</button>
-                  <button data-reject="${t.id}" class="px-2 py-1 bg-zinc-300 rounded text-xs">Reject</button>
+                  <button data-reject="${t.id}" class="px-2 py-1 bg-gray-300 rounded text-xs">Reject</button>
                 </span>
             </div>`;
         });
@@ -2677,7 +2678,7 @@ function renderTradeInbox(trades) {
             const line = t.sellerUid === myUid
                 ? `${t.qty} ${t.asset} to ${t.buyerName} for $${Number(t.price).toLocaleString()} — pending`
                 : `${t.qty} ${t.asset} from ${t.sellerName} for $${Number(t.price).toLocaleString()} — pending`;
-            html += `<div class="py-1 border-b border-amber-100">${line}</div>`;
+            html += `<div class="py-1 border-b border-yellow-100">${line}</div>`;
         });
     }
     const justAccepted = trades.filter(t => t.status === 'accepted' && (Date.now() - new Date(t.updatedAt||t.createdAt).getTime() < 15000) && (t.buyerUid===myUid || t.sellerUid===myUid));
@@ -4490,7 +4491,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const hint = document.getElementById('buyCashHint');
         if (hint) {
             const errorClasses = ['text-red-600'];
-            const infoClasses = ['text-amber-700'];
+            const infoClasses = ['text-yellow-700'];
             if (bounds.feasible && loanOk) {
                 if (shortfall > 0) {
                     hint.textContent = `Includes $${shortfall.toLocaleString()} borrowed for the down payment`;
