@@ -29,11 +29,11 @@ Prices are room-wide: everyone sees the same Cost column and buy-window prices. 
 - **Balance** — the crop everyone piles into gets dear (up to 2×), the ignored ones go cheap (down to half). Hay (base $15,000) only ever discounts, never rises above base.
 - **Boom&Bust** — each crop walks its own random path: every room harvest moves a crop ±1%, zero-sum across crops and capped at ±50% (host slider lowers the cap). Same walk on every device.
 
-Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted — tap the Buy/Sell to player buttons to pop up the trade forms; nothing moves until the other player accepts.
+Market prices show in the Cost column and the buy window, and are the same for everyone in a room. Existing holdings count toward net worth at their stable base value, so market discounts or premiums affect new purchase costs—not net worth. Player-to-player trades are negotiated and never adjusted — tap the Buy/Sell to player buttons to pop up the trade forms; nothing moves until the other player accepts.
 
 ## Scenarios (host one-tap presets, badge shows for everyone)
 
-Pressing MAKE ROOM opens a setup screen first: pick a scenario, mix market rules, and tune economy/harvest numbers, then make the room. Every rule and number has an ⓘ button explaining what it does. A preset fills the whole form; tweaking anything flips it to Custom. Settings are fixed when the room is made — to change them, make a new room.
+Pressing MAKE ROOM opens a setup screen first: pick a scenario, mix market rules, and tune economy/harvest numbers, then make the room. During play, the host can open Room Settings in the Market row to change them for everyone. Every rule and number has an ⓘ button explaining what it does. A preset fills the whole form; tweaking anything flips it to Custom.
 
 A scenario is a shortcut for ticking boxes and typing numbers — same room-doc path, so guests follow automatically. Hand-tweaking anything after a preset flips the badge to Custom.
 
@@ -42,9 +42,9 @@ A scenario is a shortcut for ticking boxes and typing numbers — same room-doc 
 - **Bull Market** — Balance + Boom&Bust with standard money. Walks rotate the best crop as the room harvests — chase the boom.
 - **Debt-Free** — no loans at all: 100% down, cash only. Slow and steady wins.
 
-## Host Settings (set once in the Make Room popup, everyone applies)
+## Host Settings (host-editable during the game, everyone applies)
 
-There are no mid-game settings — everything is chosen at room creation and the Market row shows a read-only badge of what's active. All boxes mix and match. Each number group applies only while its box is ticked — unticked groups play standard values. Every number has a slider plus a box to type an exact value (dragging previews live), and every market rule has its own slider too. Rules show their descriptions; sliders and numbers have ⓘ buttons explaining what they do.
+All boxes mix and match. Each number group applies only while its box is ticked — unticked groups play standard values. Every number has a slider plus a box to type an exact value (dragging previews live), and every market rule has its own slider too. Rules show their descriptions; sliders and numbers have ⓘ buttons explaining what they do. Saving host changes updates the room document so everyone follows.
 
 - **Economy** ☑ — max loan $ (default 50,000), loan interest % (10), minimum down-payment % (20).
 - **Harvest** ☑ — hay bonus tiers: mid qty ×mult (5 → 1.5×), high qty ×mult (10 → 2×); equipment bonus +%/unit and unit cap (20%, 5).

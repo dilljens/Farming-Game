@@ -158,6 +158,7 @@ function updateRoomUi() {
     const qrCodeText = document.getElementById('roomQrCodeText');
     const hostBadge = document.getElementById('hostBadge');
     const hostControls = document.getElementById('hostControls');
+    const roomSettingsBtn = document.getElementById('roomSettingsBtn');
     if (big) big.textContent = currentRoomCode || '--';
     if (display) display.classList.toggle('hidden', !currentRoomCode);
     if (qrBtn) qrBtn.classList.toggle('hidden', !currentRoomCode);
@@ -170,6 +171,13 @@ function updateRoomUi() {
     }
     if (hostBadge) hostBadge.classList.toggle('hidden', !isHost || !currentRoomCode);
     if (hostControls) hostControls.classList.toggle('hidden', !isHost || !currentRoomCode);
+    // Keep settings discoverable in a room even if host identity has not
+    // finished syncing yet; click-time checks provide a useful explanation.
+    if (roomSettingsBtn) {
+        roomSettingsBtn.classList.toggle('hidden', !currentRoomCode);
+        roomSettingsBtn.disabled = false;
+        roomSettingsBtn.title = isHost ? 'Edit settings for everyone in this room' : 'Verify host status and edit room settings';
+    }
     // Guests in a room get a visible way to become the host (take over / make the game theirs)
     const guestControls = document.getElementById('guestControls');
     if (guestControls) guestControls.classList.toggle('hidden', isHost || !currentRoomCode);
@@ -307,7 +315,7 @@ function startRoomDocListener() {
         }
         isHost = !!myUid && myUid === currentRoomHostUid;
         updateRoomUi();
-        // Market rules ride the room doc: set at creation, everyone applies.
+        // Market rules ride the room doc; host edits propagate to everyone.
         currentRoomRules = normalizeRules(data.rules);
         try { updateScenarioBadge(); } catch {}
         refreshPriceCells();
@@ -390,8 +398,13 @@ function calculateNet() {
         const qtyValueEl = qtyCell.querySelector('span.editable');
         const qtyRaw = (qtyValueEl ? qtyValueEl.textContent : qtyCell.innerText).replace(/,/g, '').trim();
         const qty = parseFloat(qtyRaw) || 0;
-        const cost = parseFloat((costCell.innerText || '').replace(/,/g, '').trim()) || 0;
-        const net = qty * cost;
+        // Cost cells show the live market quote for purchases, but holdings
+        // are valued at their stable base price. Discounts/taxes change what
+        // a new buy costs, never the player's net worth.
+        const valuationCost = costCell.dataset.base !== undefined && costCell.dataset.base !== ''
+            ? parseFloat(costCell.dataset.base)
+            : parseFloat((costCell.innerText || '').replace(/,/g, '').trim());
+        const net = qty * (Number.isFinite(valuationCost) ? valuationCost : 0);
 
         netCell.textContent = numberWithCommasAndDecimals(net);
 
@@ -1647,6 +1660,8 @@ async function finishMakeRoom(rules) {
     try {
         const code = await createRoom(rules);
         persistRoomCode(code);
+        currentRoomHostUid = auth.currentUser?.uid || null;
+        isHost = !!currentRoomHostUid;
         await resetForRoomStart();
         try { history.replaceState({}, '', getRoomJoinUrl(code)); } catch {}
         updateRoomUi();
@@ -1932,8 +1947,28 @@ function openRoomSetup() {
 }
 // Host mid-game retune: prefill the same form from the live room rules and
 // save back to the room doc — the room-doc listener pushes them to guests.
-function openRoomSettings() {
-    if (!currentRoomCode || !isHost) return;
+async function openRoomSettings() {
+    const status = document.getElementById('roomStatus');
+    if (!currentRoomCode) {
+        if (status) status.textContent = 'Join or create a room before editing its settings.';
+        return;
+    }
+    try {
+        await authReady;
+        const snap = await getDoc(doc(db, 'rooms', currentRoomCode));
+        const hostUid = snap.exists() ? (snap.data().hostUid || null) : null;
+        currentRoomHostUid = hostUid;
+        isHost = !!auth.currentUser?.uid && auth.currentUser.uid === hostUid;
+        updateRoomUi();
+    } catch (e) {
+        console.error('Unable to verify room host before settings edit', e);
+        if (status) status.textContent = roomErrorMessage(e);
+        return;
+    }
+    if (!isHost) {
+        if (status) status.textContent = 'Only the room host can edit settings. Confirm the host badge or ask the host to transfer host status.';
+        return;
+    }
     roomSetupMode = 'edit';
     renderSetupForm();
     const r = normalizeRules(currentRoomRules);
@@ -1952,10 +1987,23 @@ async function saveRoomSettings(rules) {
     const status = document.getElementById('roomStatus');
     if (status) status.textContent = 'Saving settings…';
     try {
+        await authReady;
+        const snap = await getDoc(doc(db, 'rooms', currentRoomCode));
+        if (!snap.exists() || snap.data().hostUid !== auth.currentUser?.uid) {
+            isHost = false;
+            updateRoomUi();
+            if (status) status.textContent = 'Settings were not saved: this account is no longer the room host.';
+            return;
+        }
         await setDoc(doc(db, 'rooms', currentRoomCode), {
             rules: normalizeRules(rules),
             last_activity_at: new Date().toISOString(),
         }, { merge: true });
+        currentRoomRules = normalizeRules(rules);
+        updateScenarioBadge();
+        refreshPriceCells();
+        updateTotals();
+        populateRollTable();
         if (status) status.textContent = `Room ${currentRoomCode} settings saved — everyone follows`;
     } catch (e) {
         console.error(e);
@@ -1971,8 +2019,12 @@ document.getElementById('roomSetupModal')?.addEventListener('click', (e) => { if
 document.getElementById('confirmRoomSetup')?.addEventListener('click', async () => {
     const rules = readSetupRules();
     hideRoomSetup();
-    if (roomSetupMode === 'edit' && currentRoomCode && isHost) await saveRoomSettings(rules);
-    else await finishMakeRoom(rules);
+    if (roomSetupMode === 'edit') {
+        if (currentRoomCode && isHost) await saveRoomSettings(rules);
+        else if (document.getElementById('roomStatus')) document.getElementById('roomStatus').textContent = 'Settings were not saved: host status is no longer active.';
+    } else {
+        await finishMakeRoom(rules);
+    }
 });
 document.getElementById('roomSettingsBtn')?.addEventListener('click', () => openRoomSettings());
 
@@ -2068,7 +2120,7 @@ function updateScenarioBadge() {
 
 // Number settings (economy + harvest tuning): slider + number-box rows
 // rendered from one spec for the room setup screen (scope 'setup').
-// Setup rows are a draft read once when the room is made.
+// Setup rows are shared by room creation and host mid-game settings edits.
 const SETTING_SPECS = [
     { group: 'econ', key: 'debtCap', label: 'Max loan $', min: 0, max: 500000, step: 5000, def: 50000, desc: 'The biggest loan the bank will give you. Set to 0 for no loans at all (Debt-Free).' },
     { group: 'econ', key: 'interestPct', label: 'Interest %', min: 0, max: 100, step: 1, def: 10, desc: 'Yearly cut added to what you owe. Higher means borrowed money costs more over time.' },

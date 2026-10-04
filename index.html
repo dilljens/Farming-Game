@@ -114,12 +114,12 @@
                           <li><strong>Debt-Free</strong> — no loans: 100% down, cash only.</li>
                         </ul>
                         <p class="mt-2">A scenario just fills the popup form — hand-tweaking anything after flips the badge to Custom.</p>
-                        <h4 class="font-semibold mt-4">Settings (chosen once in the Make Room popup, everyone applies)</h4>
+                        <h4 class="font-semibold mt-4">Settings (host can change these during the game)</h4>
                         <ul class="list-disc list-inside">
                           <li><strong>Economy</strong> numbers (need Economy ☑) — max loan $, loan interest %, minimum down-payment %.</li>
                           <li><strong>Harvest</strong> numbers (need Harvest ☑) — hay bonus tiers (qty → ×mult) and equipment bonus +%/unit with unit cap.</li>
                         </ul>
-                        <p class="mt-2">Every rule and number has an ⓘ button explaining what it does. Settings are fixed when the room is made — to change them, make a new room.</p>
+                        <p class="mt-2">Every rule and number has an ⓘ button explaining what it does. The host can open Room Settings in the Market row and save changes for everyone at any time.</p>
                         
                         <h4 class="font-semibold mt-4">2nd Week of February</h4>
                         <p>After passing/reaching Spring planting go to 2nd week of February.</p>
@@ -278,14 +278,14 @@
         </div>
         <p id="roomStatus" class="text-xs text-zinc-500 min-h-[16px]"></p>
         <div id="hostControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
-          <button id="roomSettingsBtn" type="button" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-xs font-bold">Room Settings (host)</button>
           <button id="hostResetRoomBtn" type="button" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-bold">Reset Room (host)</button>
           <button id="hostResetGameBtn" type="button" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs">Reset My Game</button>
         </div>
-        <div id="marketRules" class="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-600" title="Market rules — set when the room is made, everyone sees. Same prices on every device.">
+        <div id="marketRules" class="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-600" title="Market rules — the host can change them during the game. Everyone sees the same prices.">
           <span class="uppercase tracking-widest text-zinc-400">Market:</span>
           <span id="scenarioBadge" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-semibold" title="Active gameplay scenario">Standard</span>
           <span id="activeRulesText" class="text-zinc-500"></span>
+          <button id="roomSettingsBtn" type="button" class="hidden px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-full text-xs font-bold">Room Settings</button>
         </div>
         <div id="guestControls" class="hidden mt-2 flex flex-wrap items-center justify-center gap-2">
           <button id="becomeHostBtn" type="button" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-xs font-bold">Become Host</button>
@@ -751,7 +751,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20260907y"></script>
+<script type="module" src="scripts.js?v=20261003a"></script>
 
 </body>
 </html>
