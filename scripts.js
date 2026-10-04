@@ -19,7 +19,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907f';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20261004f';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20261004g';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -1791,7 +1791,7 @@ const RULE_DESCRIPTIONS = {
     seasons: 'Prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.',
     rubberband: 'Individual leader/trailer prices are disabled so everyone sees the same room-wide costs.',
     estate: 'Adds a shared surcharge: crops per unit and farms/equipment per unit owned past the starting grant, cattle per 2 head — all off room-average ownership.',
-    balance: 'The crop everyone piles into goes dear (up to 2×); ignored ones go cheap (down to half). Hay caps at $20k, fruit floors at $20k.',
+    balance: 'Crowded crops cost up to $1,000 over base in $100 tickets; ignored ones discount the same way. Hay caps at $20k, fruit floors at $20k.',
     events: 'Each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped. Over-held crops also drift down and under-held crops drift up ($100 tickets).',
     customecon: 'Enables your economy numbers below (unticked = $50k cap, 10% interest, 20% down).',
     customharvest: 'Enables your harvest numbers below (unticked = standard hay tiers and equipment bonus).'
@@ -1808,7 +1808,7 @@ const RULE_TUNING_SPECS = {
     seasons: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard the harvest wave swings prices. 100% is classic; 0% holds everything at base.' },
     rubberband: { label: 'Leader tax / trailer aid', min: 0, max: 30, step: 1, def: 10, suffix: '%', desc: 'Kept for legacy room settings; individual price differences are disabled so all players see the same costs.' },
     estate: { label: 'Shared extra cost per unit', min: 0, max: 50, step: 5, def: 10, suffix: '%', desc: 'Adds the same surcharge to everyone: crops and farms/equipment per owned unit past the starting grant, cattle per 2 head, all off room-average ownership.' },
-    balance: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard the demand balancer pushes the popular crop up and the ignored ones down.' },
+    balance: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard demand pushes in $100 tickets (100% = up to ±$1,000). 0% silences it.' },
     events: { label: 'Max walk swing', min: 0, max: 50, step: 5, def: 50, suffix: '%', desc: 'Farthest a crop\u2019s walk may stray from base. Still zero-sum — one crop\u2019s boom is funded by the others\u2019 busts.' }
 };
 

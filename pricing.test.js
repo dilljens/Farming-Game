@@ -118,11 +118,13 @@ test('market basis: starting units excluded, remainder per-capita', () => {
     assert.deepEqual(marketBasis({ hay: 5, grain: 5, fruit: 5 }, 0), { hay: 5, grain: 5, fruit: 5 });
 });
 
-test('market basis calms big rooms: UP grain demand-only, solo at base', () => {
+test('market basis calms big rooms: UP grain ticks gradual, solo at base', () => {
     const ctx = { rules: { balance: true, seasons: true, events: true }, players: 8, rank: undefined, avgOwned: 0, myOwned: 0, roomCode: 'UP' };
+    // Same $500 pressure, ticketed: the small per-capita deviation rounds
+    // away, leaving only the slow season wave — no ×1.5 jump.
     const grain = computeMarketPrice(20000, 'grain', { ...ctx, totals: marketBasis({ hay: 11, grain: 10, fruit: 0 }, 8) });
-    assert.equal(grain.price, 24200);
-    assert.deepEqual(grain.notes, ['high demand ×1.2']);
+    assert.equal(grain.price, 20200);
+    assert.deepEqual(grain.notes, []);
     const solo = computeMarketPrice(20000, 'grain', { ...ctx, players: 1, totals: marketBasis({ hay: 1, grain: 1, fruit: 0 }, 1) });
     assert.deepEqual(solo, { price: 20000, mult: 1, notes: [] });
 });
@@ -160,9 +162,8 @@ test('balance: hot crop dear, ignored crops cheap', () => {
 test('balance is a host rule: hot fruit costs more only when enabled', () => {
     const totals = { hay: 1, grain: 1, fruit: 28 };
     const on = computeMarketPrice(25000, 'fruit', { rules: { balance: true }, totals });
-    assert.ok(on.mult > 1);
-    assert.equal(on.price, 49900); // 2x demand minus the $100 mean-reversion drift
-    assert.deepEqual(on.notes, ['high demand ×2', 'drift -$100']);
+    assert.equal(on.price, 25900); // capped $1,000 ticket minus $100 drift
+    assert.deepEqual(on.notes, ['high demand +$1,000', 'drift -$100']);
     const off = computeMarketPrice(25000, 'fruit', { rules: {}, totals });
     assert.deepEqual(off, { price: 25000, mult: 1, notes: [] });
 });
@@ -286,20 +287,20 @@ test('mix-and-match: every rule combo prices every asset sanely', () => {
 });
 
 test('hay ceiling: hay never prices above $20k', () => {
-    // Balance alone would 2x hay when the room piles in; the $20k ceiling
-    // holds it (the $100 downward drift still applies underneath).
+    // A piled-in room deals the capped $1,000 demand ticket; the $20k
+    // ceiling holds it (the $100 downward drift still applies underneath).
     const r = computeMarketPrice(15000, 'hay', {
         rules: { balance: true }, totals: { hay: 28, grain: 1, fruit: 1 }
     });
-    assert.ok(r.mult <= 20000 / 15000 + 1e-9);
-    assert.equal(r.price, 19900);
-    assert.deepEqual(r.notes, ['high demand ×2', 'drift -$100']);
+    assert.ok(r.price <= 20000);
+    assert.equal(r.price, 15900);
+    assert.deepEqual(r.notes, ['high demand +$1,000', 'drift -$100']);
     // Hay still discounts when the room ignores it.
     const cheap = computeMarketPrice(15000, 'hay', {
         rules: { balance: true }, totals: { hay: 0, grain: 10, fruit: 10 }
     });
-    assert.ok(cheap.mult < 1);
     assert.ok(cheap.price < 15000);
+    assert.deepEqual(cheap.notes, ['low demand -$1,000', 'drift +$100']);
 });
 
 test('estate steps: cattle per 2 head, crops per earned unit', () => {
@@ -331,14 +332,14 @@ test('estate covers cattle: room-average cows surcharge ranch prices', () => {
 });
 
 test('fruit floor: fruit never prices below $20k', () => {
-    // Balance alone would halve ignored fruit; the $20k floor holds it (the
-    // $100 upward drift still applies underneath).
+    // An ignored room deals the capped -$1,000 demand ticket; the $20k floor
+    // holds it (the $100 upward drift still applies underneath).
     const r = computeMarketPrice(25000, 'fruit', {
         rules: { balance: true }, totals: { hay: 10, grain: 10, fruit: 0 }
     });
-    assert.ok(r.mult >= 20000 / 25000 - 1e-9);
-    assert.equal(r.price, 20100);
-    assert.deepEqual(r.notes, ['low demand ×0.5', 'drift +$100']);
+    assert.ok(r.price >= 20000);
+    assert.equal(r.price, 24100);
+    assert.deepEqual(r.notes, ['low demand -$1,000', 'drift +$100']);
     // A bust walk clips at base too (same as hay booms clip at base).
     const bust = computeMarketPrice(25000, 'fruit', {
         rules: { events: true }, totals: { hay: 0, grain: 0, fruit: 0 }, roomCode: 'FLOOR'
@@ -349,8 +350,8 @@ test('fruit floor: fruit never prices below $20k', () => {
     const dear = computeMarketPrice(25000, 'fruit', {
         rules: { balance: true }, totals: { hay: 1, grain: 1, fruit: 28 }
     });
-    assert.ok(dear.mult > 1);
-    assert.ok(dear.price > 25000);
+    assert.equal(dear.price, 25900);
+    assert.deepEqual(dear.notes, ['high demand +$1,000', 'drift -$100']);
 });
 
 test('fresh rooms open at base: starting holdings move no rule', () => {
@@ -493,11 +494,16 @@ test('strength sliders scale seasons/balance around 1x', () => {
     assert.ok(Math.abs(double.mult - 1.5) < 1e-9, 'peak doubled: 1 + 0.25*2');
     const off = computeMarketPrice(20000, 'grain', { ...base, rules: { seasons: true, tuning: { seasons: 0 } } });
     assert.deepEqual(off, { price: 20000, mult: 1, notes: [] });
-    // Balance still scales the same way (hot fruit 2x at full strength).
+    // Balance now tickets the pressure: full strength deals the capped
+    // $1,000 ticket on a real pile, half strength deals a smaller ticket.
     const hot = computeMarketPrice(20000, 'fruit', {
-        rules: { balance: true, tuning: { balance: 50 } }, totals: { hay: 1, grain: 1, fruit: 28 }
+        rules: { balance: true }, totals: { hay: 1, grain: 1, fruit: 28 }
     });
-    assert.ok(Math.abs(hot.mult - 1.5) < 1e-9, 'half strength: 1 + (2-1)*0.5');
+    assert.deepEqual(hot.notes, ['high demand +$1,000', 'drift -$100']);
+    const half = computeMarketPrice(20000, 'fruit', {
+        rules: { balance: true, tuning: { balance: 50 } }, totals: { hay: 2, grain: 2, fruit: 4 }
+    });
+    assert.deepEqual(half.notes, ['high demand +$300', 'drift -$100']);
 });
 
 test('rubberband slider sets the leader tax / trailer aid', () => {

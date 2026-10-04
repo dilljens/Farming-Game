@@ -12,12 +12,12 @@
 //              (hay 4x, grain 5x, fruit 6x players), so the dear crop keeps
 //              rotating. Peaks at +25%, never below base. Hay/Grain/Fruit.
 //   rubberband room leader pays 1.1x, trailer pays 0.9x. Everything.
-//   estate     your Nth unit costs base * (1 + 0.1 * owned).
-//              Farm/Harvester/Tractor only (ridges already scale per unit).
-//   balance    demand balancer across Hay/Grain/Fruit. Each crop's share of
-//              total room crop holdings vs an even split maps to
-//              mult = clamp(share * 3, 0.5, 2). The crop everyone piles into
-//              gets dear (up to 2x); the ignored ones go cheap (down to 0.5x).
+//   estate     your Nth unit costs base * (1 + 0.1 * owned) — crops per
+//              earned unit, cattle per 2 head, farms/equipment per unit.
+//              Crops/Harvester/Tractor/Cows (ridges already scale per unit).
+//   balance    demand tickets across Hay/Grain/Fruit: deviation from the
+//              even split maps to $500 per unit, ticketed to $100 steps and
+//              capped at ±$1000. Crowded crops premium, ignored ones discount.
 //   events     boom & bust: each crop walks its own random path — every
 //              room harvest moves a crop ±$100. Walk deviations are
 //              normalized zero-sum (swings add to ~$0) so the meta rotates
@@ -425,8 +425,29 @@ export function driftDollars(asset, totals) {
     const clamped = Math.max(-DRIFT_MAX, Math.min(DRIFT_MAX, q));
     return clamped === 0 ? 0 : clamped; // normalize -0 (strict-equal tests)
 }
-// Demand balancer: the crop everyone piles into gets dear, the ignored
-// ones go cheap. share = this crop's fraction of total room crop holdings;
+// --- Demand tickets: gradual pressure for/against the crowded crop ---
+// The hot crop's premium (and ignored crops' discount) move in $100 tickets
+// up to ±$1000 — never an instant ×1.5–×2 jump. Driven by earned room
+// holdings: $500 per unit of deviation from the even split, scaled by the
+// host's balance strength, ticketed, then capped.
+export const DEMAND_PER_UNIT = 500;
+export const DEMAND_TICKET = 100;
+export const DEMAND_MAX = 1000;
+export function demandDollars(asset, totals, strengthPct = 100) {
+    const key = String(asset || '').toLowerCase();
+    if (!BALANCE_ASSETS.includes(key)) return 0;
+    const t = totals && typeof totals === 'object' ? totals : {};
+    const nums = BALANCE_ASSETS.map((k) => Math.max(0, Number(t[k]) || 0));
+    const sum = nums[0] + nums[1] + nums[2];
+    if (!(sum > 0)) return 0;
+    const dev = nums[BALANCE_ASSETS.indexOf(key)] - sum / 3;
+    const s = clampNum(strengthPct, 0, 200, 100) / 100;
+    const q = Math.round((DEMAND_PER_UNIT * dev * s) / DEMAND_TICKET) * DEMAND_TICKET;
+    const clamped = Math.max(-DEMAND_MAX, Math.min(DEMAND_MAX, q));
+    return clamped === 0 ? 0 : clamped; // normalize -0 (strict-equal tests)
+}
+// Raw demand-balancer multiplier (kept for the rule's unit tests and tuning
+// math): share = this crop's fraction of total room crop holdings;
 // even split (1/3 each) => 1x. totals = { hay, grain, fruit } room totals.
 // Empty room (nothing held) => neutral 1x. Non-crop assets => 1x.
 export function balanceMult(asset, totals) {
@@ -464,13 +485,12 @@ export function computeMarketPrice(base, asset, ctx = {}) {
     const notes = [];
 
     // Demand balancer: the crop everyone piles into gets dear, the
-    // ignored ones go cheap — keeps one dominant strategy from eating
-    // the room.
+    // ignored ones go cheap — expressed as $100 demand tickets (up to
+    // ±$1000), never an instant mult jump. Scaled by the balance strength.
+    let demand = 0;
     if (rules.balance && BALANCE_ASSETS.includes(key)) {
-        const m = scaleStrength(balanceMult(key, ctx.totals), tuning.balance);
-        mults.push(m);
-        if (m > 1) notes.push(`high demand ${fmtMult(m)}`);
-        else if (m < 1) notes.push(`low demand ${fmtMult(m)}`);
+        demand = demandDollars(key, ctx.totals, tuning.balance);
+        if (demand !== 0) notes.push(`${demand > 0 ? 'high' : 'low'} demand ${demand > 0 ? '+' : '-'}$${Math.abs(demand).toLocaleString()}`);
     }
 
     if (rules.seasons && SEASON_ASSETS.includes(key)) {
@@ -513,14 +533,14 @@ export function computeMarketPrice(base, asset, ctx = {}) {
         if (drift !== 0) notes.push(`drift ${drift > 0 ? '+' : '-'}$${Math.abs(drift).toLocaleString()}`);
     }
 
-    if (mults.length === 0 && walkDollars === 0 && drift === 0) return { price: Math.round(Number(base) || 0), mult: 1, notes };
+    if (mults.length === 0 && walkDollars === 0 && drift === 0 && demand === 0) return { price: Math.round(Number(base) || 0), mult: 1, notes };
     const b = Number(base) || 0;
     let mult = Math.min(MAX_MULT, Math.max(MIN_MULT, mults.reduce((a, b) => a * b, 1)));
     // Hay ceiling / fruit floor, expressed against this asset's own base so
     // the caps stay exact: hay never past $20k, fruit never under $20k.
     if (key === 'hay' && b > 0) mult = Math.min(mult, HAY_CEILING / b);
     if (key === 'fruit' && b > 0) mult = Math.max(mult, FRUIT_FLOOR / b);
-    let price = roundPrice(b * mult + walkDollars + drift);
+    let price = roundPrice(b * mult + walkDollars + drift + demand);
     // The dollar terms move after the mult, so the caps re-apply to the
     // final price (a hay spike or sub-floor fruit can never leak through).
     if (key === 'hay') price = Math.min(price, HAY_CEILING);
