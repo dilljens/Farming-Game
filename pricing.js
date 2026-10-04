@@ -57,10 +57,10 @@ export const ESTATE_ASSETS = ['farm', 'harvester', 'tractor'];
 export const BALANCE_ASSETS = ['hay', 'grain', 'fruit'];
 export const BALANCE_MIN = 0.5;
 export const BALANCE_MAX = 2;
-// Hay may only ever discount from base, never rise above it.
-export const HAY_MAX_MULT = 1;
-// Fruit may only ever rise from base, never discount below it.
-export const FRUIT_MIN_MULT = 1;
+// Hay may rise above its $15,000 base but never past its $20,000 ceiling.
+export const HAY_CEILING = 20000;
+// Fruit may dip below its $25,000 base but never past its $20,000 floor.
+export const FRUIT_FLOOR = 20000;
 
 export const MIN_MULT = 0.25;
 export const MAX_MULT = 3;
@@ -480,11 +480,7 @@ export function computeMarketPrice(base, asset, ctx = {}) {
     // multiplied) so every step is a flat $100 ticket.
     let walkDollars = 0;
     if (rules.events && EVENT_ASSETS.includes(key)) {
-        let walk = eventDollars(key, ctx.roomCode, harvestClock(ctx.totals), base, tuning.events / 100);
-        // Hay discounts only — a hay boom clips at $0, busts still bite.
-        if (key === 'hay') walk = Math.min(walk, 0);
-        // Fruit premiums only — a fruit bust clips at $0, booms still pay.
-        if (key === 'fruit') walk = Math.max(walk, 0);
+        const walk = eventDollars(key, ctx.roomCode, harvestClock(ctx.totals), base, tuning.events / 100);
         const rw = Math.round(walk);
         if (rw !== 0) {
             walkDollars = rw;
@@ -500,17 +496,16 @@ export function computeMarketPrice(base, asset, ctx = {}) {
     }
 
     if (mults.length === 0 && walkDollars === 0 && drift === 0) return { price: Math.round(Number(base) || 0), mult: 1, notes };
+    const b = Number(base) || 0;
     let mult = Math.min(MAX_MULT, Math.max(MIN_MULT, mults.reduce((a, b) => a * b, 1)));
-    // Hay ceiling: hay discounts only, never above base — no matter which
-    // rules (or the balancer) push upward.
-    if (key === 'hay') mult = Math.min(mult, HAY_MAX_MULT);
-    // Fruit floor: fruit premiums only, never below base — no matter which
-    // rules (or the balancer) push downward.
-    if (key === 'fruit') mult = Math.max(mult, FRUIT_MIN_MULT);
-    let price = roundPrice((Number(base) || 0) * mult + walkDollars + drift);
+    // Hay ceiling / fruit floor, expressed against this asset's own base so
+    // the caps stay exact: hay never past $20k, fruit never under $20k.
+    if (key === 'hay' && b > 0) mult = Math.min(mult, HAY_CEILING / b);
+    if (key === 'fruit' && b > 0) mult = Math.max(mult, FRUIT_FLOOR / b);
+    let price = roundPrice(b * mult + walkDollars + drift);
     // The dollar terms move after the mult, so the caps re-apply to the
-    // final price (a hay boom or sub-base fruit can never leak through).
-    if (key === 'hay') price = Math.min(price, Math.round(Number(base) || 0));
-    if (key === 'fruit') price = Math.max(price, Math.round(Number(base) || 0));
+    // final price (a hay spike or sub-floor fruit can never leak through).
+    if (key === 'hay') price = Math.min(price, HAY_CEILING);
+    if (key === 'fruit') price = Math.max(price, FRUIT_FLOOR);
     return { price, mult, notes };
 }

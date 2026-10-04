@@ -74,13 +74,12 @@ test('seasons: harvest clock starts normal, walks up and back, scales with playe
 
 test('seasons: mid-cycle peaks carry a high-season note, hay ceiling holds', () => {
     // Hay, 2 players: cycle 8 harvests; H=4 is mid-cycle => seasons pushes
-    // 1.25x but the hay ceiling clips it back to base (the note survives,
-    // same as balance pressure — it names the rule, not the final price).
+    // 1.25x, inside the $20k hay ceiling (the note names the rule).
     const r = computeMarketPrice(15000, 'hay', {
         rules: { seasons: true }, totals: { hay: 2, grain: 1, fruit: 1 }, players: 2
     });
-    assert.equal(r.mult, 1);
-    assert.equal(r.price, 15000);
+    assert.equal(r.mult, 1.25);
+    assert.equal(r.price, 18800);
     assert.deepEqual(r.notes, ['high season']);
     const grain = computeMarketPrice(20000, 'grain', {
         rules: { seasons: true }, totals: { hay: 2, grain: 1, fruit: 1 }, players: 2
@@ -255,7 +254,8 @@ test('custom numbers apply only when their checkbox is on', () => {
 
 test('mix-and-match: every rule combo prices every asset sanely', () => {
     // Buying must never NaN, go negative, or escape the clamps — whatever
-    // the host ticks. Hay additionally never rises above base.
+    // the host ticks. Hay additionally never rises above $20k, fruit never
+    // drops below $20k.
     const flags = ['seasons', 'rubberband', 'estate', 'balance', 'events'];
     const assets = ['hay', 'grain', 'fruit', 'farm', 'harvester', 'tractor', 'cows'];
     const bases = { hay: 15000 };
@@ -272,20 +272,27 @@ test('mix-and-match: every rule combo prices every asset sanely', () => {
                 const r = computeMarketPrice(bases[asset] || 20000, asset, { ...c, rules });
                 assert.ok(Number.isFinite(r.price) && r.price >= 500, `mask ${mask} ${asset}: price ${r.price}`);
                 assert.ok(r.mult >= 0.25 && r.mult <= 3, `mask ${mask} ${asset}: mult ${r.mult}`);
-                if (asset === 'hay') assert.ok(r.mult <= 1, `mask ${mask} hay above base`);
+                if (asset === 'hay') {
+                    assert.ok(r.mult <= 20000 / 15000 + 1e-9, `mask ${mask} hay above $20k`);
+                    assert.ok(r.price <= 20000, `mask ${mask} hay price above $20k`);
+                }
+                if (asset === 'fruit') {
+                    assert.ok(r.mult >= 20000 / 25000 - 1e-9, `mask ${mask} fruit below $20k`);
+                    assert.ok(r.price >= 20000, `mask ${mask} fruit price below $20k`);
+                }
             }
         }
     }
 });
 
-test('hay ceiling: hay never prices above base', () => {
-    // Balance alone would 2x hay when the room piles in; the ceiling holds it
-    // (the $100 downward drift still applies underneath).
+test('hay ceiling: hay never prices above $20k', () => {
+    // Balance alone would 2x hay when the room piles in; the $20k ceiling
+    // holds it (the $100 downward drift still applies underneath).
     const r = computeMarketPrice(15000, 'hay', {
         rules: { balance: true }, totals: { hay: 28, grain: 1, fruit: 1 }
     });
-    assert.equal(r.mult, 1);
-    assert.equal(r.price, 14900);
+    assert.ok(r.mult <= 20000 / 15000 + 1e-9);
+    assert.equal(r.price, 19900);
     assert.deepEqual(r.notes, ['high demand', 'drift -$100']);
     // Hay still discounts when the room ignores it.
     const cheap = computeMarketPrice(15000, 'hay', {
@@ -295,14 +302,14 @@ test('hay ceiling: hay never prices above base', () => {
     assert.ok(cheap.price < 15000);
 });
 
-test('fruit floor: fruit never prices below base', () => {
-    // Balance alone would halve ignored fruit; the floor holds it (the $100
-    // upward drift still applies underneath).
+test('fruit floor: fruit never prices below $20k', () => {
+    // Balance alone would halve ignored fruit; the $20k floor holds it (the
+    // $100 upward drift still applies underneath).
     const r = computeMarketPrice(25000, 'fruit', {
         rules: { balance: true }, totals: { hay: 10, grain: 10, fruit: 0 }
     });
-    assert.equal(r.mult, 1);
-    assert.equal(r.price, 25100);
+    assert.ok(r.mult >= 20000 / 25000 - 1e-9);
+    assert.equal(r.price, 20100);
     assert.deepEqual(r.notes, ['low demand', 'drift +$100']);
     // A bust walk clips at base too (same as hay booms clip at base).
     const bust = computeMarketPrice(25000, 'fruit', {
