@@ -4228,6 +4228,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
     calculateNet(); // Initial calculation on page load
     updateUpgradedRidgesDisplay();
     wireManualInterestCell();
+    // Build stamp: reads our own script URL token so "which version am I
+    // running" is always answerable on-device (stale-cache diagnosis).
+    try {
+        const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
+        const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
+        const stamp = document.getElementById('buildStamp');
+        if (stamp) stamp.textContent = `build ${token}`;
+    } catch {}
     //console.log(document.getElementById('cashInput'));
     makeEditableCellsExitOnEnter();
     const cashUndoCell = document.getElementById('cashUndoCell');
