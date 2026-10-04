@@ -80,12 +80,12 @@ test('seasons: mid-cycle peaks carry a high-season note, hay ceiling holds', () 
     });
     assert.equal(r.mult, 1.25);
     assert.equal(r.price, 18800);
-    assert.deepEqual(r.notes, ['high season']);
+    assert.deepEqual(r.notes, ['high season ×1.25']);
     const grain = computeMarketPrice(20000, 'grain', {
         rules: { seasons: true }, totals: { hay: 2, grain: 1, fruit: 1 }, players: 2
     });
     assert.ok(grain.mult > 1 && grain.mult <= 1.25);
-    assert.deepEqual(grain.notes, ['high season']);
+    assert.deepEqual(grain.notes, ['high season ×1.2']);
 });
 
 test('rubberband: leader taxed, trailer aided, middle neutral', () => {
@@ -122,7 +122,7 @@ test('market basis calms big rooms: UP grain demand-only, solo at base', () => {
     const ctx = { rules: { balance: true, seasons: true, events: true }, players: 8, rank: undefined, avgOwned: 0, myOwned: 0, roomCode: 'UP' };
     const grain = computeMarketPrice(20000, 'grain', { ...ctx, totals: marketBasis({ hay: 11, grain: 10, fruit: 0 }, 8) });
     assert.equal(grain.price, 24200);
-    assert.deepEqual(grain.notes, ['high demand']);
+    assert.deepEqual(grain.notes, ['high demand ×1.2']);
     const solo = computeMarketPrice(20000, 'grain', { ...ctx, players: 1, totals: marketBasis({ hay: 1, grain: 1, fruit: 0 }, 1) });
     assert.deepEqual(solo, { price: 20000, mult: 1, notes: [] });
 });
@@ -132,7 +132,7 @@ test('combined mults multiply then round: 1.1 tax x 1.1 estate on 25k', () => {
         rules: { rubberband: true, estate: true }, rank: 0, players: 4, myOwned: 1
     });
     assert.equal(r.price, 30300); // 25000*1.21=30250 -> 30300
-    assert.deepEqual(r.notes, ['leader tax', 'estate x1.1']);
+    assert.deepEqual(r.notes, ['leader tax ×1.1', 'estate ×1.1']);
 });
 
 test('combined mult clamps to [0.25, 3]', () => {
@@ -162,7 +162,7 @@ test('balance is a host rule: hot fruit costs more only when enabled', () => {
     const on = computeMarketPrice(25000, 'fruit', { rules: { balance: true }, totals });
     assert.ok(on.mult > 1);
     assert.equal(on.price, 49900); // 2x demand minus the $100 mean-reversion drift
-    assert.deepEqual(on.notes, ['high demand', 'drift -$100']);
+    assert.deepEqual(on.notes, ['high demand ×2', 'drift -$100']);
     const off = computeMarketPrice(25000, 'fruit', { rules: {}, totals });
     assert.deepEqual(off, { price: 25000, mult: 1, notes: [] });
 });
@@ -293,13 +293,28 @@ test('hay ceiling: hay never prices above $20k', () => {
     });
     assert.ok(r.mult <= 20000 / 15000 + 1e-9);
     assert.equal(r.price, 19900);
-    assert.deepEqual(r.notes, ['high demand', 'drift -$100']);
+    assert.deepEqual(r.notes, ['high demand ×2', 'drift -$100']);
     // Hay still discounts when the room ignores it.
     const cheap = computeMarketPrice(15000, 'hay', {
         rules: { balance: true }, totals: { hay: 0, grain: 10, fruit: 10 }
     });
     assert.ok(cheap.mult < 1);
     assert.ok(cheap.price < 15000);
+});
+
+test('estate covers cattle: room-average cows surcharge ranch prices', () => {
+    // Room averages 2 head (combined farm + ranch counts): 1.2x on $10k.
+    const r = computeMarketPrice(10000, 'cows', {
+        rules: { estate: true }, myOwned: 2, players: 4
+    });
+    assert.equal(r.mult, 1.2);
+    assert.equal(r.price, 12000);
+    assert.deepEqual(r.notes, ['estate ×1.2']);
+    // No cattle on average => base, no note.
+    const flat = computeMarketPrice(10000, 'cows', {
+        rules: { estate: true }, myOwned: 0, players: 4
+    });
+    assert.deepEqual(flat, { price: 10000, mult: 1, notes: [] });
 });
 
 test('fruit floor: fruit never prices below $20k', () => {
@@ -310,7 +325,7 @@ test('fruit floor: fruit never prices below $20k', () => {
     });
     assert.ok(r.mult >= 20000 / 25000 - 1e-9);
     assert.equal(r.price, 20100);
-    assert.deepEqual(r.notes, ['low demand', 'drift +$100']);
+    assert.deepEqual(r.notes, ['low demand ×0.5', 'drift +$100']);
     // A bust walk clips at base too (same as hay booms clip at base).
     const bust = computeMarketPrice(25000, 'fruit', {
         rules: { events: true }, totals: { hay: 0, grain: 0, fruit: 0 }, roomCode: 'FLOOR'

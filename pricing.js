@@ -52,7 +52,9 @@ export const RULE_KEYS = ['seasons', 'rubberband', 'estate', 'balance', 'events'
 // Assets each rule touches. Cows/ridges: cost is bonus-driven in the modal;
 // rubberband still applies there, the rest leave ridges alone.
 export const SEASON_ASSETS = ['hay', 'grain', 'fruit'];
-export const ESTATE_ASSETS = ['farm', 'harvester', 'tractor'];
+// Estate scope: owned durable property — farms, cattle, and equipment.
+// The surcharge keys off room-average ownership, so every device quotes it.
+export const ESTATE_ASSETS = ['farm', 'cows', 'harvester', 'tractor'];
 // Auto balancer scope: the three buyable crop properties.
 export const BALANCE_ASSETS = ['hay', 'grain', 'fruit'];
 export const BALANCE_MIN = 0.5;
@@ -438,6 +440,12 @@ function roundPrice(value) {
     return Math.max(ROUND_TO, Math.round(value / ROUND_TO) * ROUND_TO);
 }
 
+// Every mult-type modifier names its value: "high demand ×1.2", not bare
+// "high demand". Dollar terms (boom/bust/drift) already carry theirs.
+function fmtMult(m) {
+    return `×${m.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}`;
+}
+
 // ctx: { rules, avgOwned, myOwned, rank, players, totals, roomCode }.
 // totals = { hay, grain, fruit } room holdings; feeds the demand balancer,
 // the seasons harvest clock, and the boom & bust random walks
@@ -456,25 +464,25 @@ export function computeMarketPrice(base, asset, ctx = {}) {
     if (rules.balance && BALANCE_ASSETS.includes(key)) {
         const m = scaleStrength(balanceMult(key, ctx.totals), tuning.balance);
         mults.push(m);
-        if (m > 1) notes.push('high demand');
-        else if (m < 1) notes.push('low demand');
+        if (m > 1) notes.push(`high demand ${fmtMult(m)}`);
+        else if (m < 1) notes.push(`low demand ${fmtMult(m)}`);
     }
 
     if (rules.seasons && SEASON_ASSETS.includes(key)) {
         const m = scaleStrength(seasonMult(key, harvestClock(ctx.totals), ctx.players), tuning.seasons);
         mults.push(m);
-        if (m > 1.01) notes.push('high season');
+        if (m > 1.01) notes.push(`high season ${fmtMult(m)}`);
     }
     if (rules.rubberband) {
         const m = rubberbandMult(ctx.rank, ctx.players, tuning.rubberband);
         mults.push(m);
-        if (m > 1) notes.push('leader tax');
-        else if (m < 1) notes.push('trailer aid');
+        if (m > 1) notes.push(`leader tax ${fmtMult(m)}`);
+        else if (m < 1) notes.push(`trailer aid ${fmtMult(m)}`);
     }
     if (rules.estate && ESTATE_ASSETS.includes(key)) {
         const m = estateMult(ctx.myOwned, tuning.estate);
         mults.push(m);
-        if (m > 1) notes.push(`estate x${m.toFixed(1)}`);
+        if (m > 1) notes.push(`estate ${fmtMult(m)}`);
     }
     // Random-walk dollars live outside the mults (added to the price, not
     // multiplied) so every step is a flat $100 ticket.
