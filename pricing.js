@@ -207,20 +207,19 @@ export function scenarioName(rules) {
 }
 
 // --- Bulk buys: benchmark-unlocked purchase increments ---
-// Always-on, like the hay ceiling. While ANY one player holds net worth at
-// or above a benchmark, everyone may buy up to the tier multiplier in one
-// purchase. Hay and grain (bulk crops) start early and climb to 5x —
-// 2x at $150k, 3x at $250k, 5x at $500k; everything else unlocks 2x at
-// $250k and caps there. Evaluated live off the leaderboard snapshot, so
+// Always-on. While ANY one player holds net worth at or above a benchmark,
+// everyone may buy up to the tier multiplier in one purchase. Hay climbs to
+// 5x (2x at $150k, 3x at $250k, 5x at $500k); grain climbs to 3x (2x at
+// $150k, 3x at $250k); fruit, cattle, and everything else unlock 2x at
+// $250k and cap there. Evaluated live off the leaderboard snapshot, so
 // every device agrees with no extra state — dip back below and the tier
 // locks again.
 export const BULK_TIERS = [
-    { min: 150000, mult: 2, bulkOnly: true },
+    { min: 150000, mult: 2, assets: ['hay', 'grain'] },
     { min: 250000, mult: 2 },
-    { min: 250000, mult: 3, bulkOnly: true },
-    { min: 500000, mult: 5, bulkOnly: true }
+    { min: 250000, mult: 3, assets: ['hay', 'grain'] },
+    { min: 500000, mult: 5, assets: ['hay'] }
 ];
-export const BULK_ASSETS = ['hay', 'grain'];
 
 export function boardMaxNetWorth(board) {
     if (!Array.isArray(board) || board.length === 0) return 0;
@@ -232,27 +231,27 @@ export function boardMaxNetWorth(board) {
     return max;
 }
 
-function isBulkAsset(asset) {
-    return BULK_ASSETS.includes(String(asset || '').toLowerCase());
+function tierApplies(t, key) {
+    return !t.assets || t.assets.includes(key);
 }
 
 export function bulkMult(maxNetWorth, asset) {
-    const bulk = isBulkAsset(asset);
+    const key = String(asset || '').toLowerCase();
     const worth = Number(maxNetWorth) || 0;
     let m = 1;
     for (const t of BULK_TIERS) {
-        if (worth >= t.min && (!t.bulkOnly || bulk)) m = Math.max(m, t.mult);
+        if (worth >= t.min && tierApplies(t, key)) m = Math.max(m, t.mult);
     }
     return m;
 }
 
 // Next locked tier for the hint line ({mult, min}), or null when maxed.
 export function bulkNext(maxNetWorth, asset) {
-    const bulk = isBulkAsset(asset);
+    const key = String(asset || '').toLowerCase();
     const worth = Number(maxNetWorth) || 0;
     const cur = bulkMult(worth, asset);
     for (const t of BULK_TIERS) {
-        if ((!t.bulkOnly || bulk) && worth < t.min && t.mult > cur) return { mult: t.mult, min: t.min };
+        if (tierApplies(t, key) && worth < t.min && t.mult > cur) return { mult: t.mult, min: t.min };
     }
     return null;
 }

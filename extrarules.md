@@ -17,7 +17,7 @@ This multiplier affects the **roll payout values** shown in the roll table (prof
 
 ## Options to Buy
 
-Able to buy in bulk once any one player reaches these net-worth benchmarks (buy window offers 1x up to your unlocked tier; unaffordable tiers step down automatically): 2x hay/grain at $150,000 — 2x of anything plus 3x hay/grain at $250,000 — 5x hay/grain at $500,000. Tiers lock again if no one holds the benchmark.
+Able to buy in bulk once any one player reaches these net-worth benchmarks (buy window offers 1x up to your unlocked tier; unaffordable tiers step down automatically): 2x hay/grain at $150,000 — 2x of anything (incl. cattle) plus 3x hay/grain at $250,000 — 5x hay only at $500,000. Tiers lock again if no one holds the benchmark.
 
 ## Market Rules (room host picks per room, same prices on every device)
 

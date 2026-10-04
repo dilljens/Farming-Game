@@ -455,10 +455,15 @@ test('bulk tiers: benchmarks unlock increments, hay/grain climb highest', () => 
     assert.equal(bulkMult(250000, 'hay'), 3);
     assert.equal(bulkMult(300000, 'grain'), 3);
     assert.equal(bulkMult(300000, 'farm'), 2, 'non-bulk capped at 2x');
-    // $500k: hay/grain reach 5x, everything else still 2x.
+    // $500k: hay reaches 5x, grain caps at 3x, everything else still 2x.
     assert.equal(bulkMult(500000, 'hay'), 5);
-    assert.equal(bulkMult(5000000, 'grain'), 5, 'never above 5x');
+    assert.equal(bulkMult(5000000, 'grain'), 3, 'grain caps at 3x');
+    assert.equal(bulkMult(5000000, 'fruit'), 2, 'fruit caps at 2x');
     assert.equal(bulkMult(5000000, 'tractor'), 2, 'never above 2x off-bulk');
+    // Cattle ride the standard tiers: 2x at $250k like everything else.
+    assert.equal(bulkMult(250000, 'cows'), 2);
+    assert.deepEqual(bulkNext(0, 'cows'), { mult: 2, min: 250000 });
+    assert.equal(bulkNext(300000, 'cows'), null, 'cows max out at 2x');
     // Junk input stays safe.
     assert.equal(bulkMult(NaN, 'hay'), 1);
     assert.equal(bulkMult(-100, 'hay'), 1);
@@ -469,7 +474,7 @@ test('bulk tiers: benchmarks unlock increments, hay/grain climb highest', () => 
 test('bulk next: hint line names the coming tier or null at max', () => {
     assert.deepEqual(bulkNext(0, 'hay'), { mult: 2, min: 150000 });
     assert.deepEqual(bulkNext(200000, 'hay'), { mult: 3, min: 250000 });
-    assert.deepEqual(bulkNext(300000, 'grain'), { mult: 5, min: 500000 });
+    assert.deepEqual(bulkNext(300000, 'grain'), null, 'grain maxed at 3x');
     assert.equal(bulkNext(500000, 'hay'), null, 'hay maxed at 5x');
     assert.deepEqual(bulkNext(0, 'farm'), { mult: 2, min: 250000 });
     assert.deepEqual(bulkNext(200000, 'farm'), { mult: 2, min: 250000 });
