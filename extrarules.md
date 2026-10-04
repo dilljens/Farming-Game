@@ -26,7 +26,7 @@ Prices are room-wide: everyone sees the same Cost column and buy-window prices. 
 - **Seasons** — prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.
 - **Rubber-band** — individual leader/trailer prices are disabled so all players get the same room-wide costs.
 - **Estate** — Farm/Harvester/Tractor prices receive a shared surcharge based on the room-average number owned.
-- **Balance** — the crop everyone piles into gets dear (up to 2×), the ignored ones go cheap (down to half). Hay (base $15,000) only ever discounts, never rises above base.
+- **Balance** — the crop everyone piles into gets dear (up to 2×), the ignored ones go cheap (down to half). Hay (base $15,000) only ever discounts, never rises above base. Fruit (base $25,000) only ever rises, never drops below base.
 - **Boom&Bust** — each crop walks its own random path: every room harvest moves a crop ±1%, zero-sum across crops and capped at ±50% (host slider lowers the cap). Same walk on every device.
 
 Market rules run on earned, per-player holdings: everyone's starting hay+grain is excluded and the rest is divided by player count, so 2- and 8-player rooms swing at the same pace and every game opens at base prices. Each crop's Cost line names its active modifiers and source (demand, season, boom/bust, estate).

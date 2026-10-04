@@ -291,6 +291,39 @@ test('hay ceiling: hay never prices above base', () => {
     assert.ok(cheap.price < 15000);
 });
 
+test('fruit floor: fruit never prices below base', () => {
+    // Balance alone would halve ignored fruit; the floor holds it.
+    const r = computeMarketPrice(25000, 'fruit', {
+        rules: { balance: true }, totals: { hay: 10, grain: 10, fruit: 0 }
+    });
+    assert.equal(r.mult, 1);
+    assert.equal(r.price, 25000);
+    // A bust walk clips at base too (same as hay booms clip at base).
+    const bust = computeMarketPrice(25000, 'fruit', {
+        rules: { events: true }, totals: { hay: 0, grain: 0, fruit: 0 }, roomCode: 'FLOOR'
+    });
+    assert.ok(bust.mult >= 1);
+    assert.ok(bust.price >= 25000);
+    // Fruit still rises when the room piles in.
+    const dear = computeMarketPrice(25000, 'fruit', {
+        rules: { balance: true }, totals: { hay: 1, grain: 1, fruit: 28 }
+    });
+    assert.ok(dear.mult > 1);
+    assert.ok(dear.price > 25000);
+});
+
+test('fresh rooms open at base: starting holdings move no rule', () => {
+    // 4 players holding only their starting 1 hay + 1 grain, every rule on.
+    const totals = marketBasis({ hay: 4, grain: 4, fruit: 0 }, 4);
+    assert.deepEqual(totals, { hay: 0, grain: 0, fruit: 0 });
+    const rules = { balance: true, seasons: true, rubberband: true, estate: true, events: true };
+    for (const [asset, base] of [['hay', 15000], ['grain', 20000], ['fruit', 25000], ['farm', 5000], ['harvester', 10000], ['tractor', 10000]]) {
+        const r = computeMarketPrice(base, asset, { rules, totals, players: 4, roomCode: 'FRESH' });
+        assert.equal(r.price, base, `${asset} opens at base`);
+        assert.deepEqual(r.notes, [], `${asset} opens with no modifiers`);
+    }
+});
+
 test('scenarios: every preset normalizes to playable rules', () => {
     for (const key of ['standard', 'drought', 'bull', 'debtfree']) {
         const r = applyScenario(key);

@@ -59,6 +59,8 @@ export const BALANCE_MIN = 0.5;
 export const BALANCE_MAX = 2;
 // Hay may only ever discount from base, never rise above it.
 export const HAY_MAX_MULT = 1;
+// Fruit may only ever rise from base, never discount below it.
+export const FRUIT_MIN_MULT = 1;
 
 export const MIN_MULT = 0.25;
 export const MAX_MULT = 3;
@@ -455,6 +457,8 @@ export function computeMarketPrice(base, asset, ctx = {}) {
         let m = eventMult(key, ctx.roomCode, harvestClock(ctx.totals), tuning.events / 100);
         // Hay discounts only — a hay boom clips at base, busts still bite.
         if (key === 'hay') m = Math.min(m, HAY_MAX_MULT);
+        // Fruit premiums only — a fruit bust clips at base, booms still pay.
+        if (key === 'fruit') m = Math.max(m, FRUIT_MIN_MULT);
         mults.push(m);
         if (m >= 1.01) notes.push(`boom +${Math.round((m - 1) * 100)}%`);
         else if (m <= 0.99) notes.push(`bust ${Math.round((m - 1) * 100)}%`);
@@ -465,5 +469,8 @@ export function computeMarketPrice(base, asset, ctx = {}) {
     // Hay ceiling: hay discounts only, never above base — no matter which
     // rules (or the balancer) push upward.
     if (key === 'hay') mult = Math.min(mult, HAY_MAX_MULT);
+    // Fruit floor: fruit premiums only, never below base — no matter which
+    // rules (or the balancer) push downward.
+    if (key === 'fruit') mult = Math.max(mult, FRUIT_MIN_MULT);
     return { price: roundPrice((Number(base) || 0) * mult), mult, notes };
 }

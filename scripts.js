@@ -19,7 +19,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907f';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20261004a';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20261004b';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -2725,7 +2725,7 @@ function renderTradeInbox(trades) {
             const line = t.sellerUid === myUid
                 ? `${t.qty} ${t.asset} to ${t.buyerName} for $${Number(t.price).toLocaleString()} — pending`
                 : `${t.qty} ${t.asset} from ${t.sellerName} for $${Number(t.price).toLocaleString()} — pending`;
-            html += `<div class="py-1 border-b border-yellow-100">${line}</div>`;
+            html += `<div class="py-1 border-b border-yellow-100 flex items-center justify-between gap-2"><span>${line}</span><button data-reject="${t.id}" class="px-1.5 py-0.5 text-gray-500 hover:text-gray-800 text-sm leading-none" title="Cancel this offer">×</button></div>`;
         });
     }
     const justAccepted = trades.filter(t => t.status === 'accepted' && (Date.now() - new Date(t.updatedAt||t.createdAt).getTime() < 15000) && (t.buyerUid===myUid || t.sellerUid===myUid) && !dismissedTrades.has(t.id));
