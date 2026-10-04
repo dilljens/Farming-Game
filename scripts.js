@@ -337,6 +337,13 @@ function restartRoomListener() {
 let purchaseMult = 1;
 let gameClockTimer = null;
 
+// Pay/gain modal state lives up here (not with the modal code below):
+// updateActionButtonStates() reads payModeSelection during early page init,
+// so these must be initialized before any init-time updateTotals() call.
+let isGainMode = false;
+let payModeSelection = { payType: 'total', perAcre: '100' };
+let gainModeSelection = { payType: 'total', perAcre: '100' };
+
 let leaderboardSaveTimer = null;
 let leaderboardSaveGeneration = 0;
 let leaderboardWriteQueue = Promise.resolve();
@@ -3355,12 +3362,8 @@ function hideExtraRulesModal() {
     document.getElementById('extraRulesModal').classList.add('hidden');
 }
 
-// Global variable to track if we're in gain or pay mode
-let isGainMode = false;
-
-// Store selected options separately for pay and gain modes
-let payModeSelection = { payType: 'total', perAcre: '100' };
-let gainModeSelection = { payType: 'total', perAcre: '100' };
+// Pay/gain modal state is declared with the other top-level state (see
+// isGainMode / payModeSelection / gainModeSelection above) — see note there.
 
 // Function to update modal title and button text based on mode
 function updateModalForMode() {
