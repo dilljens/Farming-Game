@@ -69,6 +69,9 @@ export const FRUIT_FLOOR = 20000;
 export const MIN_MULT = 0.25;
 export const MAX_MULT = 3;
 export const ROUND_TO = 100; // prices tick in $100 steps, never faster
+// Crops never add past 1.5x no matter how rules stack — seasons and
+// estate add together, but the combined crop multiplier stops here.
+export const CROP_MAX_MULT = 1.5;
 
 export function normalizeRules(rules) {
     // Retired keys (market/scarcity) fall off here: only RULE_KEYS survive,
@@ -535,7 +538,9 @@ export function computeMarketPrice(base, asset, ctx = {}) {
 
     if (mults.length === 0 && walkDollars === 0 && drift === 0 && demand === 0) return { price: Math.round(Number(base) || 0), mult: 1, notes };
     const b = Number(base) || 0;
-    let mult = Math.min(MAX_MULT, Math.max(MIN_MULT, mults.reduce((a, b) => a * b, 1)));
+    let mult = Math.min(MAX_MULT, Math.max(MIN_MULT, 1 + mults.reduce((s, m) => s + (m - 1), 0)));
+    // Crops stop at 1.5x combined, however seasons and estate stack.
+    if (BALANCE_ASSETS.includes(key)) mult = Math.min(mult, CROP_MAX_MULT);
     // Hay ceiling / fruit floor, expressed against this asset's own base so
     // the caps stay exact: hay never past $20k, fruit never under $20k.
     if (key === 'hay' && b > 0) mult = Math.min(mult, HAY_CEILING / b);

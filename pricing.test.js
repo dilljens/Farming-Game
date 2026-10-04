@@ -129,12 +129,22 @@ test('market basis calms big rooms: UP grain ticks gradual, solo at base', () =>
     assert.deepEqual(solo, { price: 20000, mult: 1, notes: [] });
 });
 
-test('combined mults multiply then round: 1.1 tax x 1.1 estate on 25k', () => {
+test('combined mults add then round: 1.1 tax + 1.1 estate on 25k', () => {
     const r = computeMarketPrice(25000, 'farm', {
         rules: { rubberband: true, estate: true }, rank: 0, players: 4, myOwned: 1
     });
-    assert.equal(r.price, 30300); // 25000*1.21=30250 -> 30300
+    assert.equal(r.price, 30000); // 25000*1.2=30000, relative additive
     assert.deepEqual(r.notes, ['leader tax ×1.1', 'estate ×1.1']);
+});
+
+test('crop mults add, then stop at 1.5x', () => {
+    // Seasons 1.1 + estate 2.0 would multiply past 2x; additive gives
+    // 1 + 0.1 + 1.0 = 2.1, and the crop backstop holds it at 1.5x.
+    const r = computeMarketPrice(20000, 'grain', {
+        rules: { seasons: true, estate: true }, totals: { hay: 4, grain: 4, fruit: 4 }, players: 2, myOwned: 10
+    });
+    assert.ok(r.mult <= 1.5 + 1e-9);
+    assert.equal(r.price, 30000);
 });
 
 test('combined mult clamps to [0.25, 3]', () => {
