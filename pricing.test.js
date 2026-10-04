@@ -89,11 +89,16 @@ test('seasons: mid-cycle peaks carry a high-season note, hay ceiling holds', () 
 });
 
 test('rubberband: leader taxed, trailer aided, middle neutral', () => {
-    assert.equal(rubberbandMult(0, 6), 1.1);
-    assert.equal(rubberbandMult(5, 6), 0.9);
-    assert.equal(rubberbandMult(2, 6), 1);
-    assert.equal(rubberbandMult(0, 1), 1); // solo => neutral
-    assert.equal(rubberbandMult(undefined, 6), 1);
+    // The split only switches on once the room leader holds $70k+.
+    assert.equal(rubberbandMult(0, 6, 10, 80000), 1.1);
+    assert.equal(rubberbandMult(5, 6, 10, 80000), 0.9);
+    assert.equal(rubberbandMult(2, 6, 10, 80000), 1);
+    assert.equal(rubberbandMult(0, 1, 10, 80000), 1); // solo => neutral
+    assert.equal(rubberbandMult(undefined, 6, 10, 80000), 1);
+    // Below $70k top net worth the whole room stays neutral.
+    assert.equal(rubberbandMult(0, 6, 10, 69999), 1);
+    assert.equal(rubberbandMult(5, 6, 10, 69999), 1);
+    assert.equal(rubberbandMult(0, 6, 10, 0), 1);
 });
 
 test('estate: tenth-percent per owned unit', () => {
@@ -131,7 +136,7 @@ test('market basis calms big rooms: UP grain ticks gradual, solo at base', () =>
 
 test('combined mults add then round: 1.1 tax + 1.1 estate on 25k', () => {
     const r = computeMarketPrice(25000, 'farm', {
-        rules: { rubberband: true, estate: true }, rank: 0, players: 4, myOwned: 1
+        rules: { rubberband: true, estate: true }, rank: 0, players: 4, myOwned: 1, leaderNetWorth: 80000
     });
     assert.equal(r.price, 30000); // 25000*1.2=30000, relative additive
     assert.deepEqual(r.notes, ['leader tax ×1.1', 'estate ×1.1']);
@@ -149,7 +154,7 @@ test('crop mults add, then stop at 1.5x', () => {
 
 test('combined mult clamps to [0.25, 3]', () => {
     const hi = computeMarketPrice(20000, 'tractor', {
-        rules: { rubberband: true, estate: true }, rank: 0, players: 4, myOwned: 25
+        rules: { rubberband: true, estate: true }, rank: 0, players: 4, myOwned: 25, leaderNetWorth: 80000
     });
     // 1.1 x 3.5 = 3.85 => clamped to 3 => 60000
     assert.equal(hi.mult, 3);
@@ -518,12 +523,12 @@ test('strength sliders scale seasons/balance around 1x', () => {
 });
 
 test('rubberband slider sets the leader tax / trailer aid', () => {
-    assert.equal(rubberbandMult(0, 6, 20), 1.2);
-    assert.equal(rubberbandMult(5, 6, 20), 0.8);
-    assert.equal(rubberbandMult(2, 6, 20), 1, 'middle stays neutral');
-    assert.equal(rubberbandMult(0, 6, 0), 1, 'zero aid is silent');
+    assert.equal(rubberbandMult(0, 6, 20, 80000), 1.2);
+    assert.equal(rubberbandMult(5, 6, 20, 80000), 0.8);
+    assert.equal(rubberbandMult(2, 6, 20, 80000), 1, 'middle stays neutral');
+    assert.equal(rubberbandMult(0, 6, 0, 80000), 1, 'zero aid is silent');
     const r = computeMarketPrice(25000, 'farm', {
-        rules: { rubberband: true, tuning: { rubberband: 30 } }, rank: 0, players: 4
+        rules: { rubberband: true, tuning: { rubberband: 30 } }, rank: 0, players: 4, leaderNetWorth: 80000
     });
     assert.equal(r.mult, 1.3);
 });

@@ -329,9 +329,12 @@ export function seasonMult(asset, harvests, players) {
 }
 
 // rank = 0-based position in networth-desc board. Unknown/solo => neutral.
-// pct = leader tax / trailer aid % (default 10).
-export function rubberbandMult(rank, players, pct = DEFAULT_TUNING.rubberband) {
+// The split only switches on once the room leader holds $70k+ — small rooms
+// play neutral no matter the ranks. pct = leader tax / trailer aid %.
+export const RUBBERBAND_NET_WORTH = 70000;
+export function rubberbandMult(rank, players, pct = DEFAULT_TUNING.rubberband, leaderNetWorth = 0) {
     if (!Number.isInteger(rank) || !Number.isFinite(players) || players < 2) return 1;
+    if (!(Number(leaderNetWorth) >= RUBBERBAND_NET_WORTH)) return 1;
     const p = clampNum(pct, 0, 30, DEFAULT_TUNING.rubberband) / 100;
     if (rank <= 0) return 1 + p;
     if (rank >= players - 1) return 1 - p;
@@ -502,7 +505,7 @@ export function computeMarketPrice(base, asset, ctx = {}) {
         if (m > 1.01) notes.push(`high season ${fmtMult(m)}`);
     }
     if (rules.rubberband) {
-        const m = rubberbandMult(ctx.rank, ctx.players, tuning.rubberband);
+        const m = rubberbandMult(ctx.rank, ctx.players, tuning.rubberband, ctx.leaderNetWorth);
         mults.push(m);
         if (m > 1) notes.push(`leader tax ${fmtMult(m)}`);
         else if (m < 1) notes.push(`trailer aid ${fmtMult(m)}`);

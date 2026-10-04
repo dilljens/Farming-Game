@@ -19,7 +19,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907f';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20261004i';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20261004j';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -1535,6 +1535,13 @@ function currentMarketCtx(asset) {
     const key = String(asset || '').toLowerCase();
     let total = 0;
     for (const d of board) total += Number(d[key] ?? 0) || 0;
+    // Net-worth ranking for rubber-band (leader tax / trailer aid). Equal
+    // net worth is a tie, not an arbitrary rank — ties stay neutral.
+    const uid = (typeof auth !== 'undefined' && auth.currentUser) ? auth.currentUser.uid : null;
+    const sorted = [...board].sort((a, b) => (Number(b.networth) || 0) - (Number(a.networth) || 0));
+    const idx = uid ? sorted.findIndex((d) => d._id === uid) : -1;
+    const tied = idx >= 0 && sorted.some((d, i) => i !== idx && Number(d.networth) === Number(sorted[idx].networth));
+    const leaderNetWorth = sorted.length ? (Number(sorted[0].networth) || 0) : 0;
     // Room crop totals feed the demand balancer, the seasons clock, and
     // the boom & bust walks (same snapshot on every client, so every
     // device prices identically). Per-capita earned basis: starting
@@ -1547,14 +1554,16 @@ function currentMarketCtx(asset) {
         rawTotals[k] = t;
     }
     const cropTotals = marketBasis(rawTotals, players);
-    // Market cost is a room-wide quote, never personalized by this device's
-    // rank or local inventory. Use room-average ownership for Estate so every
-    // client computes the same surcharge from the same leaderboard snapshot.
+    // Market cost is a room-wide quote, never personalized by local
+    // inventory (estate uses room-average ownership). The one exception is
+    // rubber-band: leader/trailer pricing is positional by design, and only
+    // switches on once the room leader holds $70k+.
     const avgOwned = players > 0 ? total / players : 0;
     return {
         rules: normalizeRules(currentRoomRules),
         players,
-        rank: undefined,
+        rank: idx < 0 || tied ? undefined : idx,
+        leaderNetWorth,
         avgOwned,
         myOwned: avgOwned,
         totals: cropTotals,
@@ -1789,7 +1798,7 @@ const RULE_LABELS = {
 };
 const RULE_DESCRIPTIONS = {
     seasons: 'Prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.',
-    rubberband: 'Individual leader/trailer prices are disabled so everyone sees the same room-wide costs.',
+    rubberband: 'Once the room leader passes $70k net worth, the leader pays extra and the trailer saves on everything.',
     estate: 'Adds a shared surcharge: crops per unit and farms/equipment per unit owned past the starting grant, cattle per 2 head — all off room-average ownership.',
     balance: 'Crowded crops cost up to $1,000 over base in $100 tickets; ignored ones discount the same way. Hay caps at $20k, fruit floors at $20k.',
     events: 'Each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped. Over-held crops also drift down and under-held crops drift up ($100 tickets, up to ±$500).',
