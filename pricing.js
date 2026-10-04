@@ -52,9 +52,11 @@ export const RULE_KEYS = ['seasons', 'rubberband', 'estate', 'balance', 'events'
 // Assets each rule touches. Cows/ridges: cost is bonus-driven in the modal;
 // rubberband still applies there, the rest leave ridges alone.
 export const SEASON_ASSETS = ['hay', 'grain', 'fruit'];
-// Estate scope: owned durable property — farms, cattle, and equipment.
-// The surcharge keys off room-average ownership, so every device quotes it.
-export const ESTATE_ASSETS = ['farm', 'cows', 'harvester', 'tractor'];
+// Estate scope: owned property — crops per unit held, cattle per 2 head,
+// farms and equipment per unit. The surcharge keys off room-average
+// ownership, so every device quotes it. (The board's cattle count mixes
+// farm + ranch head, so farm cows ride along at the cattle rate.)
+export const ESTATE_ASSETS = ['hay', 'grain', 'fruit', 'farm', 'cows', 'harvester', 'tractor'];
 // Auto balancer scope: the three buyable crop properties.
 export const BALANCE_ASSETS = ['hay', 'grain', 'fruit'];
 export const BALANCE_MIN = 0.5;
@@ -333,8 +335,11 @@ export function rubberbandMult(rank, players, pct = DEFAULT_TUNING.rubberband) {
     return 1;
 }
 
-export function estateMult(owned, pct = DEFAULT_TUNING.estate) {
-    const n = Math.max(0, Math.floor(Number(owned) || 0));
+export function estateMult(owned, pct = DEFAULT_TUNING.estate, per = 1) {
+    // per = units per estate step: 1 for most property, 2 for cattle (every
+    // second cow adds a step). Fractional room averages floor down.
+    const step = Math.max(1, Math.floor(Number(per) || 1));
+    const n = Math.max(0, Math.floor((Number(owned) || 0) / step));
     return 1 + (clampNum(pct, 0, 50, DEFAULT_TUNING.estate) / 100) * n;
 }
 
@@ -480,7 +485,12 @@ export function computeMarketPrice(base, asset, ctx = {}) {
         else if (m < 1) notes.push(`trailer aid ${fmtMult(m)}`);
     }
     if (rules.estate && ESTATE_ASSETS.includes(key)) {
-        const m = estateMult(ctx.myOwned, tuning.estate);
+        // Crops count earned units only — the starting hay+grain grant never
+        // pays estate (fresh rooms stay at base). Cattle steps every 2 head.
+        const owned = BALANCE_ASSETS.includes(key)
+            ? Math.max(0, (Number(ctx.myOwned) || 0) - (STARTING_HOLDINGS[key] || 0))
+            : ctx.myOwned;
+        const m = estateMult(owned, tuning.estate, key === 'cows' ? 2 : 1);
         mults.push(m);
         if (m > 1) notes.push(`estate ${fmtMult(m)}`);
     }

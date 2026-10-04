@@ -302,10 +302,23 @@ test('hay ceiling: hay never prices above $20k', () => {
     assert.ok(cheap.price < 15000);
 });
 
+test('estate steps: cattle per 2 head, crops per earned unit', () => {
+    assert.equal(estateMult(3, 10, 2), 1.1, '3 head is one cattle step');
+    assert.equal(estateMult(1, 10, 2), 1, 'a single cow is not yet a step');
+    assert.equal(estateMult(3), 1.3, 'default step stays per-unit');
+    // Crop estate ignores the starting grant: room averaging 3 hay (2 earned).
+    const r = computeMarketPrice(15000, 'hay', {
+        rules: { estate: true }, myOwned: 3, players: 4
+    });
+    assert.equal(r.mult, 1.2);
+    assert.equal(r.price, 18000);
+    assert.deepEqual(r.notes, ['estate ×1.2']);
+});
+
 test('estate covers cattle: room-average cows surcharge ranch prices', () => {
-    // Room averages 2 head (combined farm + ranch counts): 1.2x on $10k.
+    // Room averages 4 head (combined farm + ranch counts): 2 steps at 1.1x.
     const r = computeMarketPrice(10000, 'cows', {
-        rules: { estate: true }, myOwned: 2, players: 4
+        rules: { estate: true }, myOwned: 4, players: 4
     });
     assert.equal(r.mult, 1.2);
     assert.equal(r.price, 12000);
