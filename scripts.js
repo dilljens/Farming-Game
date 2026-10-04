@@ -909,6 +909,22 @@ function setButtonDisabled(button, disabled) {
     button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
 }
 
+// Interest-row buttons never use the `disabled` attribute: a disabled button
+// swallows taps with zero feedback ("grayed out when it shouldn't"). They
+// look gray via the same class but stay tappable, and the tap either pays
+// or says exactly why not in the room status line.
+function setTappableBtn(button, blocked, reason) {
+    if (!button) return;
+    button.disabled = false;
+    button.classList.toggle('is-disabled', !!blocked);
+    button.setAttribute('aria-disabled', blocked ? 'true' : 'false');
+    if (reason) button.title = reason;
+}
+function sayStatus(msg) {
+    const status = document.getElementById('roomStatus');
+    if (status) status.textContent = msg;
+}
+
 function updateActionButtonStates() {
     const cashTotal = getCurrentCashTotal();
 
@@ -920,18 +936,24 @@ function updateActionButtonStates() {
         const interest = getCurrentInterestValue();
         const short = interest > 0 && cashTotal < interest;
         payInterestBtn.classList.toggle('hidden', short && !!borrowInterestBtn);
-        const disabled = !(interest > 0) || cashTotal < interest;
-        setButtonDisabled(payInterestBtn, disabled);
+        const blocked = !(interest > 0) || cashTotal < interest;
+        setTappableBtn(
+            payInterestBtn,
+            blocked,
+            !(interest > 0)
+                ? 'No interest due right now.'
+                : `Needs $${interest.toLocaleString()} — cash $${cashTotal.toLocaleString()} is short. Borrow covers it.`
+        );
         if (borrowInterestBtn) {
             borrowInterestBtn.classList.toggle('hidden', !short);
             if (short) {
                 const loan = interest + EXPENSE_LOAN_EXTRA;
                 const capOk = getCurrentLoanTotal() + loan <= debtCap();
                 borrowInterestBtn.textContent = `Borrow $${interest.toLocaleString()} + $1k`;
-                borrowInterestBtn.title = capOk
+                const reason = capOk
                     ? `Pays $${interest.toLocaleString()} interest now; loan $${loan.toLocaleString()}, you keep $1,000 cash`
-                    : `Debt cap $${debtCap().toLocaleString()} blocks this loan`;
-                setButtonDisabled(borrowInterestBtn, !capOk);
+                    : `Debt cap $${debtCap().toLocaleString()} blocks the $${loan.toLocaleString()} loan — pay down debt or ask the host to raise the cap.`;
+                setTappableBtn(borrowInterestBtn, !capOk, reason);
             }
         }
     }
@@ -4253,19 +4275,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
             const interest = getCurrentInterestValue();
             if (!(interest > 0)) {
-                // alert('No interest to pay.');
+                sayStatus('No interest due right now.');
                 return;
             }
 
             const currentCash = getCurrentCashTotal();
             if (currentCash < interest) {
-                // alert(
-                //     'Insufficient cash to pay interest. You need $' +
-                //         interest.toLocaleString() +
-                //         ' but only have $' +
-                //         currentCash.toLocaleString() +
-                //         '.'
-                // );
+                sayStatus(`Short $${(interest - currentCash).toLocaleString()} for interest — cash $${currentCash.toLocaleString()} vs $${interest.toLocaleString()} due. Use Borrow.`);
+                updateActionButtonStates();
                 return;
             }
 
@@ -4290,7 +4307,16 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // short: borrows the interest plus $1,000 extra, then pays it).
     document.getElementById('borrowInterestBtn')?.addEventListener('click', (event) => {
         event.preventDefault();
-        if (borrowForExpense(getCurrentInterestValue(), 'Pay interest')) {
+        updateTotals();
+        const interest = getCurrentInterestValue();
+        const loan = interest + EXPENSE_LOAN_EXTRA;
+        if (!(interest > 0)) { sayStatus('No interest due right now.'); return; }
+        if (getCurrentLoanTotal() + loan > debtCap()) {
+            sayStatus(`Debt cap $${debtCap().toLocaleString()} blocks the $${loan.toLocaleString()} loan — pay down debt or ask the host to raise the cap.`);
+            updateActionButtonStates();
+            return;
+        }
+        if (borrowForExpense(interest, 'Pay interest')) {
             // Borrowed+p paid — snap back to auto calc on the new loan total.
             manualInterestOverride = null;
             updateTotals();
