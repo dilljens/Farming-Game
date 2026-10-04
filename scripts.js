@@ -51,6 +51,10 @@ signInAnonymously(auth)
 
 // --- Room lobby — mirrors imposterirl/src/lib/games.ts + src/app/lobby/[room_code]/page.tsx + RoomCodeDisplay.tsx ---
 const STORAGE_KEY_ROOM_CODE = 'farmingGameRoomCode';
+const roomCodeAtBoot = (() => {
+    try { return localStorage.getItem(STORAGE_KEY_ROOM_CODE)?.toUpperCase() || null; }
+    catch { return null; }
+})();
 let currentRoomCode = (() => {
     try {
         const params = new URLSearchParams(window.location.search);
@@ -216,7 +220,9 @@ async function joinRoom(code) {
     if (!upper) throw new Error('Enter a room code');
     const room = await getRoomByCode(upper);
     if (!room) throw new Error('Room not found');
+    const previousRoom = (() => { try { return localStorage.getItem(STORAGE_KEY_ROOM_CODE)?.toUpperCase() || null; } catch { return null; } })();
     persistRoomCode(upper);
+    if (previousRoom !== upper) await resetForRoomStart();
     const url = getRoomJoinUrl(upper);
     try { history.replaceState({}, '', url); } catch {}
     updateRoomUi();
@@ -1419,9 +1425,6 @@ function roomGameElapsed(now) {
 function currentMarketCtx(asset) {
     const board = marketBoard();
     const players = board.length;
-    const uid = (typeof auth !== 'undefined' && auth.currentUser) ? auth.currentUser.uid : null;
-    const sorted = [...board].sort((a, b) => (Number(b.networth) || 0) - (Number(a.networth) || 0));
-    const idx = uid ? sorted.findIndex((d) => d._id === uid) : -1;
     const key = String(asset || '').toLowerCase();
     let total = 0;
     for (const d of board) total += Number(d[key] ?? 0) || 0;
@@ -1434,13 +1437,16 @@ function currentMarketCtx(asset) {
         for (const d of board) t += Number(d[k] ?? 0) || 0;
         cropTotals[k] = t;
     }
-    const myOwned = parseInt(document.querySelector(`.qty-${key}`)?.textContent) || 0;
+    // Market cost is a room-wide quote, never personalized by this device's
+    // rank or local inventory. Use room-average ownership for Estate so every
+    // client computes the same surcharge from the same leaderboard snapshot.
+    const avgOwned = players > 0 ? total / players : 0;
     return {
         rules: normalizeRules(currentRoomRules),
         players,
-        rank: idx < 0 ? undefined : idx,
-        avgOwned: players > 0 ? total / players : NaN,
-        myOwned,
+        rank: undefined,
+        avgOwned,
+        myOwned: avgOwned,
         totals: cropTotals,
         roomCode: currentRoomCode || ''
     };
@@ -1616,6 +1622,13 @@ async function initRoomFromUrl() {
             updateRoomUi();
             return;
         }
+        // URL joins can race DOMContentLoaded/localStorage restoration; only
+        // reset after the saved farm has loaded, and only on room transition.
+        if (document.readyState === 'loading') {
+            await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+        }
+        if (roomCodeAtBoot !== currentRoomCode) await resetForRoomStart();
+        persistRoomCode(currentRoomCode);
         await updateRoomQr(currentRoomCode);
         document.getElementById('roomStatus').textContent = `Joined room ${currentRoomCode}`;
     } catch (e) { console.error('initRoom', e); }
@@ -1634,6 +1647,7 @@ async function finishMakeRoom(rules) {
     try {
         const code = await createRoom(rules);
         persistRoomCode(code);
+        await resetForRoomStart();
         try { history.replaceState({}, '', getRoomJoinUrl(code)); } catch {}
         updateRoomUi();
         await updateRoomQr(code);
@@ -1654,8 +1668,8 @@ const RULE_LABELS = {
 };
 const RULE_DESCRIPTIONS = {
     seasons: 'Prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.',
-    rubberband: 'Room leader pays +10%, trailer pays −10% on everything.',
-    estate: 'Your Nth farm, harvester, or tractor costs +10% per unit you own.',
+    rubberband: 'Individual leader/trailer prices are disabled so everyone sees the same room-wide costs.',
+    estate: 'Adds a shared surcharge based on the room-average number of farms, harvesters, or tractors owned.',
     balance: 'The crop everyone piles into goes dear (up to 2×); ignored ones go cheap (down to half). Hay only ever discounts.',
     events: 'Each crop walks its own random path: every room harvest moves a crop ±1%, zero-sum across crops and capped.',
     customecon: 'Enables your economy numbers below (unticked = $50k cap, 10% interest, 20% down).',
@@ -1664,14 +1678,15 @@ const RULE_DESCRIPTIONS = {
 let setupScenarioKey = 'standard';
 
 // One slider per market rule, set at room creation. Strengths scale how
-// hard seasons/balance bite (100% = classic); rubberband sets the
-// leader tax / trailer aid %; estate sets the extra cost per owned unit;
+// hard seasons/balance bite (100% = classic); individual rank-based
+// rubberband prices are neutral under shared-cost pricing; estate uses
+// room-average ownership so every player gets the same quote;
 // events sets the max walk swing %. Economy/Harvest have no row — their
 // number groups below are the tuning.
 const RULE_TUNING_SPECS = {
     seasons: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard the harvest wave swings prices. 100% is classic; 0% holds everything at base.' },
-    rubberband: { label: 'Leader tax / trailer aid', min: 0, max: 30, step: 1, def: 10, suffix: '%', desc: 'What the room leader extra-pays and the trailer saves on everything.' },
-    estate: { label: 'Extra cost per unit', min: 0, max: 50, step: 5, def: 10, suffix: '%', desc: 'How much dearer your Nth farm, harvester, or tractor gets per unit you own.' },
+    rubberband: { label: 'Leader tax / trailer aid', min: 0, max: 30, step: 1, def: 10, suffix: '%', desc: 'Kept for legacy room settings; individual price differences are disabled so all players see the same costs.' },
+    estate: { label: 'Shared extra cost per unit', min: 0, max: 50, step: 5, def: 10, suffix: '%', desc: 'Adds the same surcharge to everyone using the room-average number of farms, harvesters, or tractors.' },
     balance: { label: 'Effect strength', min: 0, max: 200, step: 10, def: 100, desc: 'How hard the demand balancer pushes the popular crop up and the ignored ones down.' },
     events: { label: 'Max walk swing', min: 0, max: 50, step: 5, def: 50, suffix: '%', desc: 'Farthest a crop\u2019s walk may stray from base. Still zero-sum — one crop\u2019s boom is funded by the others\u2019 busts.' }
 };
@@ -3938,6 +3953,15 @@ async function performReset(opts = {}) {
     populateRollTable();
     recordHistoryPoint(getCurrentTotalWorthFromDOM() || 0);
     startGameClock();
+}
+
+async function resetForRoomStart() {
+    // On direct URL joins, wait until persisted per-device data has loaded
+    // before replacing it with the identical fresh-game baseline.
+    if (document.readyState === 'loading') {
+        await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+    }
+    await performReset({ keepRoom: true });
 }
 
 

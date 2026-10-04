@@ -21,11 +21,11 @@ Able to buy in bulk once any one player reaches these net-worth benchmarks (buy 
 
 ## Market Rules (room host picks per room, same prices on every device)
 
-Each rule has its own slider in the Make Room popup — tune how hard it bites. Strength sliders (Seasons, Balance) run 0–200% where 100% is the classic rule; Rubber-band sets the leader tax / trailer aid %; Estate sets the extra cost per owned unit %; Boom&Bust sets the max walk swing % (still zero-sum). Economy/Harvest boxes enable the number groups instead of scaling anything.
+Prices are room-wide: everyone sees the same Cost column and buy-window prices. Strength sliders (Seasons, Balance) run 0–200% where 100% is the classic rule; Estate sets a shared surcharge based on room-average ownership; Boom&Bust sets the max walk swing % (still zero-sum). The legacy Rubber-band setting no longer creates individual leader/trailer prices. Economy/Harvest boxes enable the number groups instead of scaling anything.
 
 - **Seasons** — prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.
-- **Rubber-band** — room leader pays +10%, trailer pays −10% on everything.
-- **Estate** — your Nth Farm/Harvester/Tractor costs +10% per unit you own.
+- **Rubber-band** — individual leader/trailer prices are disabled so all players get the same room-wide costs.
+- **Estate** — Farm/Harvester/Tractor prices receive a shared surcharge based on the room-average number owned.
 - **Balance** — the crop everyone piles into gets dear (up to 2×), the ignored ones go cheap (down to half). Hay (base $15,000) only ever discounts, never rises above base.
 - **Boom&Bust** — each crop walks its own random path: every room harvest moves a crop ±1%, zero-sum across crops and capped at ±50% (host slider lowers the cap). Same walk on every device.
 
