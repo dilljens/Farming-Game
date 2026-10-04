@@ -364,14 +364,17 @@ let gainModeSelection = { payType: 'total', perAcre: '100' };
 let manualInterestOverride = null;
 
 // Short on cash for a mandatory expense (per-acre pay, interest)? Borrow
-// the full expense plus $1,000 extra: the loan lands as cash first (like
-// the buy flow's shortfall) so the cash floor can't block the payment.
-// Net effect: +$1,000 cash, +(expense + $1,000) loan. Blocked by the debt
-// cap. One undoable action covering every leg.
+// the $1,000 increment covering it — need $500 → $1,000 loan (pay, keep
+// $500); need $1,500 → $2,000 loan (pay, keep $500). The loan lands as cash
+// first (like the buy flow's shortfall) so the cash floor can't block the
+// payment. Blocked by the debt cap. One undoable action covering every leg.
 // (Declared up top: updateActionButtonStates() reads it during early page
 // init, before this section of the file executes — same TDZ crash as
 // payModeSelection before it.)
-const EXPENSE_LOAN_EXTRA = 1000;
+const EXPENSE_LOAN_STEP = 1000;
+function expenseLoanAmount(expense) {
+    return Math.max(EXPENSE_LOAN_STEP, Math.ceil((Number(expense) || 0) / EXPENSE_LOAN_STEP) * EXPENSE_LOAN_STEP);
+}
 
 let leaderboardSaveTimer = null;
 let leaderboardSaveGeneration = 0;
@@ -930,7 +933,7 @@ function updateActionButtonStates() {
     const cashTotal = getCurrentCashTotal();
 
     // Pay Interest — when cash can't cover it, swap in the borrow button:
-    // same expense plus $1,000 extra on the loan.
+    // the $1,000 increment covering the interest.
     const payInterestBtn = document.getElementById('payInterestBtn');
     const borrowInterestBtn = document.getElementById('borrowInterestBtn');
     if (payInterestBtn) {
@@ -950,11 +953,12 @@ function updateActionButtonStates() {
         if (borrowInterestBtn) {
             borrowInterestBtn.classList.toggle('hidden', !short);
             if (short) {
-                const loan = interest + EXPENSE_LOAN_EXTRA;
+                const loan = expenseLoanAmount(interest);
+                const keep = loan - interest;
                 const capOk = getCurrentLoanTotal() + loan <= debtCap();
-                borrowInterestBtn.textContent = `Borrow $${interest.toLocaleString()} + $1k`;
+                borrowInterestBtn.textContent = `Borrow $${loan.toLocaleString()} (keep $${keep.toLocaleString()})`;
                 const reason = capOk
-                    ? `Pays $${interest.toLocaleString()} interest now; loan $${loan.toLocaleString()}, you keep $1,000 cash`
+                    ? `Pays $${interest.toLocaleString()} interest now; loan $${loan.toLocaleString()}, you keep $${keep.toLocaleString()} cash`
                     : `Debt cap $${debtCap().toLocaleString()} blocks the $${loan.toLocaleString()} loan — pay down debt or ask the host to raise the cap.`;
                 setTappableBtn(borrowInterestBtn, !capOk, reason);
             }
@@ -969,9 +973,9 @@ function updateActionButtonStates() {
         setButtonDisabled(payPerAcreBtn, disabled);
     }
 
-    // Short on cash — sits left of Pay Per Acre: borrows the current
-    // pay-mode total plus $1,000 extra and pays it in one tap. When cash
-    // covers, it just opens the pay modal instead.
+    // Short on cash — sits left of Pay Per Acre: borrows the $1,000
+    // increment covering the current pay-mode total and pays it in one
+    // tap. When cash covers, it just opens the pay modal instead.
     const shortOnCashBtn = document.getElementById('shortOnCashBtn');
     if (shortOnCashBtn) {
         const total = currentPayPerAcreTotal();
@@ -982,10 +986,11 @@ function updateActionButtonStates() {
             shortOnCashBtn.title = `Cash covers the $${total.toLocaleString()} — opens Pay Per Acre`;
             setButtonDisabled(shortOnCashBtn, false);
         } else {
-            const loan = total + EXPENSE_LOAN_EXTRA;
+            const loan = expenseLoanAmount(total);
+            const keep = loan - total;
             const capOk = getCurrentLoanTotal() + loan <= debtCap();
             shortOnCashBtn.title = capOk
-                ? `Borrows $${total.toLocaleString()} + $1,000 extra (loan $${loan.toLocaleString()}) and pays it — you keep $1,000 cash`
+                ? `Borrows $${loan.toLocaleString()} (pays $${total.toLocaleString()}, you keep $${keep.toLocaleString()})`
                 : `Debt cap $${debtCap().toLocaleString()} blocks this loan`;
             setButtonDisabled(shortOnCashBtn, !capOk);
         }
@@ -3823,7 +3828,7 @@ document.getElementById('payPerAcreBtn').addEventListener('click', (event) => {
 });
 
 // Short on cash button (cell, left of Pay Per Acre): cash covers it → open
-// the pay modal; cash short → borrow the total + $1,000 extra and pay it.
+// the pay modal; cash short → borrow the $1,000 increment and pay it.
 document.getElementById('shortOnCashBtn')?.addEventListener('click', (event) => {
     event.preventDefault();
     const total = currentPayPerAcreTotal();
@@ -3854,7 +3859,7 @@ document.getElementById('confirmPayPerAcre').addEventListener('click', (event) =
 });
 
 // Event listener for the borrow-for-expense button (pay mode, cash short:
-// borrows the expense plus $1,000 extra, pays, closes on success)
+// borrows the $1,000 increment, pays, closes on success)
 document.getElementById('borrowPayPerAcreBtn')?.addEventListener('click', (event) => {
     event.preventDefault();
     const selectedButton = document.querySelector('.pay-acre-button.selected');
@@ -3915,24 +3920,25 @@ function updatePayPerAcreDisplay() {
         paymentDisplay.textContent = `Total Payment: $${totalPayment.toLocaleString()}`;
     }
 
-    // Short on cash in pay mode? Offer the borrow button: full expense plus
-    // $1,000 extra on the loan. Hidden in gain mode and when cash covers.
+    // Short on cash in pay mode? Offer the borrow button: the $1,000
+    // increment covering the expense. Hidden in gain mode and when cash covers.
     const borrowBtn = document.getElementById('borrowPayPerAcreBtn');
     const borrowHint = document.getElementById('borrowPayPerAcreHint');
     if (borrowBtn) {
         updateTotals();
-        const loan = totalPayment + EXPENSE_LOAN_EXTRA;
+        const loan = expenseLoanAmount(totalPayment);
+        const keep = loan - totalPayment;
         const show = !isGainMode && totalPayment > 0 && getCurrentCashTotal() < totalPayment;
         borrowBtn.classList.toggle('hidden', !show);
         borrowBtn.classList.toggle('inline-flex', show);
         if (borrowHint) borrowHint.classList.toggle('hidden', true);
         if (show) {
             const capOk = getCurrentLoanTotal() + loan <= debtCap();
-            borrowBtn.textContent = `Borrow $${totalPayment.toLocaleString()} + $1,000 extra (loan $${loan.toLocaleString()})`;
+            borrowBtn.textContent = `Borrow $${loan.toLocaleString()} (keep $${keep.toLocaleString()})`;
             setButtonDisabled(borrowBtn, !capOk);
             if (borrowHint) {
                 borrowHint.textContent = capOk
-                    ? 'Pays the expense now; you keep $1,000 cash.'
+                    ? `Pays the $${totalPayment.toLocaleString()} now; you keep $${keep.toLocaleString()} cash.`
                     : `Debt cap $${debtCap().toLocaleString()} blocks this loan.`;
                 borrowHint.classList.toggle('hidden', false);
             }
@@ -4051,14 +4057,13 @@ function currentPayPerAcreTotal() {
     const perAcre = parseFloat(payModeSelection.perAcre) || 0;
     return (getAcresForType(payModeSelection.payType) || 0) * perAcre;
 }
-// Net effect: +$1,000 cash, +(expense + $1,000) loan. Blocked by the debt
-// cap. One undoable action covering every leg (constant declared with the
-// other top-level state — see note there).
+// Borrow the $1,000 increment covering the expense (helper above holds the
+// terms). Blocked by the debt cap. One undoable action covering every leg.
 function borrowForExpense(expense, label) {
     const amount = Math.round(Number(expense) || 0);
     if (!(amount > 0)) return false;
     updateTotals();
-    const loan = amount + EXPENSE_LOAN_EXTRA;
+    const loan = expenseLoanAmount(amount);
     if (getCurrentLoanTotal() + loan > debtCap()) return false;
     const cashBefore = ledgerLen('cash');
     const loanBefore = ledgerLen('loan');
@@ -4066,7 +4071,7 @@ function borrowForExpense(expense, label) {
     addCashTransactionValue(loan);
     addCashTransactionValue(-amount);
     pushUndoAction({
-        label: `${label} $${amount.toLocaleString()} — borrowed $${loan.toLocaleString()}`,
+        label: `${label} $${amount.toLocaleString()} — borrowed $${loan.toLocaleString()} (keep $${(loan - amount).toLocaleString()})`,
         cash: ledgerLen('cash') - cashBefore,
         loan: ledgerLen('loan') - loanBefore
     });
@@ -4478,12 +4483,12 @@ window.addEventListener('DOMContentLoaded', (event) => {
     }
 
     // Borrow-for-expense button (shown instead of Pay Interest when cash is
-    // short: borrows the interest plus $1,000 extra, then pays it).
+    // short: borrows the $1,000 increment covering the interest, then pays it).
     document.getElementById('borrowInterestBtn')?.addEventListener('click', (event) => {
         event.preventDefault();
         updateTotals();
         const interest = getCurrentInterestValue();
-        const loan = interest + EXPENSE_LOAN_EXTRA;
+        const loan = expenseLoanAmount(interest);
         if (!(interest > 0)) {
             if (manualInterestOverride != null) {
                 manualInterestOverride = null;
