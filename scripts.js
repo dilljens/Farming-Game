@@ -2917,7 +2917,23 @@ function refreshCustomSellBuyers() {
         const hasPrev = [...sel.options].some(o => o.value === prev);
         if (hasPrev) sel.value = prev;
     }
+    // The bank always buys, instantly, at half of base — no accept needed.
+    const bank = document.createElement('option');
+    bank.value = 'BANK';
+    bank.dataset.uid = 'BANK';
+    bank.dataset.username = 'Bank';
+    bank.textContent = 'Bank — instant, half of base';
+    sel.appendChild(bank);
+    if (prev === 'BANK') sel.value = 'BANK';
     updateCustomSellPreview();
+}
+// Half of base value for bank sales: instant, non-negotiable.
+function bankSellPrice(asset, qty) {
+    return Math.max(0, Math.round(assetBasePrice(asset) * Math.max(0, qty || 0) / 2));
+}
+function isBankBuyer() {
+    const opt = document.getElementById('customSellBuyer')?.selectedOptions?.[0];
+    return (opt?.dataset?.uid || '') === 'BANK';
 }
 function updateCustomSellPreview() {
     const preview = document.getElementById('customSellPreview');
@@ -2926,7 +2942,17 @@ function updateCustomSellPreview() {
     const buyerSel = document.getElementById('customSellBuyer');
     const asset = document.getElementById('customSellAsset')?.value || 'Hay';
     const qty = parseInt(document.getElementById('customSellQty')?.value || '1', 10);
-    const price = Math.round(parseFloat(String(document.getElementById('customSellPrice')?.value || '0').replace(/,/g, '')) || 0);
+    const priceEl = document.getElementById('customSellPrice');
+    const bank = isBankBuyer();
+    // Bank price is fixed at half of base — show it locked, not editable.
+    if (bank && priceEl) {
+        priceEl.value = String(bankSellPrice(asset, qty));
+        priceEl.disabled = true;
+    } else if (priceEl) {
+        priceEl.disabled = false;
+    }
+    const price = bank ? bankSellPrice(asset, qty)
+        : Math.round(parseFloat(String(priceEl?.value || '0').replace(/,/g, '')) || 0);
     const opt = buyerSel?.selectedOptions?.[0];
     const buyerName = opt?.dataset?.username || opt?.textContent?.split(' (')[0] || 'buyer';
     // Ranch cows: only qty above the ridge-bonus floor can be sold.
@@ -2935,7 +2961,8 @@ function updateCustomSellPreview() {
     const sellable = Math.max(0, myQty - locked);
     preview.innerHTML = `You: ${asset} ${myQty} → ${myQty - qty} after sale` +
         (locked > 0 ? ` (${locked} ridge bonus locked)` : '') +
-        `<br>${buyerName} pays $${price.toLocaleString()} for ${qty} × ${asset}`;
+        (bank ? `<br>Bank pays $${price.toLocaleString()} now — half of $${assetBasePrice(asset).toLocaleString()} base × ${qty}`
+            : `<br>${buyerName} pays $${price.toLocaleString()} for ${qty} × ${asset}`);
     let err = '';
     if (!buyerSel || !buyerSel.value) err = 'Pick a buyer.';
     else if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
@@ -2945,7 +2972,10 @@ function updateCustomSellPreview() {
         : `You only have ${myQty} ${asset}.`;
     if (hint) { hint.textContent = err; hint.classList.toggle('hidden', !err); }
     const confirm = document.getElementById('confirmCustomSell');
-    if (confirm) confirm.disabled = !!err;
+    if (confirm) {
+        confirm.disabled = !!err;
+        confirm.textContent = bank ? 'Sell to Bank' : 'Send offer';
+    }
 }
 function showCustomSellModal() {
     refreshCustomSellBuyers();
@@ -2968,6 +2998,20 @@ async function performCustomSell() {
     // re-validate (preview state may be stale)
     updateCustomSellPreview();
     if (document.getElementById('confirmCustomSell')?.disabled) return;
+    // Bank sales settle instantly — no offer, no accept, one undo entry.
+    if (isBankBuyer()) {
+        const bankPrice = bankSellPrice(asset, qty);
+        const qtyKey = getAssetQtyKey(asset);
+        if (applyLocalTrade({ asset: qtyKey, qty, price: bankPrice }, 'seller')) {
+            hideCustomSellModal();
+            const status = document.getElementById('roomStatus');
+            if (status) status.textContent = `Sold ${qty} ${asset} to the bank for $${bankPrice.toLocaleString()}`;
+        } else if (hint) {
+            hint.textContent = `Couldn't sell — check sellable ${asset}.`;
+            hint.classList.remove('hidden');
+        }
+        return;
+    }
     if (!buyerUid) { if (hint){hint.textContent='Buyer not found (no UID).'; hint.classList.remove('hidden');} return; }
     if (buyerUid === auth.currentUser?.uid) { if (hint){hint.textContent='Cannot sell to yourself.'; hint.classList.remove('hidden');} return; }
     const sellableNow = isRanchCowsAsset(asset) ? sellableRanchCows() : myAssetQty(asset);

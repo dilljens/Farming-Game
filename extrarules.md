@@ -31,7 +31,7 @@ Prices are room-wide: everyone sees the same Cost column and buy-window prices. 
 
 Market rules run on earned, per-player holdings: everyone's starting hay+grain is excluded and the rest is divided by player count, so 2- and 8-player rooms swing at the same pace and every game opens at base prices. Each crop's Cost line names its active modifiers and source (demand, season, boom/bust, estate).
 
-Market prices show in the Cost column and the buy window, and are the same for everyone in a room. Existing holdings count toward net worth at their stable base value, so market discounts or premiums affect new purchase costs—not net worth. Player-to-player trades are negotiated and never adjusted — tap the Buy/Sell to player buttons to pop up the trade forms (price starts at the property's base value); nothing moves until the other player accepts. Accepted-offer confirmations have an × to clear them from your inbox.
+Market prices show in the Cost column and the buy window, and are the same for everyone in a room. Existing holdings count toward net worth at their stable base value, so market discounts or premiums affect new purchase costs—not net worth. Player-to-player trades are negotiated and never adjusted — tap the Buy/Sell to player buttons to pop up the trade forms (price starts at the property's base value); nothing moves until the other player accepts. Accepted-offer confirmations have an × to clear them from your inbox. The sell form also offers the Bank: instant sale at half of base value, no accept needed.
 
 ## Scenarios (host one-tap presets, badge shows for everyone)
 
