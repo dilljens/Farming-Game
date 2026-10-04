@@ -941,7 +941,9 @@ function updateActionButtonStates() {
             payInterestBtn,
             blocked,
             !(interest > 0)
-                ? 'No interest due right now.'
+                ? (manualInterestOverride != null
+                    ? 'Custom $0 interest pinned — tap Pay Interest to clear it and resume auto.'
+                    : 'No interest due right now.')
                 : `Needs $${interest.toLocaleString()} — cash $${cashTotal.toLocaleString()} is short. Borrow covers it.`
         );
         if (borrowInterestBtn) {
@@ -1110,6 +1112,7 @@ function updateInterest() {
         if (document.activeElement !== interestCell) {
             interestCell.textContent = numberWithCommasAndDecimals(manualInterestOverride);
         }
+        paintInterestCustom();
         return;
     }
     // Retrieve and parse the loan total value
@@ -1122,6 +1125,21 @@ function updateInterest() {
 
     // Update the interest cell with formatted value
     interestCell.textContent = numberWithCommasAndDecimals(interestValue);
+    paintInterestCustom();
+}
+
+// A pinned custom amount gets an amber tint + title so a $0 never reads as
+// a broken calc — it reads as what it is: your override, cleared by paying.
+function paintInterestCustom() {
+    const cell = document.querySelector('.interest');
+    if (!cell) return;
+    if (manualInterestOverride != null) {
+        cell.style.background = '#fef3c7';
+        cell.title = `Custom interest $${manualInterestOverride.toLocaleString()} — tap Pay Interest to settle, auto calc resumes`;
+    } else {
+        cell.style.background = '';
+        cell.title = 'Tap to type a custom interest amount';
+    }
 }
 
 // Tapping the Interest cell types a custom amount owed. It sticks (auto
@@ -1138,6 +1156,7 @@ function wireManualInterestCell() {
     cell.addEventListener('input', () => {
         const v = parseFloat(String(cell.textContent).replace(/,/g, '')) || 0;
         manualInterestOverride = Math.max(0, Math.round(v));
+        paintInterestCustom();
         updateActionButtonStates();
     });
     cell.addEventListener('blur', () => {
@@ -4275,7 +4294,16 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
             const interest = getCurrentInterestValue();
             if (!(interest > 0)) {
-                sayStatus('No interest due right now.');
+                // A pinned $0 is a real state with an exit: paying clears it
+                // and resumes auto. Otherwise say exactly why it is $0.
+                if (manualInterestOverride != null) {
+                    manualInterestOverride = null;
+                    updateInterest();
+                    updateActionButtonStates();
+                    sayStatus(`Custom interest cleared — auto interest $${getCurrentInterestValue().toLocaleString()} (loan $${getCurrentLoanTotal().toLocaleString()} × ${roomEcon().interestPct}%).`);
+                } else {
+                    sayStatus(`No interest due — loan $${getCurrentLoanTotal().toLocaleString()} × ${roomEcon().interestPct}% = $0. Host sets Interest % in Room Settings.`);
+                }
                 return;
             }
 
@@ -4310,7 +4338,17 @@ window.addEventListener('DOMContentLoaded', (event) => {
         updateTotals();
         const interest = getCurrentInterestValue();
         const loan = interest + EXPENSE_LOAN_EXTRA;
-        if (!(interest > 0)) { sayStatus('No interest due right now.'); return; }
+        if (!(interest > 0)) {
+            if (manualInterestOverride != null) {
+                manualInterestOverride = null;
+                updateInterest();
+                updateActionButtonStates();
+                sayStatus(`Custom interest cleared — auto interest $${getCurrentInterestValue().toLocaleString()} (loan $${getCurrentLoanTotal().toLocaleString()} × ${roomEcon().interestPct}%).`);
+            } else {
+                sayStatus(`No interest due — loan $${getCurrentLoanTotal().toLocaleString()} × ${roomEcon().interestPct}% = $0. Host sets Interest % in Room Settings.`);
+            }
+            return;
+        }
         if (getCurrentLoanTotal() + loan > debtCap()) {
             sayStatus(`Debt cap $${debtCap().toLocaleString()} blocks the $${loan.toLocaleString()} loan — pay down debt or ask the host to raise the cap.`);
             updateActionButtonStates();

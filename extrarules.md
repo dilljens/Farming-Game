@@ -49,7 +49,7 @@ All boxes mix and match. Each number group applies only while its box is ticked 
 - **Economy** ☑ — max loan $ (default 50,000), loan interest % (10), minimum down-payment % (20).
 - **Harvest** ☑ — hay bonus tiers: mid qty ×mult (5 → 1.5×), high qty ×mult (10 → 2×); equipment bonus +%/unit and unit cap (20%, 5).
 
-Interest is auto-computed from your loan, but you can tap the Interest cell to type a custom amount (card rulings, house rules) — Pay/Borrow Interest pays it, then auto calc resumes.
+Interest is auto-computed from your loan, but you can tap the Interest cell to type a custom amount (card rulings, house rules) — Pay/Borrow Interest pays it, then auto calc resumes. Typing 0 pins it at zero (amber tint); tap Pay Interest to clear back to auto.
 
 Market prices show in the Cost column and the buy window. Player-to-player trades are negotiated and never adjusted.
 
