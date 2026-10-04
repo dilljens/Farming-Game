@@ -363,6 +363,16 @@ let gainModeSelection = { payType: 'total', perAcre: '100' };
 // snaps back to the auto calculation (loan × host interest %).
 let manualInterestOverride = null;
 
+// Short on cash for a mandatory expense (per-acre pay, interest)? Borrow
+// the full expense plus $1,000 extra: the loan lands as cash first (like
+// the buy flow's shortfall) so the cash floor can't block the payment.
+// Net effect: +$1,000 cash, +(expense + $1,000) loan. Blocked by the debt
+// cap. One undoable action covering every leg.
+// (Declared up top: updateActionButtonStates() reads it during early page
+// init, before this section of the file executes — same TDZ crash as
+// payModeSelection before it.)
+const EXPENSE_LOAN_EXTRA = 1000;
+
 let leaderboardSaveTimer = null;
 let leaderboardSaveGeneration = 0;
 let leaderboardWriteQueue = Promise.resolve();
@@ -3862,12 +3872,9 @@ function currentPayPerAcreTotal() {
     const perAcre = parseFloat(payModeSelection.perAcre) || 0;
     return (getAcresForType(payModeSelection.payType) || 0) * perAcre;
 }
-// Short on cash for a mandatory expense (per-acre pay, interest)? Borrow
-// the full expense plus $1,000 extra: the loan lands as cash first (like
-// the buy flow's shortfall) so the cash floor can't block the payment.
 // Net effect: +$1,000 cash, +(expense + $1,000) loan. Blocked by the debt
-// cap. One undoable action covering every leg.
-const EXPENSE_LOAN_EXTRA = 1000;
+// cap. One undoable action covering every leg (constant declared with the
+// other top-level state — see note there).
 function borrowForExpense(expense, label) {
     const amount = Math.round(Number(expense) || 0);
     if (!(amount > 0)) return false;
