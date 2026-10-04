@@ -409,13 +409,13 @@ export function eventDollars(asset, roomCode, harvests, base, maxSwing = EVENT_M
 // --- Mean-reversion drift: pull concentrated crops back toward the average ---
 // Deviation-driven and per-capita: $500 of pull per unit of per-capita
 // deviation from the room crop average, quantized to $100 tickets and
-// capped at ±$100 — over-held crops cheapen, under-held crops dear. Under
+// capped at ±$500 — over-held crops cheapen, under-held crops dear. Under
 // the hay ceiling (clips rises) and fruit floor (clips drops) this is the
 // term that keeps all three crops visibly alive: piled hay drifts down,
 // ignored fruit drifts up.
 export const DRIFT_PER_CAPITA = 500;
 export const DRIFT_TICKET = 100;
-export const DRIFT_MAX = 100;
+export const DRIFT_MAX = 500;
 export function driftDollars(asset, totals) {
     const key = String(asset || '').toLowerCase();
     if (!BALANCE_ASSETS.includes(key)) return 0;

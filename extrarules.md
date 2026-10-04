@@ -27,7 +27,7 @@ Prices are room-wide: everyone sees the same Cost column and buy-window prices. 
 - **Rubber-band** — individual leader/trailer prices are disabled so all players get the same room-wide costs.
 - **Estate** — Crop/farm/equipment prices receive a shared surcharge per owned unit past the starting grant (cattle per 2 head), all off room-average ownership.
 - **Balance** — crowded crops cost up to $1,000 over base in $100 tickets; ignored ones discount the same way. Hay (base $15,000) caps at $20,000; fruit (base $25,000) floors at $20,000.
-- **Boom&Bust** — each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped at ±50% of base (host slider lowers the cap). Same walk on every device. Crops off the room average also drift back toward it in $100 tickets (piled crops cheapen, ignored crops dear) — this is what keeps hay and fruit moving inside their ceiling/floor.
+- **Boom&Bust** — each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped at ±50% of base (host slider lowers the cap). Same walk on every device. Crops off the room average also drift back toward it in $100 tickets up to ±$500 (piled crops cheapen, ignored crops dear) — this is what keeps hay and fruit moving inside their ceiling/floor.
 
 Market rules run on earned, per-player holdings: everyone's starting hay+grain is excluded and the rest is divided by player count, so 2- and 8-player rooms swing at the same pace and every game opens at base prices. Each crop's Cost line names its active modifiers and source (demand, season, boom/bust, estate).
 

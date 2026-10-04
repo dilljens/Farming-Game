@@ -172,8 +172,8 @@ test('balance: hot crop dear, ignored crops cheap', () => {
 test('balance is a host rule: hot fruit costs more only when enabled', () => {
     const totals = { hay: 1, grain: 1, fruit: 28 };
     const on = computeMarketPrice(25000, 'fruit', { rules: { balance: true }, totals });
-    assert.equal(on.price, 25900); // capped $1,000 ticket minus $100 drift
-    assert.deepEqual(on.notes, ['high demand +$1,000', 'drift -$100']);
+    assert.equal(on.price, 25500); // capped $1,000 ticket minus $500 drift
+    assert.deepEqual(on.notes, ['high demand +$1,000', 'drift -$500']);
     const off = computeMarketPrice(25000, 'fruit', { rules: {}, totals });
     assert.deepEqual(off, { price: 25000, mult: 1, notes: [] });
 });
@@ -303,14 +303,14 @@ test('hay ceiling: hay never prices above $20k', () => {
         rules: { balance: true }, totals: { hay: 28, grain: 1, fruit: 1 }
     });
     assert.ok(r.price <= 20000);
-    assert.equal(r.price, 15900);
-    assert.deepEqual(r.notes, ['high demand +$1,000', 'drift -$100']);
+    assert.equal(r.price, 15500);
+    assert.deepEqual(r.notes, ['high demand +$1,000', 'drift -$500']);
     // Hay still discounts when the room ignores it.
     const cheap = computeMarketPrice(15000, 'hay', {
         rules: { balance: true }, totals: { hay: 0, grain: 10, fruit: 10 }
     });
     assert.ok(cheap.price < 15000);
-    assert.deepEqual(cheap.notes, ['low demand -$1,000', 'drift +$100']);
+    assert.deepEqual(cheap.notes, ['low demand -$1,000', 'drift +$500']);
 });
 
 test('estate steps: cattle per 2 head, crops per earned unit', () => {
@@ -348,8 +348,8 @@ test('fruit floor: fruit never prices below $20k', () => {
         rules: { balance: true }, totals: { hay: 10, grain: 10, fruit: 0 }
     });
     assert.ok(r.price >= 20000);
-    assert.equal(r.price, 24100);
-    assert.deepEqual(r.notes, ['low demand -$1,000', 'drift +$100']);
+    assert.equal(r.price, 24500);
+    assert.deepEqual(r.notes, ['low demand -$1,000', 'drift +$500']);
     // A bust walk clips at base too (same as hay booms clip at base).
     const bust = computeMarketPrice(25000, 'fruit', {
         rules: { events: true }, totals: { hay: 0, grain: 0, fruit: 0 }, roomCode: 'FLOOR'
@@ -360,8 +360,8 @@ test('fruit floor: fruit never prices below $20k', () => {
     const dear = computeMarketPrice(25000, 'fruit', {
         rules: { balance: true }, totals: { hay: 1, grain: 1, fruit: 28 }
     });
-    assert.equal(dear.price, 25900);
-    assert.deepEqual(dear.notes, ['high demand +$1,000', 'drift -$100']);
+    assert.equal(dear.price, 25500);
+    assert.deepEqual(dear.notes, ['high demand +$1,000', 'drift -$500']);
 });
 
 test('fresh rooms open at base: starting holdings move no rule', () => {
@@ -509,11 +509,12 @@ test('strength sliders scale seasons/balance around 1x', () => {
     const hot = computeMarketPrice(20000, 'fruit', {
         rules: { balance: true }, totals: { hay: 1, grain: 1, fruit: 28 }
     });
-    assert.deepEqual(hot.notes, ['high demand +$1,000', 'drift -$100']);
+    assert.deepEqual(hot.notes, ['high demand +$1,000', 'drift -$500']);
     const half = computeMarketPrice(20000, 'fruit', {
         rules: { balance: true, tuning: { balance: 50 } }, totals: { hay: 2, grain: 2, fruit: 4 }
     });
-    assert.deepEqual(half.notes, ['high demand +$300', 'drift -$100']);
+    assert.equal(half.price, 20000); // +$300 tickets, -$500 drift, $20k floor holds
+    assert.deepEqual(half.notes, ['high demand +$300', 'drift -$500']);
 });
 
 test('rubberband slider sets the leader tax / trailer aid', () => {
@@ -569,6 +570,6 @@ test('drift: mean-reversion in $100 tickets, capped, crops only', () => {
     assert.equal(driftDollars('grain', { hay: 0, grain: 0, fruit: 0 }), 0);
     assert.equal(driftDollars('farm', up), 0);
     // Corners clamp at one ticket — never dominates the price.
-    assert.equal(driftDollars('grain', { hay: 0, grain: 100, fruit: 0 }), -100);
-    assert.equal(driftDollars('fruit', { hay: 0, grain: 100, fruit: 0 }), 100);
+    assert.equal(driftDollars('grain', { hay: 0, grain: 100, fruit: 0 }), -500);
+    assert.equal(driftDollars('fruit', { hay: 0, grain: 100, fruit: 0 }), 500);
 });

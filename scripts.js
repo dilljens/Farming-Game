@@ -19,7 +19,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907f';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20261004h';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20261004i';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -1792,7 +1792,7 @@ const RULE_DESCRIPTIONS = {
     rubberband: 'Individual leader/trailer prices are disabled so everyone sees the same room-wide costs.',
     estate: 'Adds a shared surcharge: crops per unit and farms/equipment per unit owned past the starting grant, cattle per 2 head — all off room-average ownership.',
     balance: 'Crowded crops cost up to $1,000 over base in $100 tickets; ignored ones discount the same way. Hay caps at $20k, fruit floors at $20k.',
-    events: 'Each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped. Over-held crops also drift down and under-held crops drift up ($100 tickets).',
+    events: 'Each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped. Over-held crops also drift down and under-held crops drift up ($100 tickets, up to ±$500).',
     customecon: 'Enables your economy numbers below (unticked = $50k cap, 10% interest, 20% down).',
     customharvest: 'Enables your harvest numbers below (unticked = standard hay tiers and equipment bonus).'
 };
