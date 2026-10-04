@@ -482,6 +482,7 @@ function handleTransaction(inputId, transactionClass, totalClass) {
         const newValue = parseTransactionValue(inputElement.value);
         if (!Number.isFinite(newValue)) {
             inputElement.value = '';
+            sayStatus(`Couldn't read that as a number — try plain digits like 2000.`);
             return;
         }
 
@@ -497,8 +498,8 @@ function handleTransaction(inputId, transactionClass, totalClass) {
             updateTotals();
             const currentLoanTotal = getCurrentLoanTotal();
             if (currentLoanTotal + newValue > debtCap()) {
-                // alert('Loan transaction would exceed the debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + newValue.toLocaleString() + '.');
                 inputElement.value = '';
+                sayStatus(`Debt cap $${debtCap().toLocaleString()} blocks +$${newValue.toLocaleString()} — current debt $${currentLoanTotal.toLocaleString()}. Pay down debt or ask the host to raise the cap.`);
                 return;
             }
         }
