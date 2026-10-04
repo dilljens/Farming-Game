@@ -32,15 +32,31 @@ th {
     background-color: #cccccc;
 }
 
-/* Spreadsheet table column widths */
+/* Spreadsheet table column widths — tuned for a 390px phone (sums ≈374):
+   skinny Acres, wide Cost for price + modifier notes, Net fits one line. */
+#spreadsheet th:nth-child(1),
+#spreadsheet td:nth-child(1) {
+    width: 46px; /* Assets column - Buy button + wrapped name */
+}
+
+#spreadsheet th:nth-child(2),
+#spreadsheet td:nth-child(2) {
+    width: 48px; /* Acres column - skinny, short values only */
+}
+
 #spreadsheet th:nth-child(3),
 #spreadsheet td:nth-child(3) {
-    width: 120px; /* Qty column - wider */
+    width: 112px; /* Qty column - minus/plus/number trio */
 }
 
 #spreadsheet th:nth-child(4),
 #spreadsheet td:nth-child(4) {
-    width: 80px; /* Cost column - narrower */
+    width: 120px; /* Cost column - wide for price + modifier notes */
+}
+
+#spreadsheet th:nth-child(5),
+#spreadsheet td:nth-child(5) {
+    width: 52px; /* Net column - one line totals */
 }
 
 td.editable {
