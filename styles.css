@@ -46,12 +46,12 @@ th {
 
 #spreadsheet th:nth-child(3),
 #spreadsheet td:nth-child(3) {
-    width: 112px; /* Qty column - minus/plus/number trio */
+    width: 88px; /* Qty column - narrow minus/plus/number trio */
 }
 
 #spreadsheet th:nth-child(4),
 #spreadsheet td:nth-child(4) {
-    width: 120px; /* Cost column - wide for price + modifier notes */
+    width: 144px; /* Cost column - wide for price + modifier notes */
 }
 
 #spreadsheet th:nth-child(5),
