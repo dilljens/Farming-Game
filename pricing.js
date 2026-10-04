@@ -19,10 +19,10 @@
 //              mult = clamp(share * 3, 0.5, 2). The crop everyone piles into
 //              gets dear (up to 2x); the ignored ones go cheap (down to 0.5x).
 //   events     boom & bust: each crop walks its own random path — every
-//              room harvest moves a crop ±1%. Walk deviations are
-//              normalized zero-sum (swings add to 0) so the meta rotates
-//              instead of inflating, capped at ±50%. Deterministic per
-//              room + harvest count — same prices on every device, no
+//              room harvest moves a crop ±$100. Walk deviations are
+//              normalized zero-sum (swings add to ~$0) so the meta rotates
+//              instead of inflating, capped at ±50% of base. Deterministic
+//              per room + harvest count — same prices on every device, no
 //              server round trip.
 // Hay never prices above base: its final multiplier always clamps to
 // [0.25, 1], so hay only ever discounts. Every other asset may rise above
@@ -64,7 +64,7 @@ export const FRUIT_MIN_MULT = 1;
 
 export const MIN_MULT = 0.25;
 export const MAX_MULT = 3;
-export const ROUND_TO = 500;
+export const ROUND_TO = 100; // prices tick in $100 steps, never faster
 
 export function normalizeRules(rules) {
     // Retired keys (market/scarcity) fall off here: only RULE_KEYS survive,
@@ -337,14 +337,15 @@ export function estateMult(owned, pct = DEFAULT_TUNING.estate) {
 }
 
 // --- Boom & bust: per-crop random walks stepped by room harvests ---
-// Each crop walks its own path: every room harvest multiplies that crop by
-// 1.01 or 0.99, the sign drawn deterministically from (room, crop, harvest
-// index) so every device walks the same path. Walk deviations are
-// mean-subtracted so the three sum to ~0 (one crop's boom is funded by the
-// others' busts) and rescaled — not clipped — past the cap.
+// Each crop walks its own path: every room harvest moves that crop ±$100,
+// the sign drawn deterministically from (room, crop, harvest index) so
+// every device walks the same path. Walk deviations are mean-subtracted so
+// the three sum to ~$0 (one crop's boom is funded by the others' busts)
+// and rescaled — not clipped — past the dollar cap (the host's max-swing %
+// of that crop's base price).
 export const EVENT_ASSETS = ['hay', 'grain', 'fruit'];
-export const EVENT_MAX_SWING = 0.5; // no crop ever walks past ±50%
-export const EVENT_STEP = 0.01; // each harvest moves a crop ±1%
+export const EVENT_MAX_SWING = 0.5; // no crop ever walks past ±50% of base
+export const EVENT_STEP_DOLLARS = 100; // each harvest moves a crop ±$100
 
 function hashSeed(str) {
     let h = 1779033703 ^ str.length;
@@ -361,25 +362,25 @@ function walkStep(room, cropIdx, i) {
     return (hashSeed(`${room}|${cropIdx}|${i}`) & 1) ? 1 : -1;
 }
 
-// Raw walk multiplier for one crop after H room harvests. Non-crops and
-// negative counts stay at 1.
+// Raw walk deviation in dollars for one crop after H room harvests.
+// Non-crops and negative counts stay at $0.
 export function eventWalk(asset, roomCode, harvests) {
     const idx = EVENT_ASSETS.indexOf(String(asset || '').toLowerCase());
-    if (idx < 0) return 1;
+    if (idx < 0) return 0;
     const H = Math.max(0, Math.floor(Number(harvests) || 0));
     const room = String(roomCode || '').toUpperCase();
-    let mult = 1;
-    for (let i = 1; i <= H; i++) mult *= 1 + EVENT_STEP * walkStep(room, idx, i);
-    return mult;
+    let d = 0;
+    for (let i = 1; i <= H; i++) d += EVENT_STEP_DOLLARS * walkStep(room, idx, i);
+    return d;
 }
 
-// Raw walk deviations in [-swing, +swing], mean-subtracted so the three
-// swings sum to ~0. If centering pushes a swing past ±swing, everything
-// rescales (not clips) so the zero-sum survives and the cap still holds.
-export function eventSwings(roomCode, harvests, maxSwing = EVENT_MAX_SWING) {
-    const cap = clampNum(maxSwing, 0, EVENT_MAX_SWING, EVENT_MAX_SWING);
-    if (cap === 0) return [0, 0, 0]; // silenced rule: flat, no walk to run
-    const raw = EVENT_ASSETS.map((_, i) => eventWalk(EVENT_ASSETS[i], roomCode, harvests) - 1);
+// Raw walk deviations in dollars, mean-subtracted so the three sum to ~$0.
+// If centering pushes a swing past the dollar cap, everything rescales (not
+// clips) so the zero-sum survives and the cap still holds.
+export function eventSwings(roomCode, harvests, base, maxSwing = EVENT_MAX_SWING) {
+    const cap = clampNum(maxSwing, 0, EVENT_MAX_SWING, EVENT_MAX_SWING) * Math.max(0, Number(base) || 0);
+    if (cap === 0) return [0, 0, 0]; // silenced rule (or baseless asset): flat, no walk to run
+    const raw = EVENT_ASSETS.map((_, i) => eventWalk(EVENT_ASSETS[i], roomCode, harvests));
     const mean = (raw[0] + raw[1] + raw[2]) / 3;
     const centered = raw.map((v) => v - mean);
     const peak = Math.max(Math.abs(centered[0]), Math.abs(centered[1]), Math.abs(centered[2]));
@@ -388,13 +389,35 @@ export function eventSwings(roomCode, harvests, maxSwing = EVENT_MAX_SWING) {
     return centered.map((v) => v * k);
 }
 
-export function eventMult(asset, roomCode, harvests, maxSwing = EVENT_MAX_SWING) {
+export function eventDollars(asset, roomCode, harvests, base, maxSwing = EVENT_MAX_SWING) {
     const key = String(asset || '').toLowerCase();
     const i = EVENT_ASSETS.indexOf(key);
-    if (i < 0) return 1;
-    return 1 + eventSwings(roomCode, harvests, maxSwing)[i];
+    if (i < 0) return 0;
+    return eventSwings(roomCode, harvests, base, maxSwing)[i];
 }
 
+// --- Mean-reversion drift: pull concentrated crops back toward the average ---
+// Deviation-driven and per-capita: $500 of pull per unit of per-capita
+// deviation from the room crop average, quantized to $100 tickets and
+// capped at ±$100 — over-held crops cheapen, under-held crops dear. Under
+// the hay ceiling (clips rises) and fruit floor (clips drops) this is the
+// term that keeps all three crops visibly alive: piled hay drifts down,
+// ignored fruit drifts up.
+export const DRIFT_PER_CAPITA = 500;
+export const DRIFT_TICKET = 100;
+export const DRIFT_MAX = 100;
+export function driftDollars(asset, totals) {
+    const key = String(asset || '').toLowerCase();
+    if (!BALANCE_ASSETS.includes(key)) return 0;
+    const t = totals && typeof totals === 'object' ? totals : {};
+    const nums = BALANCE_ASSETS.map((k) => Math.max(0, Number(t[k]) || 0));
+    const sum = nums[0] + nums[1] + nums[2];
+    if (!(sum > 0)) return 0;
+    const dev = nums[BALANCE_ASSETS.indexOf(key)] - sum / 3;
+    const q = Math.round((-DRIFT_PER_CAPITA * dev) / DRIFT_TICKET) * DRIFT_TICKET;
+    const clamped = Math.max(-DRIFT_MAX, Math.min(DRIFT_MAX, q));
+    return clamped === 0 ? 0 : clamped; // normalize -0 (strict-equal tests)
+}
 // Demand balancer: the crop everyone piles into gets dear, the ignored
 // ones go cheap. share = this crop's fraction of total room crop holdings;
 // even split (1/3 each) => 1x. totals = { hay, grain, fruit } room totals.
@@ -453,18 +476,30 @@ export function computeMarketPrice(base, asset, ctx = {}) {
         mults.push(m);
         if (m > 1) notes.push(`estate x${m.toFixed(1)}`);
     }
+    // Random-walk dollars live outside the mults (added to the price, not
+    // multiplied) so every step is a flat $100 ticket.
+    let walkDollars = 0;
     if (rules.events && EVENT_ASSETS.includes(key)) {
-        let m = eventMult(key, ctx.roomCode, harvestClock(ctx.totals), tuning.events / 100);
-        // Hay discounts only — a hay boom clips at base, busts still bite.
-        if (key === 'hay') m = Math.min(m, HAY_MAX_MULT);
-        // Fruit premiums only — a fruit bust clips at base, booms still pay.
-        if (key === 'fruit') m = Math.max(m, FRUIT_MIN_MULT);
-        mults.push(m);
-        if (m >= 1.01) notes.push(`boom +${Math.round((m - 1) * 100)}%`);
-        else if (m <= 0.99) notes.push(`bust ${Math.round((m - 1) * 100)}%`);
+        let walk = eventDollars(key, ctx.roomCode, harvestClock(ctx.totals), base, tuning.events / 100);
+        // Hay discounts only — a hay boom clips at $0, busts still bite.
+        if (key === 'hay') walk = Math.min(walk, 0);
+        // Fruit premiums only — a fruit bust clips at $0, booms still pay.
+        if (key === 'fruit') walk = Math.max(walk, 0);
+        const rw = Math.round(walk);
+        if (rw !== 0) {
+            walkDollars = rw;
+            notes.push(`${rw > 0 ? 'boom' : 'bust'} ${rw > 0 ? '+' : '-'}$${Math.abs(rw).toLocaleString()}`);
+        }
+    }
+    // Mean-reversion drift rides with any motion rule (balance or events):
+    // gradual $100-ticket lean against concentration, same snapshot math.
+    let drift = 0;
+    if ((rules.balance || rules.events) && BALANCE_ASSETS.includes(key)) {
+        drift = driftDollars(key, ctx.totals);
+        if (drift !== 0) notes.push(`drift ${drift > 0 ? '+' : '-'}$${Math.abs(drift).toLocaleString()}`);
     }
 
-    if (mults.length === 0) return { price: Math.round(Number(base) || 0), mult: 1, notes };
+    if (mults.length === 0 && walkDollars === 0 && drift === 0) return { price: Math.round(Number(base) || 0), mult: 1, notes };
     let mult = Math.min(MAX_MULT, Math.max(MIN_MULT, mults.reduce((a, b) => a * b, 1)));
     // Hay ceiling: hay discounts only, never above base — no matter which
     // rules (or the balancer) push upward.
@@ -472,5 +507,10 @@ export function computeMarketPrice(base, asset, ctx = {}) {
     // Fruit floor: fruit premiums only, never below base — no matter which
     // rules (or the balancer) push downward.
     if (key === 'fruit') mult = Math.max(mult, FRUIT_MIN_MULT);
-    return { price: roundPrice((Number(base) || 0) * mult), mult, notes };
+    let price = roundPrice((Number(base) || 0) * mult + walkDollars + drift);
+    // The dollar terms move after the mult, so the caps re-apply to the
+    // final price (a hay boom or sub-base fruit can never leak through).
+    if (key === 'hay') price = Math.min(price, Math.round(Number(base) || 0));
+    if (key === 'fruit') price = Math.max(price, Math.round(Number(base) || 0));
+    return { price, mult, notes };
 }

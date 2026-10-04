@@ -14,9 +14,10 @@ import {
     bulkMult,
     bulkNext,
     computeMarketPrice,
+    driftDollars,
     earnedTotals,
     estateMult,
-    eventMult,
+    eventDollars,
     eventSwings,
     eventWalk,
     harvestClock,
@@ -121,7 +122,7 @@ test('market basis: starting units excluded, remainder per-capita', () => {
 test('market basis calms big rooms: UP grain demand-only, solo at base', () => {
     const ctx = { rules: { balance: true, seasons: true, events: true }, players: 8, rank: undefined, avgOwned: 0, myOwned: 0, roomCode: 'UP' };
     const grain = computeMarketPrice(20000, 'grain', { ...ctx, totals: marketBasis({ hay: 11, grain: 10, fruit: 0 }, 8) });
-    assert.equal(grain.price, 24000);
+    assert.equal(grain.price, 24200);
     assert.deepEqual(grain.notes, ['high demand']);
     const solo = computeMarketPrice(20000, 'grain', { ...ctx, players: 1, totals: marketBasis({ hay: 1, grain: 1, fruit: 0 }, 1) });
     assert.deepEqual(solo, { price: 20000, mult: 1, notes: [] });
@@ -131,7 +132,7 @@ test('combined mults multiply then round: 1.1 tax x 1.1 estate on 25k', () => {
     const r = computeMarketPrice(25000, 'farm', {
         rules: { rubberband: true, estate: true }, rank: 0, players: 4, myOwned: 1
     });
-    assert.equal(r.price, 30500); // 25000*1.21=30250 -> 30500
+    assert.equal(r.price, 30300); // 25000*1.21=30250 -> 30300
     assert.deepEqual(r.notes, ['leader tax', 'estate x1.1']);
 });
 
@@ -161,24 +162,23 @@ test('balance is a host rule: hot fruit costs more only when enabled', () => {
     const totals = { hay: 1, grain: 1, fruit: 28 };
     const on = computeMarketPrice(25000, 'fruit', { rules: { balance: true }, totals });
     assert.ok(on.mult > 1);
-    assert.ok(on.price > 25000);
-    assert.deepEqual(on.notes, ['high demand']);
+    assert.equal(on.price, 49900); // 2x demand minus the $100 mean-reversion drift
+    assert.deepEqual(on.notes, ['high demand', 'drift -$100']);
     const off = computeMarketPrice(25000, 'fruit', { rules: {}, totals });
     assert.deepEqual(off, { price: 25000, mult: 1, notes: [] });
 });
 
-test('events: each crop walks ±1% a harvest, deterministic per room', () => {
+test('events: each crop walks ±$100 a harvest, deterministic per room', () => {
     // No harvests => flat; junk counts clamp to flat; non-crops never walk.
-    assert.equal(eventWalk('grain', 'AB', 0), 1);
-    assert.equal(eventWalk('grain', 'AB', -5), 1);
-    assert.equal(eventWalk('tractor', 'AB', 50), 1);
-    assert.equal(eventWalk('weeds', 'AB', 50), 1);
-    // Every single step is exactly ±1%.
+    assert.equal(eventWalk('grain', 'AB', 0), 0);
+    assert.equal(eventWalk('grain', 'AB', -5), 0);
+    assert.equal(eventWalk('tractor', 'AB', 50), 0);
+    assert.equal(eventWalk('weeds', 'AB', 50), 0);
+    // Every single step is exactly ±$100.
     for (const crop of ['hay', 'grain', 'fruit']) {
         for (let h = 0; h < 200; h++) {
-            const ratio = eventWalk(crop, 'AB', h + 1) / eventWalk(crop, 'AB', h);
-            assert.ok(Math.abs(ratio - 1.01) < 1e-12 || Math.abs(ratio - 0.99) < 1e-12,
-                `${crop} harvest ${h} steps x${ratio}`);
+            const step = eventWalk(crop, 'AB', h + 1) - eventWalk(crop, 'AB', h);
+            assert.ok(step === 100 || step === -100, `${crop} harvest ${h} steps $${step}`);
         }
     }
     // Crops walk separately — same room and harvest count, different paths.
@@ -188,30 +188,32 @@ test('events: each crop walks ±1% a harvest, deterministic per room', () => {
     assert.notEqual(eventWalk('grain', 'AB', 50), eventWalk('grain', 'AB', 51));
 });
 
-test('events: deterministic, bounded ±50%, zero-sum across crops', () => {
-    const a = eventSwings('AB', 25);
-    const b = eventSwings('AB', 25);
+test('events: deterministic, bounded, zero-sum across crops', () => {
+    const base = 20000;
+    const a = eventSwings('AB', 25, base);
+    const b = eventSwings('AB', 25, base);
     assert.deepEqual(a, b); // same room + harvest count => same swings, every device
-    for (const v of a) assert.ok(v >= -0.5 && v <= 0.5, `swing ${v} in range`);
+    for (const v of a) assert.ok(v >= -0.5 * base && v <= 0.5 * base, `swing $${v} in range`);
     const sum = a[0] + a[1] + a[2];
-    assert.ok(Math.abs(sum) < 1e-9, `swings sum to ~0 (got ${sum})`);
+    assert.ok(Math.abs(sum) < 1e-6, `swings sum to ~$0 (got $${sum})`);
     // Zero harvests => flat walk.
-    assert.deepEqual(eventSwings('AB', 0), [0, 0, 0]);
-    // More harvests move the walk.
-    assert.notDeepEqual(eventSwings('AB', 25), eventSwings('AB', 26));
+    assert.deepEqual(eventSwings('AB', 0, base), [0, 0, 0]);
+    // More harvests move the walk (26 can echo 25 when every crop steps the
+    // same way, so compare across a wider gap).
+    assert.notDeepEqual(eventSwings('AB', 25, base), eventSwings('AB', 35, base));
     // A tighter host cap holds: custom 10% ceiling on a 100-harvest walk.
-    for (const v of eventSwings('AB', 100, 0.1)) assert.ok(v >= -0.1 && v <= 0.1, `swing ${v} in cap`);
+    for (const v of eventSwings('AB', 100, base, 0.1)) assert.ok(v >= -0.1 * base && v <= 0.1 * base, `swing $${v} in cap`);
     // Zero-sum + bounds hold across hundreds of rooms and walk lengths
     // (rescale, not clip, keeps the sum exact when centering overshoots).
     for (let i = 0; i < 500; i++) {
         for (const h of [1, 7, 25, 100, 300]) {
-            const w = eventSwings('R' + i, h);
-            for (const v of w) assert.ok(v >= -0.5 && v <= 0.5, `swing ${v} in range`);
-            assert.ok(Math.abs(w[0] + w[1] + w[2]) < 1e-9, `swings sum to ~0 (got ${w})`);
+            const w = eventSwings('R' + i, h, base);
+            for (const v of w) assert.ok(v >= -0.5 * base && v <= 0.5 * base, `swing $${v} in range`);
+            assert.ok(Math.abs(w[0] + w[1] + w[2]) < 1e-6, `swings sum to ~$0 (got ${w})`);
         }
     }
     // Non-crops never swing.
-    assert.equal(eventMult('tractor', 'AB', 25), 1);
+    assert.equal(eventDollars('tractor', 'AB', 25, base), 0);
 });
 
 test('events is a host rule with boom/bust notes', () => {
@@ -277,12 +279,14 @@ test('mix-and-match: every rule combo prices every asset sanely', () => {
 });
 
 test('hay ceiling: hay never prices above base', () => {
-    // Balance alone would 2x hay when the room piles in; the ceiling holds it.
+    // Balance alone would 2x hay when the room piles in; the ceiling holds it
+    // (the $100 downward drift still applies underneath).
     const r = computeMarketPrice(15000, 'hay', {
         rules: { balance: true }, totals: { hay: 28, grain: 1, fruit: 1 }
     });
     assert.equal(r.mult, 1);
-    assert.equal(r.price, 15000);
+    assert.equal(r.price, 14900);
+    assert.deepEqual(r.notes, ['high demand', 'drift -$100']);
     // Hay still discounts when the room ignores it.
     const cheap = computeMarketPrice(15000, 'hay', {
         rules: { balance: true }, totals: { hay: 0, grain: 10, fruit: 10 }
@@ -292,12 +296,14 @@ test('hay ceiling: hay never prices above base', () => {
 });
 
 test('fruit floor: fruit never prices below base', () => {
-    // Balance alone would halve ignored fruit; the floor holds it.
+    // Balance alone would halve ignored fruit; the floor holds it (the $100
+    // upward drift still applies underneath).
     const r = computeMarketPrice(25000, 'fruit', {
         rules: { balance: true }, totals: { hay: 10, grain: 10, fruit: 0 }
     });
     assert.equal(r.mult, 1);
-    assert.equal(r.price, 25000);
+    assert.equal(r.price, 25100);
+    assert.deepEqual(r.notes, ['low demand', 'drift +$100']);
     // A bust walk clips at base too (same as hay booms clip at base).
     const bust = computeMarketPrice(25000, 'fruit', {
         rules: { events: true }, totals: { hay: 0, grain: 0, fruit: 0 }, roomCode: 'FLOOR'
@@ -480,22 +486,38 @@ test('estate slider sets the extra cost per owned unit', () => {
 });
 
 test('events slider caps the walk swing, zero-sum survives', () => {
+    const base = 20000;
     for (let i = 0; i < 500; i++) {
         for (const h of [1, 10, 60]) {
-            const w = eventSwings('R' + i, h, 0.2);
-            for (const v of w) assert.ok(v >= -0.2 && v <= 0.2, `swing ${v} respects the 20% cap`);
-            assert.ok(Math.abs(w[0] + w[1] + w[2]) < 1e-9, 'still zero-sum');
+            const w = eventSwings('R' + i, h, base, 0.2);
+            for (const v of w) assert.ok(v >= -0.2 * base && v <= 0.2 * base, `swing $${v} respects the 20% cap`);
+            assert.ok(Math.abs(w[0] + w[1] + w[2]) < 1e-6, 'still zero-sum');
         }
     }
-    assert.deepEqual(eventSwings('AB', 25, 0), [0, 0, 0], '0% swing is flat');
-    const m = eventMult('grain', 'AB', 25, 0.1);
-    assert.ok(m >= 0.9 && m <= 1.1, 'mult respects the 10% cap');
+    assert.deepEqual(eventSwings('AB', 25, base, 0), [0, 0, 0], '0% swing is flat');
+    const m = eventDollars('grain', 'AB', 25, base, 0.1);
+    assert.ok(Math.abs(m) <= 0.1 * base, 'walk respects the 10% cap');
     // Same walk, smaller cap => same direction, never bigger.
     for (let i = 0; i < 200; i++) {
-        const full = eventSwings('Q' + i, 40);
-        const small = eventSwings('Q' + i, 40, 0.1);
+        const full = eventSwings('Q' + i, 40, base);
+        const small = eventSwings('Q' + i, 40, base, 0.1);
         for (let k = 0; k < 3; k++) {
-            assert.ok(Math.abs(small[k]) <= Math.abs(full[k]) + 1e-12, 'smaller cap never overshoots');
+            assert.ok(Math.abs(small[k]) <= Math.abs(full[k]) + 1e-6, 'smaller cap never overshoots');
         }
     }
+});
+
+test('drift: mean-reversion in $100 tickets, capped, crops only', () => {
+    // UP room basis: hay over-held drifts down, fruit under-held drifts up.
+    const up = { hay: 0.375, grain: 0.25, fruit: 0 };
+    assert.equal(driftDollars('hay', up), -100);
+    assert.equal(driftDollars('grain', up), 0);
+    assert.equal(driftDollars('fruit', up), 100);
+    // Even splits and empty rooms drift nowhere; estates never drift.
+    assert.equal(driftDollars('grain', { hay: 2, grain: 2, fruit: 2 }), 0);
+    assert.equal(driftDollars('grain', { hay: 0, grain: 0, fruit: 0 }), 0);
+    assert.equal(driftDollars('farm', up), 0);
+    // Corners clamp at one ticket — never dominates the price.
+    assert.equal(driftDollars('grain', { hay: 0, grain: 100, fruit: 0 }), -100);
+    assert.equal(driftDollars('fruit', { hay: 0, grain: 100, fruit: 0 }), 100);
 });
