@@ -19,7 +19,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907f';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20260907q';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20261004a';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -418,7 +418,7 @@ function calculateNet() {
         // a new buy costs, never the player's net worth.
         const valuationCost = costCell.dataset.base !== undefined && costCell.dataset.base !== ''
             ? parseFloat(costCell.dataset.base)
-            : parseFloat((costCell.innerText || '').replace(/,/g, '').trim());
+            : parseFloat(((costCell.querySelector('.cost-price') || costCell).innerText || '').replace(/,/g, '').trim());
         const net = qty * (Number.isFinite(valuationCost) ? valuationCost : 0);
 
         netCell.textContent = numberWithCommasAndDecimals(net);
@@ -1016,7 +1016,8 @@ function updateActionButtonStates() {
     document.querySelectorAll('button.buy-btn[data-asset]').forEach((btn) => {
         const row = btn.closest('tr');
         const costCell = row && row.cells ? row.cells[3] : null;
-        const unitCost = costCell ? (parseFloat(String(costCell.textContent).replace(/,/g, '')) || 0) : 0;
+        const priceText = (costCell?.querySelector('.cost-price') || costCell)?.textContent || '';
+        const unitCost = parseFloat(String(priceText).replace(/,/g, '')) || 0;
         const disabled = unitCost <= 0 || !getBuyBounds(unitCost).feasible;
         setButtonDisabled(btn, disabled);
     });
@@ -1536,13 +1537,16 @@ function currentMarketCtx(asset) {
     for (const d of board) total += Number(d[key] ?? 0) || 0;
     // Room crop totals feed the demand balancer, the seasons clock, and
     // the boom & bust walks (same snapshot on every client, so every
-    // device prices identically).
-    const cropTotals = {};
+    // device prices identically). Per-capita earned basis: starting
+    // inventory stripped, remainder divided by players — room size stops
+    // accelerating the market.
+    const rawTotals = {};
     for (const k of ['hay', 'grain', 'fruit']) {
         let t = 0;
         for (const d of board) t += Number(d[k] ?? 0) || 0;
-        cropTotals[k] = t;
+        rawTotals[k] = t;
     }
+    const cropTotals = marketBasis(rawTotals, players);
     // Market cost is a room-wide quote, never personalized by this device's
     // rank or local inventory. Use room-average ownership for Estate so every
     // client computes the same surcharge from the same leaderboard snapshot.
@@ -1575,16 +1579,25 @@ function refreshPriceCells() {
         const btn = document.querySelector(`.buy-btn[data-asset="${asset}"]`);
         const costCell = btn?.closest('tr')?.cells?.[3];
         if (!costCell) continue;
+        const priceEl = costCell.querySelector('.cost-price') || costCell;
+        const noteEl = costCell.querySelector('.market-note');
         if (costCell.dataset.base === undefined || costCell.dataset.base === '') {
-            costCell.dataset.base = (costCell.innerText || '').replace(/,/g, '').trim();
+            costCell.dataset.base = (priceEl.innerText || '').replace(/,/g, '').trim();
         }
         const base = parseFloat(costCell.dataset.base) || 0;
         if (!(base > 0)) continue;
-        const { price } = computeMarketPrice(base, asset, currentMarketCtx(asset));
+        const { price, mult, notes } = computeMarketPrice(base, asset, currentMarketCtx(asset));
         const text = price.toLocaleString('en-US');
-        if (costCell.innerText.trim() !== text) {
-            costCell.innerText = text;
+        if (priceEl.innerText.trim() !== text) {
+            priceEl.innerText = text;
             changed = true;
+        }
+        // Per-crop modifiers + source, visible right under the price.
+        if (noteEl) {
+            const note = notes.length
+                ? `Market ×${mult.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')} (${notes.join(' · ')})`
+                : '';
+            if (noteEl.textContent !== note) { noteEl.textContent = note; changed = true; }
         }
     }
     if (changed && typeof calculateNet === 'function') calculateNet();
@@ -2166,12 +2179,30 @@ document.getElementById('roomCodeInput')?.addEventListener('input', (e) => {
 // boot room UI
 initRoomFromUrl();
 
+// Base price of an asset for trade-form defaults: the stable Cost-column
+// base (dataset.base once priced, else the printed cell) — never the live
+// market quote, never the old hardcoded 1000.
+function assetBasePrice(asset) {
+    const key = String(asset || '').toLowerCase();
+    const costCell = document.querySelector(`.buy-btn[data-asset="${key}"]`)?.closest('tr')?.cells?.[3];
+    const priceText = costCell?.querySelector('.cost-price')?.textContent ?? costCell?.textContent ?? '';
+    const raw = (costCell?.dataset?.base ?? '').trim() !== '' ? costCell.dataset.base : priceText;
+    const v = Math.round(parseFloat(String(raw).replace(/,/g, '')) || 0);
+    return Math.max(0, v);
+}
+function resetTradePriceToBase(priceId, qtyId, asset) {
+    const priceEl = document.getElementById(priceId);
+    if (!priceEl) return;
+    const qty = Math.max(1, parseInt(document.getElementById(qtyId)?.value || '1', 10) || 1);
+    priceEl.value = String(assetBasePrice(asset) * qty);
+}
+
 // custom buy wiring (side-by-side buttons pop up the modal)
 document.getElementById('customBuyBtn')?.addEventListener('click', showCustomBuyModal);
 document.getElementById('cancelCustomBuy')?.addEventListener('click', hideCustomBuyModal);
 document.getElementById('customBuyModal')?.addEventListener('click', (e) => { if (e.target.id === 'customBuyModal') hideCustomBuyModal(); });
 document.getElementById('confirmCustomBuy')?.addEventListener('click', performCustomBuy);
-document.getElementById('customBuyAsset')?.addEventListener('change', refreshCustomBuySellers);
+document.getElementById('customBuyAsset')?.addEventListener('change', () => { refreshCustomBuySellers(); resetTradePriceToBase('customBuyPrice', 'customBuyQty', document.getElementById('customBuyAsset')?.value || 'Hay'); updateCustomBuyPreview(); });
 document.getElementById('customBuyQty')?.addEventListener('input', updateCustomBuyPreview);
 document.getElementById('customBuyPrice')?.addEventListener('input', updateCustomBuyPreview);
 document.getElementById('customBuySeller')?.addEventListener('change', updateCustomBuyPreview);
@@ -2181,7 +2212,7 @@ document.getElementById('customSellBtn')?.addEventListener('click', showCustomSe
 document.getElementById('cancelCustomSell')?.addEventListener('click', hideCustomSellModal);
 document.getElementById('customSellModal')?.addEventListener('click', (e) => { if (e.target.id === 'customSellModal') hideCustomSellModal(); });
 document.getElementById('confirmCustomSell')?.addEventListener('click', performCustomSell);
-document.getElementById('customSellAsset')?.addEventListener('change', () => { refreshCustomSellBuyers(); updateCustomSellPreview(); });
+document.getElementById('customSellAsset')?.addEventListener('change', () => { refreshCustomSellBuyers(); resetTradePriceToBase('customSellPrice', 'customSellQty', document.getElementById('customSellAsset')?.value || 'Hay'); updateCustomSellPreview(); });
 document.getElementById('customSellQty')?.addEventListener('input', updateCustomSellPreview);
 document.getElementById('customSellPrice')?.addEventListener('input', updateCustomSellPreview);
 document.getElementById('customSellBuyer')?.addEventListener('change', updateCustomSellPreview);
@@ -2528,6 +2559,7 @@ function updateCustomBuyPreview() {
 // track who's actually online. Selection-preserving via prev-restore.
 function showCustomBuyModal() {
     refreshCustomBuySellers();
+    resetTradePriceToBase('customBuyPrice', 'customBuyQty', document.getElementById('customBuyAsset')?.value || 'Hay');
     updateCustomBuyPreview();
     document.getElementById('customBuyModal')?.classList.remove('hidden');
 }
@@ -2552,6 +2584,21 @@ try {
     const stored = JSON.parse(localStorage.getItem('farmingGameAppliedTrades') || '[]');
     if (Array.isArray(stored)) stored.forEach(id => seenTradeIds.add(id));
 } catch {}
+// Accepted-offer confirmations dismissed from MY inbox only (local): the
+// trade doc stays put so the counterparty's settlement poll still sees it.
+const dismissedTrades = new Set();
+try {
+    const storedDismissed = JSON.parse(localStorage.getItem('farmingGameDismissedTrades') || '[]');
+    if (Array.isArray(storedDismissed)) storedDismissed.forEach(id => { if (typeof id === 'string') dismissedTrades.add(id); });
+} catch {}
+function dismissTrade(tradeId) {
+    if (!tradeId) return;
+    dismissedTrades.add(tradeId);
+    try {
+        localStorage.setItem('farmingGameDismissedTrades', JSON.stringify([...dismissedTrades].slice(-200)));
+    } catch {}
+    startTradeListener(); // re-poll + re-render without the dismissed line
+}
 function markTradeApplied(tradeId) {
     seenTradeIds.add('applied-' + tradeId);
     try {
@@ -2681,10 +2728,10 @@ function renderTradeInbox(trades) {
             html += `<div class="py-1 border-b border-yellow-100">${line}</div>`;
         });
     }
-    const justAccepted = trades.filter(t => t.status === 'accepted' && (Date.now() - new Date(t.updatedAt||t.createdAt).getTime() < 15000) && (t.buyerUid===myUid || t.sellerUid===myUid));
+    const justAccepted = trades.filter(t => t.status === 'accepted' && (Date.now() - new Date(t.updatedAt||t.createdAt).getTime() < 15000) && (t.buyerUid===myUid || t.sellerUid===myUid) && !dismissedTrades.has(t.id));
     justAccepted.forEach(t => {
         const role = t.sellerUid===myUid ? 'sold' : 'bought';
-        html += `<div class="text-xs text-green-700 mt-1">✓ ${role} ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()} ${t.sellerUid===myUid?'to '+t.buyerName:'from '+t.sellerName}</div>`;
+        html += `<div class="text-xs text-green-700 mt-1 flex items-center justify-between gap-2"><span>✓ ${role} ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()} ${t.sellerUid===myUid?'to '+t.buyerName:'from '+t.sellerName}</span><button data-dismiss="${t.id}" class="px-1.5 py-0.5 text-gray-500 hover:text-gray-800 text-sm leading-none" title="Clear this confirmation">×</button></div>`;
     });
     // A stuck side used to retry silently forever. Keep retrying (cash or
     // stock may arrive), but say so out loud — role-aware either way.
@@ -2702,6 +2749,7 @@ function renderTradeInbox(trades) {
     }
     box.querySelectorAll('[data-accept]').forEach(b=> b.addEventListener('click', ()=> acceptTrade(b.dataset.accept)));
     box.querySelectorAll('[data-reject]').forEach(b=> b.addEventListener('click', ()=> rejectTrade(b.dataset.reject)));
+    box.querySelectorAll('[data-dismiss]').forEach(b=> b.addEventListener('click', ()=> dismissTrade(b.dataset.dismiss)));
     // Keep polling fresh while buyer applies fail: the snapshot layer only
     // re-renders on data change, so without this the fail counter (and the
     // warning below, and the 15s confirmation lines) would freeze after one
@@ -2901,6 +2949,7 @@ function updateCustomSellPreview() {
 }
 function showCustomSellModal() {
     refreshCustomSellBuyers();
+    resetTradePriceToBase('customSellPrice', 'customSellQty', document.getElementById('customSellAsset')?.value || 'Hay');
     updateCustomSellPreview();
     document.getElementById('customSellModal')?.classList.remove('hidden');
 }
@@ -4429,7 +4478,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
             const qtyCell = row.cells[2]; // Qty column
             const costCell = row.cells[3]; // Cost column
             const qtyValueEl = qtyCell.querySelector('span.editable');
-            const costRaw = costCell.textContent.replace(/,/g, '').trim();
+            const costRaw = ((costCell.querySelector('.cost-price') || costCell).textContent || '').replace(/,/g, '').trim();
             const cost = parseFloat(costRaw) || 0;
             const totalCost = cost; // Always buy 1
             if (totalCost <= 0) {

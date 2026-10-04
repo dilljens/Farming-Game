@@ -271,6 +271,35 @@ export function harvestClock(totals) {
     return ['hay', 'grain', 'fruit'].reduce((s, k) => s + Math.max(0, Number(t[k]) || 0), 0);
 }
 
+// Starting inventory is granted, not earned: every player starts with 1 hay
+// + 1 grain, and those free units must not count as ownership for market
+// rules (otherwise every room opens demand-spiked). Earned totals subtract
+// the per-player grant, floored at zero — deterministic from the same
+// snapshot, so every device still agrees.
+export const STARTING_HOLDINGS = { hay: 1, grain: 1, fruit: 0 };
+export function earnedTotals(totals, players) {
+    const t = totals && typeof totals === 'object' ? totals : {};
+    const P = Math.max(0, Math.floor(Number(players) || 0));
+    const out = {};
+    for (const k of ['hay', 'grain', 'fruit']) {
+        out[k] = Math.max(0, (Number(t[k]) || 0) - (STARTING_HOLDINGS[k] || 0) * P);
+    }
+    return out;
+}
+
+// Per-capita market basis: earned room holdings divided by player count, so
+// seasons and walks move at the same pace in a 2-player room and an 8-player
+// room — room size stops accelerating the market. Share-based rules (the
+// demand balancer) are ratio-invariant, so only clock-driven effects calm
+// down. Deterministic from the same snapshot, so every device still agrees.
+export function marketBasis(totals, players) {
+    const P = Math.max(1, Math.floor(Number(players) || 0));
+    const earned = earnedTotals(totals, players);
+    const out = {};
+    for (const k of ['hay', 'grain', 'fruit']) out[k] = earned[k] / P;
+    return out;
+}
+
 // Seasons ride the harvest clock, not the wall clock. Each crop walks a
 // triangle wave from base up to +25% and back: a full up-down cycle takes
 // 4/5/6 harvests per player (hay/grain/fruit), so bigger rooms swing

@@ -391,6 +391,15 @@ input, .editable {
     background-color: #45a049;
 }
 
+/* Per-crop market modifiers + source, under the Cost price. Empty when no
+   market rule moves the asset. */
+.market-note {
+    font-size: 10px;
+    line-height: 1.25;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
 /* Pay buttons — red (user request) */
 #payPerAcreBtn, #payInterestBtn, #payOffLoanBtn {
     background-color: #dc2626;

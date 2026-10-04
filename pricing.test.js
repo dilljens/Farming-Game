@@ -14,11 +14,13 @@ import {
     bulkMult,
     bulkNext,
     computeMarketPrice,
+    earnedTotals,
     estateMult,
     eventMult,
     eventSwings,
     eventWalk,
     harvestClock,
+    marketBasis,
     normalizeEcon,
     normalizeHarvest,
     normalizeRules,
@@ -103,6 +105,26 @@ test('estate: tenth-percent per owned unit', () => {
 test('all rules off => base price, no notes', () => {
     const r = computeMarketPrice(20000, 'hay', { rules: {} });
     assert.deepEqual(r, { price: 20000, mult: 1, notes: [] });
+});
+
+test('market basis: starting units excluded, remainder per-capita', () => {
+    // 8-player room UP: 11 hay / 10 grain on the board is nearly all grant.
+    assert.deepEqual(earnedTotals({ hay: 11, grain: 10, fruit: 0 }, 8), { hay: 3, grain: 2, fruit: 0 });
+    assert.deepEqual(marketBasis({ hay: 11, grain: 10, fruit: 0 }, 8), { hay: 0.375, grain: 0.25, fruit: 0 });
+    // Solo opening prices at exactly base.
+    assert.deepEqual(marketBasis({ hay: 1, grain: 1, fruit: 0 }, 1), { hay: 0, grain: 0, fruit: 0 });
+    // Grant floors at zero; empty rooms are safe.
+    assert.deepEqual(marketBasis({ hay: 0, grain: 1, fruit: 0 }, 4), { hay: 0, grain: 0, fruit: 0 });
+    assert.deepEqual(marketBasis({ hay: 5, grain: 5, fruit: 5 }, 0), { hay: 5, grain: 5, fruit: 5 });
+});
+
+test('market basis calms big rooms: UP grain demand-only, solo at base', () => {
+    const ctx = { rules: { balance: true, seasons: true, events: true }, players: 8, rank: undefined, avgOwned: 0, myOwned: 0, roomCode: 'UP' };
+    const grain = computeMarketPrice(20000, 'grain', { ...ctx, totals: marketBasis({ hay: 11, grain: 10, fruit: 0 }, 8) });
+    assert.equal(grain.price, 24000);
+    assert.deepEqual(grain.notes, ['high demand']);
+    const solo = computeMarketPrice(20000, 'grain', { ...ctx, players: 1, totals: marketBasis({ hay: 1, grain: 1, fruit: 0 }, 1) });
+    assert.deepEqual(solo, { price: 20000, mult: 1, notes: [] });
 });
 
 test('combined mults multiply then round: 1.1 tax x 1.1 estate on 25k', () => {

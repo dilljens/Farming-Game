@@ -29,7 +29,9 @@ Prices are room-wide: everyone sees the same Cost column and buy-window prices. 
 - **Balance** — the crop everyone piles into gets dear (up to 2×), the ignored ones go cheap (down to half). Hay (base $15,000) only ever discounts, never rises above base.
 - **Boom&Bust** — each crop walks its own random path: every room harvest moves a crop ±1%, zero-sum across crops and capped at ±50% (host slider lowers the cap). Same walk on every device.
 
-Market prices show in the Cost column and the buy window, and are the same for everyone in a room. Existing holdings count toward net worth at their stable base value, so market discounts or premiums affect new purchase costs—not net worth. Player-to-player trades are negotiated and never adjusted — tap the Buy/Sell to player buttons to pop up the trade forms; nothing moves until the other player accepts.
+Market rules run on earned, per-player holdings: everyone's starting hay+grain is excluded and the rest is divided by player count, so 2- and 8-player rooms swing at the same pace and every game opens at base prices. Each crop's Cost line names its active modifiers and source (demand, season, boom/bust, estate).
+
+Market prices show in the Cost column and the buy window, and are the same for everyone in a room. Existing holdings count toward net worth at their stable base value, so market discounts or premiums affect new purchase costs—not net worth. Player-to-player trades are negotiated and never adjusted — tap the Buy/Sell to player buttons to pop up the trade forms (price starts at the property's base value); nothing moves until the other player accepts. Accepted-offer confirmations have an × to clear them from your inbox.
 
 ## Scenarios (host one-tap presets, badge shows for everyone)
 
