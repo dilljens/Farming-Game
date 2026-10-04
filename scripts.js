@@ -3607,7 +3607,41 @@ function hideModal() {
 
 // Function to show the extra rules modal
 function showExtraRulesModal() {
+    try { renderExtraRulesLive(); } catch {}
     document.getElementById('extraRulesModal').classList.remove('hidden');
+}
+// Extra Rules modal shows LIVE room values (not hardcoded defaults) so
+// regular players can see the host's actual rules: which boxes are on,
+// the equipment bonus math, and the economy/harvest numbers in force.
+function renderExtraRulesLive() {
+    const rules = normalizeRules(currentRoomRules);
+    const line = document.getElementById('activeRulesLine');
+    if (line) {
+        const on = RULE_KEYS.filter((k) => !!rules[k]);
+        line.innerHTML = on.length
+            ? `Active in ${currentRoomCode ? `room ${currentRoomCode}` : 'this game'}: <strong>${on.map((k) => RULE_LABELS[k] || k).join(' · ')}</strong>`
+            : `Standard game — no market rules on${currentRoomCode ? ` in room ${currentRoomCode}` : ''}.`;
+    }
+    const h = roomHarvest();
+    const tiers = document.getElementById('hayTierList');
+    if (tiers) {
+        tiers.innerHTML =
+            `<li>If Hay quantity is <strong>${h.hayMidQty}–${h.hayHighQty - 1}</strong>, apply a <strong>${h.hayMidMult}×</strong> multiplier.</li>` +
+            `<li>If Hay quantity is <strong>${h.hayHighQty}+</strong>, apply a <strong>${h.hayHighMult}×</strong> multiplier.</li>` +
+            `<li>Otherwise, apply <strong>1×</strong>.</li>`;
+    }
+    const eq = document.getElementById('equipBonusList');
+    if (eq) {
+        const pct = Math.round(h.equipRate * 100);
+        eq.innerHTML =
+            `<li><strong>Tractors</strong> increase hay gain by <strong>+${pct}% per tractor</strong> additively, up to ${h.equipCap} tractors (+${pct * h.equipCap}%).</li>` +
+            `<li><strong>Harvesters</strong> increase grain gain by <strong>+${pct}% per harvester</strong> additively, up to ${h.equipCap} harvesters (+${pct * h.equipCap}%).</li>`;
+    }
+    const e = roomEcon();
+    const econ = document.getElementById('econLiveLine');
+    if (econ) econ.innerHTML = `<strong>Economy</strong> ${rules.customecon ? '☑' : '☐'} — max loan $${e.debtCap.toLocaleString()}, interest ${e.interestPct}%, min down ${e.downPct}%.`;
+    const harv = document.getElementById('harvestLiveLine');
+    if (harv) harv.innerHTML = `<strong>Harvest</strong> ${rules.customharvest ? '☑' : '☐'} — hay tiers ${h.hayMidQty}→×${h.hayMidMult} / ${h.hayHighQty}→×${h.hayHighMult}, equipment +${Math.round(h.equipRate * 100)}%/unit cap ${h.equipCap}.`;
 }
 
 // Function to hide the extra rules modal

@@ -75,21 +75,17 @@
                 <div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl sm:p-6">
                   <div class="mt-3 text-center sm:mt-5">
                     <h3 class="text-lg font-semibold leading-6 text-gray-900" id="extra-rules-title">Extra Rules</h3>
+                    <p id="activeRulesLine" class="text-sm text-gray-700 mt-1"></p>
                     <div class="mt-2">
                       <div class="text-sm text-gray-500 text-left">
                         <h4 class="font-semibold">Hay Roll Multiplier</h4>
                         <p>When calculating <strong>Hay</strong> roll payouts in the roll table:</p>
-                        <ul class="list-disc list-inside">
-                          <li>If Hay quantity is <strong>5–9</strong>, apply a <strong>1.5×</strong> multiplier.</li>
-                          <li>If Hay quantity is <strong>10+</strong>, apply a <strong>2×</strong> multiplier.</li>
-                          <li>Otherwise, apply <strong>1×</strong>.</li>
+                        <ul id="hayTierList" class="list-disc list-inside">
                         </ul>
                         <p>This multiplier affects the <strong>roll payout values</strong> shown in the roll table (profit per roll), not the asset purchase net values.</p>
                         
                         <h4 class="font-semibold mt-4">Equipment Bonuses</h4>
-                        <ul class="list-disc list-inside">
-                          <li><strong>Tractors</strong> increase hay gain by <strong>+20% per tractor</strong> additively, up to 5 tractors (+100%).</li>
-                          <li><strong>Harvesters</strong> increase grain gain by <strong>+20% per harvester</strong> additively, up to 5 harvesters (+100%).</li>
+                        <ul id="equipBonusList" class="list-disc list-inside">
                         </ul>
                         
                         <h4 class="font-semibold mt-4">Options to Buy</h4>
@@ -100,8 +96,8 @@
                           <li><strong>Seasons</strong> — prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.</li>
                           <li><strong>Rubber-band</strong> — individual leader/trailer prices are disabled; everyone sees the same room-wide costs.</li>
                           <li><strong>Estate</strong> — adds a shared surcharge: crops/farms/equipment per owned unit past the starting grant, cattle per 2 head, all off room averages.</li>
-                          <li><strong>Balance</strong> — the crop everyone piles into gets dear (up to 2×), the ignored ones go cheap (down to half). Hay (base $15,000) only ever discounts, never rises above base.</li>
-                          <li><strong>Boom&amp;Bust</strong> — each crop walks its own random path: every room harvest moves a crop ±1%, zero-sum across crops and capped at ±50%. Same walk on every device.</li>
+                          <li><strong>Balance</strong> — crowded crops cost up to $1,000 over base in $100 tickets; ignored ones discount the same way. Hay (base $15,000) caps at $20,000; fruit (base $25,000) floors at $20,000.</li>
+                          <li><strong>Boom&amp;Bust</strong> — each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped at ±50% of base. Same walk on every device. Off-average crops drift back in $100 tickets up to ±$500.</li>
                           <li><strong>Economy</strong> — enables the host's economy numbers below (unticked = standard $50k loan cap, 10% interest, 20% min down).</li>
                           <li><strong>Harvest</strong> — enables the host's harvest numbers below (unticked = standard hay tiers and equipment bonuses).</li>
                         </ul>
@@ -114,10 +110,10 @@
                           <li><strong>Debt-Free</strong> — no loans: 100% down, cash only.</li>
                         </ul>
                         <p class="mt-2">A scenario just fills the popup form — hand-tweaking anything after flips the badge to Custom.</p>
-                        <h4 class="font-semibold mt-4">Settings (host can change these during the game)</h4>
+                        <h4 class="font-semibold mt-4">Settings — live values for this room</h4>
                         <ul class="list-disc list-inside">
-                          <li><strong>Economy</strong> numbers (need Economy ☑) — max loan $, loan interest %, minimum down-payment %.</li>
-                          <li><strong>Harvest</strong> numbers (need Harvest ☑) — hay bonus tiers (qty → ×mult) and equipment bonus +%/unit with unit cap.</li>
+                          <li id="econLiveLine"><strong>Economy</strong> numbers — max loan $, loan interest %, minimum down-payment %.</li>
+                          <li id="harvestLiveLine"><strong>Harvest</strong> numbers — hay bonus tiers (qty → ×mult) and equipment bonus +%/unit with unit cap.</li>
                         </ul>
                         <p class="mt-2">Every rule and number has an ⓘ button explaining what it does. The host can open Room Settings in the Market row and save changes for everyone at any time.</p>
                         
@@ -751,7 +747,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20261004l"></script>
+<script type="module" src="scripts.js?v=20261004m"></script>
 
 <div id="buildStamp" class="text-center text-[10px] text-gray-400 mt-2 mb-1"></div>
 
