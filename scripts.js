@@ -1783,13 +1783,18 @@ document.querySelectorAll('#screenTabs button[data-screen]').forEach((btn) => {
     btn.addEventListener('click', () => setScreen(btn.dataset.screen));
 });
 function refreshTabStatus() {
+    // Guarded writes: the observer below watches the whole body, so an
+    // unconditional textContent assignment re-triggers it forever (the
+    // page froze in an infinite mutate-observe loop). Only write on change.
     const worth = document.querySelector('.total-worth')?.textContent?.trim() || '0';
     const cashEl = document.querySelector('.net-cash')?.textContent?.trim()
         || document.querySelector('.cash-total')?.textContent?.trim() || '0';
     const nw = document.getElementById('tabNetWorth');
     const cs = document.getElementById('tabCash');
-    if (nw) nw.textContent = `Net $${worth}`;
-    if (cs) cs.textContent = `Cash $${cashEl}`;
+    const nv = `Net $${worth}`;
+    const cv = `Cash $${cashEl}`;
+    if (nw && nw.textContent !== nv) nw.textContent = nv;
+    if (cs && cs.textContent !== cv) cs.textContent = cv;
 }
 try {
     new MutationObserver(refreshTabStatus).observe(document.body, { childList: true, subtree: true, characterData: true });
