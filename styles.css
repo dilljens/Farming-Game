@@ -74,12 +74,12 @@ input[type="number"] {
 }
 
 /* Cash/loan transaction inputs are text (not number) so mobile keyboards
-   can enter a minus sign; inputmode="decimal" keeps the numeric keypad. */
+   can enter a minus sign; inputmode="numeric" keeps the numeric keypad. */
 .small-input {
     white-space: nowrap;
 }
 #cashInput, #loanInput {
-    width: calc(100% - 58px);
+    width: calc(100% - 118px);
     padding: 8px;
     border: 1px solid #ccc;
     box-sizing: border-box;
@@ -88,23 +88,43 @@ input[type="number"] {
     min-height: 44px;
     vertical-align: middle;
 }
-/* +/- sign toggle: phone keypads have no minus key */
-.sign-toggle {
-    width: 50px;
-    padding: 8px 4px;
+/* −/+ segment: big touch targets pick the entry's sign (digits-only
+   keypad has no minus key). Selected side is solid, input tints to match. */
+.sign-seg {
+    display: inline-flex;
     margin-left: 4px;
-    min-height: 44px;
-    border: 1px solid #777;
-    border-radius: 4px;
-    box-sizing: border-box;
-    background-color: #e0e0e0;
-    font-size: 14px;
-    font-weight: bold;
-    cursor: pointer;
     vertical-align: middle;
+    border: 1px solid #777;
+    border-radius: 6px;
+    overflow: hidden;
 }
-.sign-toggle:active {
-    background-color: #c0c0c0;
+.sign-seg button {
+    width: 55px;
+    min-height: 44px;
+    padding: 8px 4px;
+    box-sizing: border-box;
+    background-color: #f3f4f6;
+    color: #6b7280;
+    font-size: 20px;
+    font-weight: bold;
+    line-height: 1;
+    border: 0;
+    cursor: pointer;
+}
+.sign-seg button + button {
+    border-left: 1px solid #777;
+}
+.sign-seg button[data-sign="-"][aria-pressed="true"] {
+    background-color: #dc2626;
+    color: #fff;
+}
+.sign-seg button[data-sign="+"][aria-pressed="true"] {
+    background-color: #16a34a;
+    color: #fff;
+}
+#cashInput.signed-neg, #loanInput.signed-neg {
+    border-color: #dc2626;
+    color: #b91c1c;
 }
 
 .input-cell {
@@ -180,6 +200,18 @@ input[type="number"] {
     position: relative;
     z-index: 2;
     background: transparent;
+}
+
+/* Buy modal slider: disabled up front when nothing is affordable */
+#downPaymentSlider:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+#downPaymentSlider:disabled::-webkit-slider-thumb {
+    background: #9ca3af;
+}
+#downPaymentSlider:disabled::-moz-range-thumb {
+    background: #9ca3af;
 }
 
 /* The progress bar wrapper is the immediate next div after the slider input */

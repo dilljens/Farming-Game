@@ -482,11 +482,21 @@ function parseTransactionValue(rawValue) {
 function handleTransaction(inputId, transactionClass, totalClass) {
     const inputElement = document.getElementById(inputId);
     if (inputElement && inputElement.value.trim() !== '') {
-        const newValue = parseTransactionValue(inputElement.value);
+        const raw = inputElement.value;
+        let newValue = parseTransactionValue(raw);
         if (!Number.isFinite(newValue)) {
             inputElement.value = '';
             sayStatus(`Couldn't read that as a number — try plain digits like 2000.`);
             return;
+        }
+        // Mobile sign: the −/+ segment decides the sign (phone keypads have
+        // no minus key and the input is digits-only). A sign typed or pasted
+        // into the text itself always wins over the segment.
+        const hasTypedSign = /^\s*[-+(]/.test(raw) || /[+-]\s*$/.test(raw);
+        if (!hasTypedSign) {
+            const seg = document.querySelector(`.sign-seg[data-target="${inputId}"]`);
+            const segSign = seg && seg.dataset.sign === '-' ? -1 : 1;
+            newValue = segSign * Math.abs(newValue);
         }
 
         // Cash floor: reject negative cash entries that would go below $0
@@ -536,7 +546,7 @@ function handleTransaction(inputId, transactionClass, totalClass) {
             }
         }
 
-        shiftAndInsertTransaction(inputId,transactionClass);
+        shiftAndInsertTransaction(inputId,transactionClass,newValue);
         // Manual entries (typed or quick-button) are single-leg undo actions.
         pushUndoAction({
             label: `Manual ${transactionClass.includes('cash') ? 'cash' : 'loan'} entry $${newValue.toLocaleString()}`,
@@ -718,18 +728,20 @@ function undoLastAction() {
     undoToast(`Undid: ${a.label}`);
 }
 
-function shiftAndInsertTransaction(inputId, transactionClass) {
+function shiftAndInsertTransaction(inputId, transactionClass, numericValue) {
     // Get the value from the input
     const inputElement = document.getElementById(inputId);
-    const numericValue = parseTransactionValue(inputElement.value);
+    // Prefer the caller-computed value (handleTransaction applies the −/+
+    // segment sign before this point); fall back to parsing the raw input.
+    const parsed = Number.isFinite(numericValue) ? numericValue : parseTransactionValue(inputElement.value);
 
     // Check that the value is not empty
-    if (Number.isFinite(numericValue)) {
+    if (Number.isFinite(parsed)) {
         // Determine which transaction type (cash or loan)
         const transactionType = transactionClass.includes('cash') ? 'cash' : 'loan';
         
         // Add new transaction to the beginning of the global data array
-        data.transactions[transactionType].unshift(String(numericValue));
+        data.transactions[transactionType].unshift(String(parsed));
         
         // Select all the transaction cells for cash or loan
         const transactionCells = document.querySelectorAll(`.${transactionClass}`);
@@ -4399,13 +4411,15 @@ window.addEventListener('DOMContentLoaded', (event) => {
     calculateNet(); // Initial calculation on page load
     updateUpgradedRidgesDisplay();
     wireManualInterestCell();
-    // Build stamp: reads our own script URL token so "which version am I
+    // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
+    // Bump GAME_VERSION with each player-facing release.
+    const GAME_VERSION = '1.4';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
         const stamp = document.getElementById('buildStamp');
-        if (stamp) stamp.textContent = `build ${token}`;
+        if (stamp) stamp.textContent = `v${GAME_VERSION} · build ${token}`;
     } catch {}
     //console.log(document.getElementById('cashInput'));
     makeEditableCellsExitOnEnter();
@@ -4423,7 +4437,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
             btn.addEventListener('click', () => {
                 const rawValue = btn.getAttribute('data-quick-transaction-value');
                 if (!rawValue) return;
-                cashInput.value = rawValue;
+                // Quick buttons carry their own sign: prefix explicit '+' so
+                // the −/+ segment can't flip a positive quick entry negative
+                // (a typed/pasted sign always wins over the segment).
+                cashInput.value = rawValue.startsWith('-') ? rawValue : '+' + rawValue;
                 handleTransaction('cashInput', 'cash-transaction', 'cash-total');
             });
         });
@@ -4500,16 +4517,28 @@ window.addEventListener('DOMContentLoaded', (event) => {
             }
         });
     }
-    // Phone keypads have no minus key: the +/- buttons flip the sign of the
-    // cash/loan inputs so negative transactions can be entered on mobile.
-    document.querySelectorAll('.sign-toggle').forEach((toggle) => {
-        toggle.addEventListener('click', () => {
-            const target = document.getElementById(toggle.getAttribute('data-target'));
-            if (!target) return;
-            const raw = target.value.trim();
-            target.value = raw.startsWith('-') ? raw.slice(1) : (raw ? '-' + raw : '-');
-            target.focus();
+    // Phone keypads have no minus key and the inputs are digits-only, so
+    // each field gets a big −/+ segment that decides the entry's sign.
+    // A sign typed or pasted into the text itself always wins (see
+    // handleTransaction); quick buttons carry their own sign the same way.
+    document.querySelectorAll('.sign-seg').forEach((seg) => {
+        const input = document.getElementById(seg.getAttribute('data-target'));
+        const paint = () => {
+            const sign = seg.dataset.sign === '-' ? '-' : '+';
+            seg.dataset.sign = sign;
+            seg.querySelectorAll('button[data-sign]').forEach((b) => {
+                b.setAttribute('aria-pressed', String(b.dataset.sign === sign));
+            });
+            if (input) input.classList.toggle('signed-neg', sign === '-');
+        };
+        seg.querySelectorAll('button[data-sign]').forEach((b) => {
+            b.addEventListener('click', () => {
+                seg.dataset.sign = b.dataset.sign;
+                paint();
+                if (input) input.focus();
+            });
         });
+        paint();
     });
     // Transaction cells are no longer editable
     // const transactionCells = document.querySelectorAll('.cash-transaction, .loan-transaction');
@@ -4710,16 +4739,24 @@ window.addEventListener('DOMContentLoaded', (event) => {
         chosen = Math.round(chosen / 100) * 100;
         chosen = Math.min(chosen, maxVal); // re-clamp: rounding can overshoot a non-round max
         downPaymentSlider.value = chosen;
+        // The range IS the affordability check: [min, max] admits only
+        // down payments that keep cash >= $0 and the loan within the cap
+        // (min covers the host % plus any amount the debt room can't,
+        // max never exceeds what cash + debt room can fund). When nothing
+        // is affordable the slider is disabled up front — no draggable
+        // dead-end, no post-hoc gating to rely on.
+        downPaymentSlider.disabled = !bounds.feasible;
 
         validateBuyConfirm();
         updateModalAmounts(parseInt(downPaymentSlider.value));
     }
 
-    // Gate Confirm + hint off the CURRENT slider value, bounds, and debt
-    // room. Called after every change (open, bulk select, slider drag) so
-    // the button can never be armed for a down payment that drops cash
-    // below $0 or pushes the loan past the debt cap — even if room econ
-    // changed mid-modal.
+    // Gate Confirm + hint off the CURRENT bounds (set before the slider
+    // is presented). Called whenever the bounds change — modal open, bulk
+    // select — never per drag tick: every position inside a feasible
+    // [min, max] is affordable by construction, and an infeasible range
+    // disables the slider itself above. The confirm-click handler keeps
+    // its own backstop recheck for econ changes mid-modal.
     function validateBuyConfirm() {
         updateTotals();
         const bounds = getBuyBounds(currentTotalCost);
@@ -4897,10 +4934,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
     downPaymentSlider.addEventListener('input', function() {
         const downPaymentAmount = parseInt(this.value);
+        // Preview only: the range was validated before presentation, so
+        // every reachable position here is affordable and within the cap.
         updateModalAmounts(downPaymentAmount);
-        // Re-gate Confirm on every drag tick (room econ may have changed
-        // since the modal opened; the slider alone can't enforce the cap).
-        validateBuyConfirm();
     });
 
     confirmBuy.addEventListener('click', function() {
