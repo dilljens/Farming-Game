@@ -4689,7 +4689,6 @@ window.addEventListener('DOMContentLoaded', (event) => {
     function refreshDownPaymentSlider() {
         updateTotals();
         const bounds = getBuyBounds(currentTotalCost);
-        const currentLoanTotal = getCurrentLoanTotal();
 
         minValidDownPayment = bounds.min;
 
@@ -4712,6 +4711,20 @@ window.addEventListener('DOMContentLoaded', (event) => {
         chosen = Math.min(chosen, maxVal); // re-clamp: rounding can overshoot a non-round max
         downPaymentSlider.value = chosen;
 
+        validateBuyConfirm();
+        updateModalAmounts(parseInt(downPaymentSlider.value));
+    }
+
+    // Gate Confirm + hint off the CURRENT slider value, bounds, and debt
+    // room. Called after every change (open, bulk select, slider drag) so
+    // the button can never be armed for a down payment that drops cash
+    // below $0 or pushes the loan past the debt cap — even if room econ
+    // changed mid-modal.
+    function validateBuyConfirm() {
+        updateTotals();
+        const bounds = getBuyBounds(currentTotalCost);
+        const currentLoanTotal = getCurrentLoanTotal();
+        const chosen = parseInt(downPaymentSlider.value) || 0;
         const shortfall = Math.max(0, chosen - bounds.cash);
         const loanOk = currentLoanTotal + Math.round(currentTotalCost - chosen) + shortfall <= debtCap();
         setButtonDisabled(confirmBuy, !(bounds.feasible && loanOk));
@@ -4741,8 +4754,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 hint.classList.remove('hidden');
             }
         }
-
-        updateModalAmounts(parseInt(downPaymentSlider.value));
+        return bounds.feasible && loanOk;
     }
 
     function showBuyModal(asset, cost, totalCost) {
@@ -4886,6 +4898,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
     downPaymentSlider.addEventListener('input', function() {
         const downPaymentAmount = parseInt(this.value);
         updateModalAmounts(downPaymentAmount);
+        // Re-gate Confirm on every drag tick (room econ may have changed
+        // since the modal opened; the slider alone can't enforce the cap).
+        validateBuyConfirm();
     });
 
     confirmBuy.addEventListener('click', function() {

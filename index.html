@@ -14,7 +14,7 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" href="./icon-192.svg">
     <link rel="apple-touch-icon" href="./icon-192.svg">
-    <link rel="stylesheet" href="./styles.css?v=20261122b">
+    <link rel="stylesheet" href="./styles.css?v=20261122d">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -457,21 +457,10 @@
     <tr>
       <td class="asset-cell"><button class="buy-btn" data-asset="cows">Buy</button> Ranch Cows</td>
       <td class="acres"></td>
-      <td class="qty-cell ranch-ridge-cell">
+      <td class="qty-cell">
         <button class="qty-btn qty-minus" data-target="qty-cows">-</button>
         <button class="qty-btn qty-plus" data-target="qty-cows">+</button>
         <span contenteditable="true" class="editable qty-cows">1</span>
-
-        <span class="ranch-ridge-dropdown">
-          <button id="ranchRidgeButton" type="button" class="ml-1 text-xs" aria-haspopup="menu" aria-expanded="false" aria-label="Select ridges">▾</button>
-          <div id="ranchRidgeMenu" class="hidden absolute right-0 mt-1 bg-white border border-gray-200 rounded p-2 text-xs z-10">
-            <div id="upgradedRidgesDisplay" class="text-xs font-bold mb-1">Ridge Expansions: 0</div>
-            <div class="block whitespace-nowrap">Ahtanum Ridge (+2) — <span data-ridge-owned="ahtanum">x0</span></div>
-            <div class="block whitespace-nowrap">Rattlesnake Ridge (+3) — <span data-ridge-owned="rattlesnake">x0</span></div>
-            <div class="block whitespace-nowrap">Cascades (+4) — <span data-ridge-owned="cascades">x0</span></div>
-            <div class="block whitespace-nowrap">Toppenish Ridge (+5) — <span data-ridge-owned="toppenish">x0</span></div>
-          </div>
-        </span>
       </td>
       <td class="cost-cell"><span class="cost-price">10,000</span><div class="market-note"></div></td>
       <td class="net">0</td>
@@ -765,7 +754,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20261122c"></script>
+<script type="module" src="scripts.js?v=20261122d"></script>
 
 <div id="buildStamp" class="text-center text-[10px] text-gray-400 mt-2 mb-1"></div>
 

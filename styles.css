@@ -262,16 +262,6 @@ input[type="number"] {
     background-color: #c0c0c0;
 }
 
-.ranch-ridge-cell {
-    position: relative;
-}
-
-.ranch-ridge-cell .ranch-ridge-dropdown {
-    position: absolute;
-    right: 2px;
-    top: 2px;
-}
-
 /* Thumb actions + prevent double-tap zoom/selection while spamming */
 button, .qty-btn, .buy-btn, .pay-acre-button, .roll-cell-button, .lb-toggle-btn {
     touch-action: manipulation;
@@ -478,10 +468,6 @@ input[type="range"]::-moz-range-thumb {
     border: none;
     margin-top: -12px;
     opacity: 0.5;
-}
-
-#ranchRidgeMenu {
-    text-align: left;
 }
 
 .roll-help {
