@@ -1722,6 +1722,80 @@ function showLeaderboardView(view) {
 document.getElementById('showTableBtn')?.addEventListener('click', () => showLeaderboardView('table'));
 document.getElementById('showChartBtn')?.addEventListener('click', () => showLeaderboardView('chart'));
 
+// --- Mobile screens: Board / Rolls / Property / Cash tabs ---
+const SCREEN_KEYS = ['board', 'rolls', 'property', 'cash'];
+function setScreen(name, opts = {}) {
+    const key = SCREEN_KEYS.includes(name) ? name : 'property';
+    for (const panel of document.querySelectorAll('[data-screen-panel]')) {
+        panel.classList.toggle('screen-hidden', panel.dataset.screenPanel !== key);
+    }
+    for (const btn of document.querySelectorAll('#screenTabs button[data-screen]')) {
+        btn.setAttribute('aria-selected', String(btn.dataset.screen === key));
+    }
+    try {
+        if (!opts.skipSave) localStorage.setItem('fgScreen', key);
+        if (!opts.skipHash && window.location.hash !== '#' + key) history.replaceState(null, '', '#' + key);
+    } catch {}
+    if (key === 'board') {
+        try {
+            if (typeof createProgressChart === 'function') createProgressChart();
+            if (progressChart) { progressChart.resize(); progressChart.update('none'); }
+        } catch {}
+    }
+    try { window.scrollTo({ top: 0, behavior: opts.instant ? 'auto' : 'smooth' }); } catch { window.scrollTo(0, 0); }
+}
+function currentScreenFromUrl() {
+    const h = (window.location.hash || '').replace('#', '');
+    if (SCREEN_KEYS.includes(h)) return h;
+    try {
+        const saved = localStorage.getItem('fgScreen');
+        if (SCREEN_KEYS.includes(saved)) return saved;
+    } catch {}
+    return 'property';
+}
+// --- View mode: tabbed mobile vs full desktop ---
+function currentViewMode() {
+    try {
+        const saved = localStorage.getItem('fgViewMode');
+        if (saved === 'mobile' || saved === 'desktop') return saved;
+    } catch {}
+    try {
+        if (window.matchMedia && window.matchMedia('(max-width: 700px)').matches) return 'mobile';
+    } catch {}
+    return 'desktop';
+}
+function applyViewMode(mode, opts = {}) {
+    const m = mode === 'desktop' ? 'desktop' : 'mobile';
+    try { document.body.dataset.view = m; } catch {}
+    const btn = document.getElementById('viewModeBtn');
+    if (btn) btn.textContent = m === 'mobile' ? '📱 Mobile' : '🖥️ Desktop';
+    try { if (!opts.skipSave) localStorage.setItem('fgViewMode', m); } catch {}
+    if (m === 'desktop') {
+        for (const panel of document.querySelectorAll('[data-screen-panel]')) panel.classList.remove('screen-hidden');
+    } else {
+        setScreen(currentScreenFromUrl(), { instant: true, skipSave: true, skipHash: true });
+    }
+}
+document.getElementById('viewModeBtn')?.addEventListener('click', () => {
+    applyViewMode(currentViewMode() === 'mobile' ? 'desktop' : 'mobile');
+});
+document.querySelectorAll('#screenTabs button[data-screen]').forEach((btn) => {
+    btn.addEventListener('click', () => setScreen(btn.dataset.screen));
+});
+function refreshTabStatus() {
+    const worth = document.querySelector('.total-worth')?.textContent?.trim() || '0';
+    const cashEl = document.querySelector('.net-cash')?.textContent?.trim()
+        || document.querySelector('.cash-total')?.textContent?.trim() || '0';
+    const nw = document.getElementById('tabNetWorth');
+    const cs = document.getElementById('tabCash');
+    if (nw) nw.textContent = `Net $${worth}`;
+    if (cs) cs.textContent = `Cash $${cashEl}`;
+}
+try {
+    new MutationObserver(refreshTabStatus).observe(document.body, { childList: true, subtree: true, characterData: true });
+} catch {}
+window.addEventListener('DOMContentLoaded', () => { applyViewMode(currentViewMode(), { skipSave: true }); refreshTabStatus(); }, { once: true });
+
 // --- Chart zoom controls (chartjs-plugin-zoom) ---
 function withZoomableChart(fn) {
     if (progressChart && typeof progressChart.zoom === 'function') fn(progressChart);
