@@ -1876,9 +1876,9 @@ function refreshTabStatus() {
     // Guarded writes: the observer below watches the whole body, so an
     // unconditional textContent assignment re-triggers it forever (the
     // page froze in an infinite mutate-observe loop). Only write on change.
+    // Cash here means cash on hand (the cash ledger total), not net cash.
     const worth = document.querySelector('.total-worth')?.textContent?.trim() || '0';
-    const cashEl = document.querySelector('.net-cash')?.textContent?.trim()
-        || document.querySelector('.cash-total')?.textContent?.trim() || '0';
+    const cashEl = document.querySelector('.cash-total')?.textContent?.trim() || '0';
     const nw = document.getElementById('tabNetWorth');
     const cs = document.getElementById('tabCash');
     const nv = `Net $${worth}`;
@@ -4860,7 +4860,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '2.0';
+    const GAME_VERSION = '2.1';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
