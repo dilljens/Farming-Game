@@ -393,6 +393,44 @@ function scheduleLeaderboardSave(totalWorth) {
                 sendDataToServer(totalWorth, leaderboardSaveGeneration);
         }, 500);
 }
+// A failed or interrupted save must never go quietly stale (the board
+// would freeze at the pre-change debt/cash). Retry shortly after a
+// failure, and flush any pending save when the tab hides or closes.
+let leaderboardSaveRetryTimer = null;
+function sendCurrentTotalToServer() {
+    try {
+        const totalWorth = getCurrentTotalWorthFromDOM();
+        if (totalWorth !== null) sendDataToServer(totalWorth, leaderboardSaveGeneration);
+    } catch {}
+}
+function retryLeaderboardSaveSoon() {
+    try {
+        if (navigator.onLine === false) return; // 'online' listener flushes
+        if (leaderboardSaveRetryTimer) return;
+        leaderboardSaveRetryTimer = setTimeout(() => {
+            leaderboardSaveRetryTimer = null;
+            sendCurrentTotalToServer();
+        }, 4000);
+    } catch {}
+}
+function flushPendingLeaderboardSave() {
+    try {
+        if (!leaderboardSaveTimer) return;
+        clearTimeout(leaderboardSaveTimer);
+        leaderboardSaveTimer = null;
+        sendCurrentTotalToServer();
+    } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPendingLeaderboardSave();
+});
+window.addEventListener('pagehide', () => { flushPendingLeaderboardSave(); });
+window.addEventListener('online', () => {
+    try {
+        if (leaderboardSaveRetryTimer) { clearTimeout(leaderboardSaveRetryTimer); leaderboardSaveRetryTimer = null; }
+        sendCurrentTotalToServer();
+    } catch {}
+});
 
 function calculateNet() {
     //console.log('Calculating net values...');
@@ -1305,6 +1343,10 @@ function sendDataToServerAfterSeed(totalWorth, username, generation) {
         })
         .catch((error) => {
             console.error('Error saving to Firestore:', error);
+            // Dropped writes freeze the board at pre-change values: retry
+            // shortly (a later local change would also save, but the player
+            // may be done playing).
+            if (generation === leaderboardSaveGeneration) retryLeaderboardSaveSoon();
         });
 
 }
