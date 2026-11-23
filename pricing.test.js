@@ -28,17 +28,18 @@ import {
     normalizeTuning,
     rubberbandMult,
     scenarioName,
-    seasonMult
+    seasonMult,
+    shuffledRolls
 } from './pricing.js';
 
 test('rules default off and ignore unknown keys', () => {
-    const off = { seasons: false, rubberband: false, estate: false, balance: false, events: false, customecon: false, customharvest: false };
+    const off = { seasons: false, rubberband: false, estate: false, balance: false, events: false, shufflerolls: false, customecon: false, customharvest: false };
     assert.deepEqual(normalizeRules(undefined), { ...off, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, tuning: DEFAULT_TUNING });
     assert.deepEqual(normalizeRules({ seasons: true, bogus: true }), { ...off, seasons: true, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, tuning: DEFAULT_TUNING });
 });
 
 test('retired market/scarcity keys are ignored, old rooms just lose the rule', () => {
-    const off = { seasons: false, rubberband: false, estate: false, balance: false, events: false, customecon: false, customharvest: false };
+    const off = { seasons: false, rubberband: false, estate: false, balance: false, events: false, shufflerolls: false, customecon: false, customharvest: false };
     assert.deepEqual(normalizeRules({ market: true, scarcity: true, tuning: { market: 200, scarcity: 200 } }),
         { ...off, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, tuning: DEFAULT_TUNING });
 });
@@ -582,4 +583,39 @@ test('drift: mean-reversion in $100 tickets, capped, crops only', () => {
     // Corners clamp at one ticket — never dominates the price.
     assert.equal(driftDollars('grain', { hay: 0, grain: 100, fruit: 0 }), -500);
     assert.equal(driftDollars('fruit', { hay: 0, grain: 100, fruit: 0 }), 500);
+});
+
+test('shuffle rolls: deterministic per room, a true permutation, stable order', () => {
+    const base = [7000, 5300, 3800, 2500, 1500, 800];
+    // Deterministic: same room + crop => identical order on every device.
+    assert.deepEqual(shuffledRolls(base, 'grain', 'AB'), shuffledRolls(base, 'grain', 'AB'));
+    assert.deepEqual(shuffledRolls(base, 'grain', 'ab'), shuffledRolls(base, 'grain', 'AB'), 'room codes match case-insensitively');
+    // A permutation, never values invented or dropped.
+    for (const room of ['AB', 'XY', 'ZZ']) {
+        for (const crop of ['hay', 'grain', 'fruit', 'cows']) {
+            const out = shuffledRolls(base, crop, room);
+            assert.equal(out.length, 6);
+            assert.deepEqual([...out].sort((a, b) => a - b), [...base].sort((a, b) => a - b), `${crop}/${room} keeps the same six payouts`);
+        }
+    }
+    // Different rooms (almost surely) order differently; the input is untouched.
+    const orders = new Set();
+    for (let i = 0; i < 20; i++) {
+        const room = 'R' + String(i).padStart(2, '0');
+        orders.add(JSON.stringify(shuffledRolls(base, 'hay', room)));
+    }
+    assert.ok(orders.size > 1, 'shuffles vary by room');
+    const frozen = [...base];
+    shuffledRolls(frozen, 'hay', 'AB');
+    assert.deepEqual(frozen, base, 'input array is not mutated');
+    // No room (roomless game) => classic order, no surprise reshuffle.
+    assert.deepEqual(shuffledRolls(base, 'hay', ''), base);
+    assert.deepEqual(shuffledRolls(base, 'hay', null), base);
+});
+
+test('shuffle rolls flag normalizes like other rules, off by default', () => {
+    const r = normalizeRules({ shufflerolls: true });
+    assert.equal(r.shufflerolls, true);
+    assert.equal(normalizeRules({}).shufflerolls, false);
+    assert.equal(normalizeRules({ shufflerolls: 'yes' }).shufflerolls, false, 'truthy strings do not enable');
 });

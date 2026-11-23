@@ -52,7 +52,14 @@ export function normalizeHistoryPoints(points) {
         const t = asTimestamp(point?.t);
         const v = Number(point?.v);
         if (Number.isFinite(t) && Number.isFinite(v)) {
-            byTimestamp.set(t, { t, v });
+            // Harvest markers ride along when present (roll 1-6 + crop);
+            // anything malformed falls off so old points stay clean.
+            const entry = { t, v };
+            const roll = Math.floor(Number(point?.roll));
+            if (roll >= 1 && roll <= 6) entry.roll = roll;
+            const crop = String(point?.crop ?? '').trim().slice(0, 16);
+            if (crop) entry.crop = crop;
+            byTimestamp.set(t, entry);
         }
     });
     return [...byTimestamp.values()].sort((a, b) => a.t - b.t);

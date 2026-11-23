@@ -19,7 +19,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907f';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName } from './pricing.js?v=20261004k';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName, shuffledRolls } from './pricing.js?v=20261004l';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -1934,7 +1934,7 @@ async function finishMakeRoom(rules) {
 // A preset fills the whole form; any hand edit flips the scenario to Custom.
 const RULE_LABELS = {
     seasons: 'Seasons', rubberband: 'Rubber-band', estate: 'Estate',
-    balance: 'Balance', events: 'Boom&Bust', customecon: 'Economy', customharvest: 'Harvest'
+    balance: 'Balance', events: 'Boom&Bust', shufflerolls: 'Shuffle rolls', customecon: 'Economy', customharvest: 'Harvest'
 };
 const RULE_DESCRIPTIONS = {
     seasons: 'Prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.',
@@ -1942,6 +1942,7 @@ const RULE_DESCRIPTIONS = {
     estate: 'Adds a shared surcharge: crops per unit and farms/equipment per unit owned past the starting grant, cattle per 2 head — all off room-average ownership.',
     balance: 'Crowded crops cost up to $1,000 over base in $100 tickets; ignored ones discount the same way. Hay caps at $20k, fruit floors at $20k.',
     events: 'Each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped. Over-held crops also drift down and under-held crops drift up ($100 tickets, up to ±$500).',
+    shufflerolls: 'Each harvest pays best on a different roll: every crop table is randomly reordered, fixed for the room, same order on every device.',
     customecon: 'Enables your economy numbers below (unticked = $50k cap, 10% interest, 20% down).',
     customharvest: 'Enables your harvest numbers below (unticked = standard hay tiers and equipment bonus).'
 };
@@ -3639,6 +3640,18 @@ function populateRollTable() {
       Fruit: [17500, 13000, 9000, 6000, 3500, 2000],
       Cows: [7500, 5000, 3800, 2800, 2000, 1400]
     };
+    // Shuffle rule: each crop's table is randomly reordered (best payout
+    // can land on any roll 1-6). Deterministic per room so every device
+    // shows the identical tables all game.
+    const shuffleOn = !!(normalizeRules(currentRoomRules).shufflerolls && currentRoomCode);
+    const rollValues = {};
+    for (const k of Object.keys(baseValues)) {
+        rollValues[k] = shuffleOn ? shuffledRolls(baseValues[k], k, currentRoomCode) : baseValues[k];
+    }
+    const helpEl = document.querySelector('.roll-help');
+    if (helpEl) helpEl.textContent = shuffleOn
+        ? 'Roll tables are shuffled — the best payout can be any roll 1-6'
+        : 'Tap the names of the asset to 1/2x, 2x, or return to normal';
     
     // Get the quantities from the contenteditable cells
     // Assuming these cells have an id or a specific class to identify them
@@ -3663,7 +3676,7 @@ function populateRollTable() {
         const cornQty = quantities.Grain || 0;
         const cornHr = roomHarvest();
         const cornMult = 1 + Math.min(quantities.Harvester, cornHr.equipCap) * cornHr.equipRate;
-        baseValues.Grain.forEach((value, rollIndex) => {
+        rollValues.Grain.forEach((value, rollIndex) => {
           const profit = cornQty * value * cornMult * 2;
           const payoutCell = row.cells[rollIndex + 1];
           if (!payoutCell) return;
@@ -3703,7 +3716,7 @@ function populateRollTable() {
             else if (state === 2 && assetType === 'Hay') manualMultiplier = 2;
   
       // Calculate and populate the cells for each roll
-      baseValues[assetType].forEach((value, rollIndex) => {
+      rollValues[assetType].forEach((value, rollIndex) => {
                 const profit = quantity * value * multiplier * manualMultiplier; // Calculate the profit
                 const payoutCell = row.cells[rollIndex + 1];
                 if (!payoutCell) return;
@@ -4805,7 +4818,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '1.8';
+    const GAME_VERSION = '1.9';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';

@@ -47,7 +47,7 @@
 // hay only ever discounts. Every other asset may rise above base.
 // Player-to-player trades are negotiated and never adjusted.
 
-export const RULE_KEYS = ['seasons', 'rubberband', 'estate', 'balance', 'events', 'customecon', 'customharvest'];
+export const RULE_KEYS = ['seasons', 'rubberband', 'estate', 'balance', 'events', 'shufflerolls', 'customecon', 'customharvest'];
 
 // Assets each rule touches. Cows/ridges: cost is bonus-driven in the modal;
 // rubberband still applies there, the rest leave ridges alone.
@@ -366,6 +366,36 @@ function hashSeed(str) {
         h = (h << 13) | (h >>> 19);
     }
     return h >>> 0;
+}
+
+// Deterministic PRNG (mulberry32): same seed => same sequence on every
+// device, with no Math.random involved.
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+// --- Shuffled rolls: randomly reorder a crop's roll table ---
+// Fisher-Yates with the seeded PRNG, so every device derives the identical
+// order from (room, crop) with no sync. Each crop shuffles independently;
+// a roomless game (no room code) keeps the classic order. The shuffle is
+// fixed for the room — it never re-rolls mid-game.
+export function shuffledRolls(base, asset, roomCode) {
+    const arr = Array.isArray(base) ? [...base] : [];
+    const room = String(roomCode || '').toUpperCase();
+    const key = String(asset || '').toLowerCase();
+    if (arr.length === 0 || !room) return arr;
+    const rand = mulberry32(hashSeed(`${room}|${key}|rolls`));
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
 }
 
 // One deterministic ±1 step per (room, crop, harvest index): same inputs

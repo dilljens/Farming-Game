@@ -12,7 +12,8 @@ import {
     clampGameDuration,
     gameElapsedMs,
     getTimeWindow,
-    mergeHistoriesByPlayer
+    mergeHistoriesByPlayer,
+    normalizeHistoryPoints
 } from './game-time.js';
 
 test('compresses long unchanged breaks to the five-minute buffer', () => {
@@ -106,6 +107,26 @@ test('cap keeps short histories untouched', () => {
     const points = [{ t: 1, v: 1 }, { t: 2, v: 2 }];
     assert.deepEqual(capHistoryPoints(points, 500), points);
     assert.equal(MAX_HISTORY_POINTS, 500);
+});
+
+test('harvest markers ride history points through normalize and cap', () => {
+    const points = [
+        { t: 1, v: 1 },
+        { t: 2, v: 2, roll: 4, crop: 'Grain' },
+        { t: 3, v: 3, roll: 9, crop: '' }, // invalid marker falls off
+        { t: 3, v: 4 } // same timestamp: later wins, marker dropped with it
+    ];
+    assert.deepEqual(normalizeHistoryPoints(points), [
+        { t: 1, v: 1 },
+        { t: 2, v: 2, roll: 4, crop: 'Grain' },
+        { t: 3, v: 4 }
+    ]);
+    const marked = Array.from({ length: 10 }, (_, i) =>
+        i === 4 ? { t: i * 1000, v: i, roll: 6, crop: 'Hay' } : { t: i * 1000, v: i });
+    const capped = capHistoryPoints(marked, 5);
+    assert.equal(capped.length, 5);
+    const kept = capped.find((p) => p.t === 4000);
+    assert.deepEqual(kept, { t: 4000, v: 4, roll: 6, crop: 'Hay' }, 'markers survive thinning on kept points');
 });
 
 test('pauses the game clock across hour-plus breaks', () => {
