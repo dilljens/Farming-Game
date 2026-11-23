@@ -79,13 +79,13 @@ input[type="number"] {
     white-space: nowrap;
 }
 #cashInput, #loanInput {
-    width: calc(100% - 118px);
-    padding: 8px;
+    width: calc(100% - 88px);
+    padding: 6px 8px;
     border: 1px solid #ccc;
     box-sizing: border-box;
     background-color: #b4d0fb;
     font-size: 16px; /* Prevents zoom on iOS */
-    min-height: 44px;
+    min-height: 36px;
     vertical-align: middle;
 }
 /* −/+ segment: big touch targets pick the entry's sign (digits-only
@@ -99,13 +99,13 @@ input[type="number"] {
     overflow: hidden;
 }
 .sign-seg button {
-    width: 55px;
-    min-height: 44px;
-    padding: 8px 4px;
+    width: 40px;
+    min-height: 36px;
+    padding: 4px;
     box-sizing: border-box;
     background-color: #f3f4f6;
     color: #6b7280;
-    font-size: 20px;
+    font-size: 18px;
     font-weight: bold;
     line-height: 1;
     border: 0;
@@ -125,6 +125,21 @@ input[type="number"] {
 #cashInput.signed-neg, #loanInput.signed-neg {
     border-color: #dc2626;
     color: #b91c1c;
+}
+/* Roomy thumb-sized segments on phones (matches the mobile/desktop
+   switch); desktop keeps the compact control above. */
+@media screen and (max-width: 700px) {
+    #cashInput, #loanInput {
+        width: calc(100% - 118px);
+        padding: 8px;
+        min-height: 44px;
+    }
+    .sign-seg button {
+        width: 55px;
+        min-height: 44px;
+        padding: 8px 4px;
+        font-size: 20px;
+    }
 }
 
 .input-cell {
