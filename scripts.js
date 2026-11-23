@@ -517,6 +517,22 @@ function handleTransaction(inputId, transactionClass, totalClass) {
             }
         }
 
+        // Loan floor: manual repayments can't pay more than is owed (the
+        // Pay Off Loan modal already caps itself; typed entries cap here).
+        if (transactionClass.includes('loan') && newValue < 0) {
+            updateTotals();
+            const currentLoanTotal = getCurrentLoanTotal();
+            if (currentLoanTotal <= 0) {
+                inputElement.value = '';
+                sayStatus('No loan to repay.');
+                return;
+            }
+            if (currentLoanTotal + newValue < 0) {
+                newValue = -currentLoanTotal;
+                sayStatus(`Repayment capped at the $${currentLoanTotal.toLocaleString()} owed.`);
+            }
+        }
+
         const table = document.getElementById('financialTable');
         // Check for an existing empty transaction cell
         let emptyCellFound = false;
@@ -4414,7 +4430,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '1.4';
+    const GAME_VERSION = '1.5';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
@@ -4734,7 +4750,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
         const minVal = parseInt(downPaymentSlider.min);
         const maxVal = parseInt(downPaymentSlider.max);
-        const desired = Number.isFinite(lastDownPaymentAmount) ? lastDownPaymentAmount : minVal;
+        // Open where no borrowing is needed when possible: cap the
+        // remembered amount at what cash covers (but never below the
+        // minimum — when min exceeds cash, borrowing is unavoidable and
+        // the slider opens at min with the hint explaining why).
+        const noBorrowCap = Math.max(bounds.cash, minVal);
+        const desired = Number.isFinite(lastDownPaymentAmount)
+            ? Math.min(lastDownPaymentAmount, noBorrowCap)
+            : Math.min(noBorrowCap, maxVal);
         let chosen = Math.min(Math.max(desired, minVal), maxVal);
         chosen = Math.round(chosen / 100) * 100;
         chosen = Math.min(chosen, maxVal); // re-clamp: rounding can overshoot a non-round max
@@ -4771,7 +4794,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
             const errorClasses = ['text-red-600'];
             const infoClasses = ['text-yellow-700'];
             if (bounds.feasible && loanOk) {
-                if (shortfall > 0) {
+                // Only narrate borrowing when it's unavoidable (the minimum
+                // itself exceeds cash). A slider dragged above cash by choice
+                // needs no commentary — the Cash/Loan After lines show it.
+                if (bounds.min > bounds.cash && shortfall > 0) {
                     hint.textContent = `Includes $${shortfall.toLocaleString()} borrowed for the down payment`;
                     hint.classList.remove(...errorClasses);
                     hint.classList.add(...infoClasses);
