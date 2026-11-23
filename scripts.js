@@ -2366,6 +2366,15 @@ document.getElementById('customSellQty')?.addEventListener('input', updateCustom
 document.getElementById('customSellPrice')?.addEventListener('input', updateCustomSellPreview);
 document.getElementById('customSellBuyer')?.addEventListener('change', updateCustomSellPreview);
 
+// Auction wiring: seller lists property, room bids, creator closes.
+document.getElementById('auctionBtn')?.addEventListener('click', showAuctionModal);
+document.getElementById('cancelAuction')?.addEventListener('click', hideAuctionModal);
+document.getElementById('auctionModal')?.addEventListener('click', (e) => { if (e.target.id === 'auctionModal') hideAuctionModal(); });
+document.getElementById('confirmAuction')?.addEventListener('click', performAuction);
+document.getElementById('auctionAsset')?.addEventListener('change', () => { resetTradePriceToBase('auctionPrice', 'auctionQty', document.getElementById('auctionAsset')?.value || 'Hay'); updateAuctionPreview(); });
+document.getElementById('auctionQty')?.addEventListener('input', updateAuctionPreview);
+document.getElementById('auctionPrice')?.addEventListener('input', updateAuctionPreview);
+
 // Trade dropdowns populate on load; snapshots keep them fresh after.
 try { refreshCustomBuySellers(); } catch {}
 try { refreshCustomSellBuyers(); } catch {}
@@ -2911,6 +2920,25 @@ function renderTradeInbox(trades) {
             html += `<div class="py-1 border-b border-yellow-100 flex items-center justify-between gap-2"><span>${line}</span><button data-reject="${t.id}" class="px-1.5 py-0.5 text-gray-500 hover:text-gray-800 text-sm leading-none" title="Cancel this offer">×</button></div>`;
         });
     }
+    // Live auctions: highest bid wins when the creator closes. Bid rows
+    // for everyone else, Close for the creator.
+    const auctions = trades.filter(t => t.status === 'auction');
+    if (auctions.length) {
+        html += `<div class="font-bold mt-2 mb-1">Auctions — highest bid wins at close</div>`;
+        auctions.forEach(t => {
+            const bids = Array.isArray(t.bids) ? t.bids : [];
+            const top = bids.length ? bids.reduce((a, b) => (Number(b.amount) || 0) > (Number(a.amount) || 0) ? b : a) : null;
+            const scopeTag = (t.roomCode && t.roomCode !== tradeRoomCode())
+                ? ` (${t.roomCode === LOBBY_ROOM_CODE ? 'lobby' : `room ${t.roomCode}`})` : '';
+            const line = top
+                ? `${t.sellerName} auctions ${t.qty} ${t.asset} — high bid $${Number(top.amount).toLocaleString()} by ${top.name} (${bids.length} bid${bids.length === 1 ? '' : 's'})`
+                : `${t.sellerName} auctions ${t.qty} ${t.asset} — opens at $${Number(t.price).toLocaleString()}, no bids yet`;
+            const controls = t.sellerUid === myUid
+                ? `<button data-close-auction="${t.id}" class="px-2 py-1 bg-yellow-600 text-white rounded text-xs">Close</button>`
+                : `<span class="flex gap-1 items-center"><input data-bid-input="${t.id}" type="text" inputmode="numeric" placeholder="Your bid" autocomplete="off" class="w-24 p-1 border border-gray-300 rounded text-xs" /><button data-bid="${t.id}" class="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs">Bid</button></span>`;
+            html += `<div class="flex items-center justify-between gap-2 py-1 border-b border-yellow-100"><span>${line}${scopeTag}</span>${controls}</div>`;
+        });
+    }
     const justAccepted = trades.filter(t => t.status === 'accepted' && (Date.now() - new Date(t.updatedAt||t.createdAt).getTime() < 15000) && (t.buyerUid===myUid || t.sellerUid===myUid) && !dismissedTrades.has(t.id));
     justAccepted.forEach(t => {
         const role = t.sellerUid===myUid ? 'sold' : 'bought';
@@ -2933,6 +2961,8 @@ function renderTradeInbox(trades) {
     box.querySelectorAll('[data-accept]').forEach(b=> b.addEventListener('click', ()=> acceptTrade(b.dataset.accept)));
     box.querySelectorAll('[data-reject]').forEach(b=> b.addEventListener('click', ()=> rejectTrade(b.dataset.reject)));
     box.querySelectorAll('[data-dismiss]').forEach(b=> b.addEventListener('click', ()=> dismissTrade(b.dataset.dismiss)));
+    box.querySelectorAll('[data-bid]').forEach(b=> b.addEventListener('click', ()=> placeBid(b.dataset.bid)));
+    box.querySelectorAll('[data-close-auction]').forEach(b=> b.addEventListener('click', ()=> closeAuction(b.dataset.closeAuction)));
     // Keep polling fresh while buyer applies fail: the snapshot layer only
     // re-renders on data change, so without this the fail counter (and the
     // warning below, and the 15s confirmation lines) would freeze after one
@@ -3029,6 +3059,158 @@ async function rejectTrade(tradeId) {
     const myUid = auth.currentUser?.uid;
     if (t.sellerUid !== myUid && t.buyerUid !== myUid) return;
     await setDoc(ref, { status: 'rejected', updatedAt: new Date().toISOString() }, { merge: true });
+}
+
+// --- Auctions: open bidding on your property, highest bid wins at close ---
+// An auction is a trades doc with status 'auction' (never 'pending', so the
+// normal accept flow ignores it). Anyone sharing the trade room may bid;
+// the creator closes whenever they like. Closing with a winner converts to
+// an 'accepted' trade and the existing settlement machinery takes over
+// (winner auto-applies on poll with a cash recheck, seller settles too).
+function showAuctionModal() {
+    const assetSel = document.getElementById('auctionAsset');
+    if (assetSel) assetSel.value = 'Hay';
+    const qtyEl = document.getElementById('auctionQty');
+    if (qtyEl) qtyEl.value = '1';
+    updateAuctionPreview();
+    document.getElementById('auctionModal')?.classList.remove('hidden');
+}
+function hideAuctionModal() {
+    document.getElementById('auctionModal')?.classList.add('hidden');
+}
+function updateAuctionPreview() {
+    const preview = document.getElementById('auctionPreview');
+    const hint = document.getElementById('auctionHint');
+    if (!preview) return;
+    const asset = document.getElementById('auctionAsset')?.value || 'Hay';
+    const qty = parseInt(document.getElementById('auctionQty')?.value || '1', 10);
+    const start = Math.round(parseFloat(String(document.getElementById('auctionPrice')?.value || '0').replace(/,/g, '')) || 0);
+    const locked = isRanchCowsAsset(asset) ? ranchBonusFloor() : 0;
+    const myQty = myAssetQty(asset);
+    const sellable = Math.max(0, myQty - locked);
+    const roomScope = currentRoomCode ? `room ${currentRoomCode}` : 'the lobby';
+    preview.innerHTML = `Auctioning ${qty} × ${asset}, opens at $${start.toLocaleString()} — anyone in ${roomScope} may bid. You hold ${myQty}.`;
+    let err = '';
+    if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
+    else if (!Number.isFinite(start) || start < 0) err = 'Starting bid must be ≥$0.';
+    else if (sellable < qty) err = locked > 0
+        ? `Only ${sellable} sellable (${locked} ridge bonus locked).`
+        : `You only have ${myQty} ${asset}.`;
+    if (hint) { hint.textContent = err; hint.classList.toggle('hidden', !err); }
+    const confirm = document.getElementById('confirmAuction');
+    if (confirm) confirm.disabled = !!err;
+}
+async function performAuction() {
+    const asset = document.getElementById('auctionAsset')?.value || 'Hay';
+    const qty = parseInt(document.getElementById('auctionQty')?.value || '1', 10);
+    const start = Math.round(parseFloat(String(document.getElementById('auctionPrice')?.value || '0').replace(/,/g, '')) || 0);
+    const hint = document.getElementById('auctionHint');
+    updateAuctionPreview();
+    if (document.getElementById('confirmAuction')?.disabled) return;
+    const sellableNow = isRanchCowsAsset(asset) ? sellableRanchCows() : myAssetQty(asset);
+    if (sellableNow < qty) { if (hint) { hint.textContent = `Only ${sellableNow} sellable ${asset}.`; hint.classList.remove('hidden'); } return; }
+    const tRoom = tradeRoomCode();
+    if (!currentRoomCode) {
+        try {
+            await setDoc(doc(db, 'rooms', LOBBY_ROOM_CODE), {
+                room_code: LOBBY_ROOM_CODE,
+                createdAt: new Date().toISOString(),
+                last_activity_at: new Date().toISOString(),
+                status: 'Lobby',
+            }, { merge: true });
+        } catch {}
+    }
+    try {
+        const tradeId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        await setDoc(doc(db, 'rooms', tRoom, 'trades', tradeId), {
+            sellerUid: auth.currentUser.uid,
+            sellerName: document.getElementById('editableUsername')?.innerText.trim() || 'seller',
+            buyerUid: null,
+            buyerName: null,
+            asset: getAssetQtyKey(asset),
+            qty,
+            price: start,
+            bids: [],
+            roomCode: tRoom,
+            status: 'auction',
+            createdBy: auth.currentUser.uid,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+        hideAuctionModal();
+        const status = document.getElementById('roomStatus');
+        if (status) status.textContent = `Auction live: ${qty} ${asset} opens at $${start.toLocaleString()} — close it to sell to the highest bidder`;
+    } catch (e) {
+        console.error('auction create failed', e);
+        if (hint) { hint.textContent = 'Auction failed: ' + roomErrorMessage(e); hint.classList.remove('hidden'); }
+    }
+}
+async function placeBid(tradeId) {
+    if (!tradeId) return;
+    const input = document.querySelector(`[data-bid-input="${tradeId}"]`);
+    const amount = Math.round(parseFloat(String(input?.value || '').replace(/,/g, '')) || 0);
+    const status = document.getElementById('roomStatus');
+    if (!(amount > 0)) { if (status) status.textContent = 'Enter a bid above $0.'; return; }
+    if (wouldGoNegativeCash(-amount)) { if (status) status.textContent = `You need $${amount.toLocaleString()} cash to bid that.`; return; }
+    const found = await getTradeDoc(tradeId);
+    if (!found) return;
+    const { ref, data: t } = found;
+    const myUid = auth.currentUser?.uid;
+    if (!myUid || t.sellerUid === myUid) return;
+    if (t.status !== 'auction') { if (status) status.textContent = 'That auction already closed.'; startTradeListener(); return; }
+    const seenBids = Array.isArray(t.bids) ? t.bids : [];
+    const top = Math.max(Number(t.price) || 0, ...seenBids.map((b) => Number(b.amount) || 0));
+    if (amount <= top) { if (status) status.textContent = `Bid must top the $${top.toLocaleString()} high bid.`; return; }
+    const myName = document.getElementById('editableUsername')?.innerText.trim() || 'bidder';
+    try {
+        await setDoc(ref, {
+            bids: [...seenBids, { uid: myUid, name: myName, amount, at: new Date().toISOString() }],
+            price: amount,
+            updatedAt: new Date().toISOString()
+        }, { merge: true });
+        if (input) input.value = '';
+        if (status) status.textContent = `Bid $${amount.toLocaleString()} placed — highest so far.`;
+    } catch (e) {
+        console.error('bid failed', e);
+        if (status) status.textContent = 'Bid failed: ' + roomErrorMessage(e);
+    }
+}
+async function closeAuction(tradeId) {
+    if (!tradeId) return;
+    const found = await getTradeDoc(tradeId);
+    if (!found) return;
+    const { ref, data: t } = found;
+    const myUid = auth.currentUser?.uid;
+    if (!myUid || t.sellerUid !== myUid) return;
+    if (t.status !== 'auction') { startTradeListener(); return; }
+    const status = document.getElementById('roomStatus');
+    const bids = Array.isArray(t.bids) ? t.bids : [];
+    try {
+        if (!bids.length) {
+            await setDoc(ref, { status: 'rejected', updatedAt: new Date().toISOString() }, { merge: true });
+            if (status) status.textContent = 'Auction cancelled — no bids.';
+            return;
+        }
+        // Seller must still hold the stock (same floor rules as a sale).
+        const available = isRanchCowsAsset(t.asset) ? sellableRanchCows() : myAssetQty(t.asset);
+        if (available < Number(t.qty || 0)) {
+            await setDoc(ref, { status: 'rejected', updatedAt: new Date().toISOString() }, { merge: true });
+            if (status) status.textContent = `Auction cancelled — you no longer hold ${t.qty} ${t.asset}.`;
+            return;
+        }
+        const top = bids.reduce((a, b) => (Number(b.amount) || 0) > (Number(a.amount) || 0) ? b : a);
+        await setDoc(ref, {
+            status: 'accepted',
+            buyerUid: top.uid,
+            buyerName: top.name,
+            price: Number(top.amount) || 0,
+            updatedAt: new Date().toISOString()
+        }, { merge: true });
+        if (status) status.textContent = `Sold ${t.qty} ${t.asset} to ${top.name} for $${Number(top.amount).toLocaleString()} — settling.`;
+    } catch (e) {
+        console.error('auction close failed', e);
+        if (status) status.textContent = 'Close failed: ' + roomErrorMessage(e);
+    }
 }
 function startTradeListener() {
     if (tradeListenerUnsub) { try{tradeListenerUnsub();}catch{} tradeListenerUnsub=null; }
@@ -4598,7 +4780,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '1.6';
+    const GAME_VERSION = '1.7';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
@@ -4842,8 +5024,40 @@ window.addEventListener('DOMContentLoaded', (event) => {
             td.setAttribute('data-state', state);
             updateAssetDisplay(td, state);
             populateRollTable();
+            syncDoubleToggles();
         });
     });
+
+    // Toggle circles for doubled Hay/Grain above the roll table: same state
+    // as tapping the asset name (2 = doubled, anything else = off). Fruit
+    // and Cows have no double tier, so they get no toggle.
+    function rollAssetState(asset) {
+        const td = [...document.querySelectorAll('.roll-table tr:not(:first-child) td:first-child')]
+            .find(c => c.textContent.split(' ')[0] === asset);
+        return { td, state: parseInt(td?.getAttribute('data-state') || 0, 10) };
+    }
+    function syncDoubleToggles() {
+        const paint = (btnId, on, label) => {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.setAttribute('aria-pressed', String(on));
+            btn.classList.toggle('is-on', on);
+            btn.textContent = `${on ? '●' : '○'} ${label}`;
+        };
+        paint('dblHayBtn', rollAssetState('Hay').state === 2, 'Hay ×2');
+        paint('dblGrainBtn', rollAssetState('Grain').state === 2, 'Grain ×2');
+    }
+    function setDoubled(asset, on) {
+        const { td } = rollAssetState(asset);
+        if (!td) return;
+        td.setAttribute('data-state', on ? 2 : 0);
+        updateAssetDisplay(td, on ? 2 : 0);
+        populateRollTable();
+        syncDoubleToggles();
+    }
+    document.getElementById('dblHayBtn')?.addEventListener('click', () => setDoubled('Hay', rollAssetState('Hay').state !== 2));
+    document.getElementById('dblGrainBtn')?.addEventListener('click', () => setDoubled('Grain', rollAssetState('Grain').state !== 2));
+    syncDoubleToggles();
 
     function updateAssetDisplay(td, state) {
         const asset = td.textContent.split(' ')[0]; // Get base asset name

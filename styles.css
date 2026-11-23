@@ -32,27 +32,27 @@ th {
     background-color: #cccccc;
 }
 
-/* Spreadsheet table column widths — tuned for a 390px phone (sums ≈378):
-   roomy Assets with the Buy button stacked above the name, skinny Acres,
-   wide-enough Cost for price + modifier notes, Net fits one line. */
+/* Spreadsheet table column widths — tuned for a 390px phone (sums 374):
+   roomy Assets so Buy + name fit on one line, skinny Acres, compact Qty,
+   Cost fits the price with notes wrapping, Net fits one line. */
 #spreadsheet th:nth-child(1),
 #spreadsheet td:nth-child(1) {
-    width: 70px; /* Assets column - Buy button stacked above the name */
+    width: 112px; /* Assets column - Buy + name on one line, no wrap */
 }
 
 #spreadsheet th:nth-child(2),
 #spreadsheet td:nth-child(2) {
-    width: 48px; /* Acres column - skinny, short values only */
+    width: 42px; /* Acres column - skinny, short values only */
 }
 
 #spreadsheet th:nth-child(3),
 #spreadsheet td:nth-child(3) {
-    width: 88px; /* Qty column - narrow minus/plus/number trio */
+    width: 80px; /* Qty column - minus/plus/number trio */
 }
 
 #spreadsheet th:nth-child(4),
 #spreadsheet td:nth-child(4) {
-    width: 120px; /* Cost column - price + modifier notes (wraps to 2 lines) */
+    width: 88px; /* Cost column - price fits, modifier notes wrap */
 }
 
 #spreadsheet th:nth-child(5),
@@ -504,15 +504,16 @@ input, .editable {
 .asset-cell {
     text-align: left;
     line-height: 1.25;
+    white-space: nowrap;
+    font-size: 13px;
 }
 
-/* Buy button sits on its own line above the asset name so neither is
-   squeezed — the column only needs to fit the wider of the two. */
+/* Buy button sits beside the asset name on one line — the column is
+   wide enough for the pair, so neither wraps. */
 .asset-cell .buy-btn {
-    display: block;
-    width: 100%;
-    margin: 0 0 3px 0;
-    padding: 3px 4px;
+    display: inline-block;
+    margin: 0 4px 0 0;
+    padding: 2px 6px;
 }
 
 /* Slider styles */
@@ -624,6 +625,25 @@ input[type="range"]::-moz-range-thumb {
 }
 
 /* Leaderboard header: title + table/chart toggle */
+/* Doubled-roll toggles above the roll table: big tap targets mirroring
+   the tap-the-name state (● on = doubled, ○ off). */
+.dbl-toggle {
+    min-height: 44px;
+    padding: 6px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 9999px;
+    background-color: #f9fafb;
+    color: #374151;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.dbl-toggle.is-on {
+    background-color: #16a34a;
+    border-color: #16a34a;
+    color: #ffffff;
+}
+
 .leaderboard-header {
     display: flex;
     align-items: center;

@@ -14,7 +14,7 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" href="./icon-192.svg">
     <link rel="apple-touch-icon" href="./icon-192.svg">
-    <link rel="stylesheet" href="./styles.css?v=20261122h">
+    <link rel="stylesheet" href="./styles.css?v=20261122i">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -357,6 +357,10 @@
       <button id="hideDiceBtn" type="button" class="mt-2 text-xs text-gray-400 hover:text-gray-600">Hide Dice</button>
     </div>
     <div class="roll-help text-gray-600 text-center">Tap the names of the asset to 1/2x, 2x, or return to normal</div>
+    <div id="doubleToggles" class="text-center my-1 flex items-center justify-center gap-3">
+      <button type="button" id="dblHayBtn" class="dbl-toggle" aria-pressed="false" title="Double hay rolls">○ Hay ×2</button>
+      <button type="button" id="dblGrainBtn" class="dbl-toggle" aria-pressed="false" title="Double grain rolls">○ Grain ×2</button>
+    </div>
     <div class="table-wrap"><table class="roll-table">
       <tr>
         <th>Roll</th>
@@ -659,6 +663,7 @@
 <div class="text-center my-3 flex items-center justify-center gap-3 flex-wrap">
   <button id="customBuyBtn" type="button" class="px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-base">Buy from player</button>
   <button id="customSellBtn" type="button" class="px-5 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-base">Sell to player</button>
+  <button id="auctionBtn" type="button" class="px-5 py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-bold text-base">Auction</button>
 </div>
 <div id="tradeInboxHint" class="text-center text-xs text-gray-500 -mt-1 mb-2">Negotiated prices — nothing moves until the other player accepts.</div>
 
@@ -742,6 +747,43 @@
   </div>
 </div>
 
+<!-- Auction popup — put your property up for open bidding -->
+<div id="auctionModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+  <div class="relative top-10 mx-auto p-5 border w-[92%] max-w-md shadow-lg rounded-md bg-white max-h-[88vh] overflow-y-auto">
+    <div class="mt-3 text-left">
+      <h3 class="text-lg font-bold text-yellow-800">Auction to the room</h3>
+      <p class="text-xs text-gray-500 mt-1">Anyone sharing this trade room may bid — highest bid wins when you close it. Closing with no bids cancels.</p>
+      <div class="mt-4 space-y-3">
+        <label class="block text-sm font-medium text-gray-700">Asset
+          <select id="auctionAsset" class="mt-1 w-full p-2 border border-gray-300 rounded text-sm">
+            <option value="Hay">Hay</option>
+            <option value="Grain">Grain</option>
+            <option value="Fruit">Fruit</option>
+            <option value="Farm">Farm Cows</option>
+            <option value="Cows">Ranch Cows</option>
+            <option value="Harvester">Harvester</option>
+            <option value="Tractor">Tractor</option>
+          </select>
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block text-sm font-medium text-gray-700">Quantity
+            <input id="auctionQty" type="number" min="1" value="1" inputmode="numeric" pattern="[0-9]*" class="mt-1 w-full p-2 border border-gray-300 rounded text-sm" />
+          </label>
+          <label class="block text-sm font-medium text-gray-700">Starting bid ($)
+            <input id="auctionPrice" type="number" min="0" step="100" value="1000" inputmode="numeric" pattern="[0-9]*" class="mt-1 w-full p-2 border border-gray-300 rounded text-sm" />
+          </label>
+        </div>
+        <div id="auctionPreview" class="text-xs bg-gray-50 p-2 rounded border min-h-[48px]"></div>
+        <p id="auctionHint" class="text-sm text-red-600 hidden"></p>
+      </div>
+      <div class="flex items-center py-3 mt-2">
+        <button id="confirmAuction" type="button" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-base font-bold rounded-md w-full">Start auction</button>
+        <button id="cancelAuction" type="button" class="ml-3 px-4 py-2 bg-gray-300 text-gray-900 text-base font-medium rounded-md w-full">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Room setup screen — shown after MAKE ROOM, before the room exists -->
 <div id="roomSetupModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
   <div class="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
@@ -764,7 +806,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20261122h"></script>
+<script type="module" src="scripts.js?v=20261122i"></script>
 
 <div id="buildStamp" class="text-center text-[10px] text-gray-400 mt-2 mb-1"></div>
 
