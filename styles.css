@@ -32,11 +32,12 @@ th {
     background-color: #cccccc;
 }
 
-/* Spreadsheet table column widths — tuned for a 390px phone (sums ≈374):
-   skinny Acres, wide Cost for price + modifier notes, Net fits one line. */
+/* Spreadsheet table column widths — tuned for a 390px phone (sums ≈378):
+   roomy Assets with the Buy button stacked above the name, skinny Acres,
+   wide-enough Cost for price + modifier notes, Net fits one line. */
 #spreadsheet th:nth-child(1),
 #spreadsheet td:nth-child(1) {
-    width: 46px; /* Assets column - Buy button + wrapped name */
+    width: 70px; /* Assets column - Buy button stacked above the name */
 }
 
 #spreadsheet th:nth-child(2),
@@ -51,7 +52,7 @@ th {
 
 #spreadsheet th:nth-child(4),
 #spreadsheet td:nth-child(4) {
-    width: 144px; /* Cost column - wide for price + modifier notes */
+    width: 120px; /* Cost column - price + modifier notes (wraps to 2 lines) */
 }
 
 #spreadsheet th:nth-child(5),
@@ -502,6 +503,16 @@ input, .editable {
 
 .asset-cell {
     text-align: left;
+    line-height: 1.25;
+}
+
+/* Buy button sits on its own line above the asset name so neither is
+   squeezed — the column only needs to fit the wider of the two. */
+.asset-cell .buy-btn {
+    display: block;
+    width: 100%;
+    margin: 0 0 3px 0;
+    padding: 3px 4px;
 }
 
 /* Slider styles */
