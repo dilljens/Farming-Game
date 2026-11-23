@@ -639,6 +639,34 @@ function showCashFloorWarning(attemptedAmount) {
     cashWarnTimer = setTimeout(() => { toast.style.opacity = '0'; }, 2200);
 }
 
+// --- Christmas: a $5,000 cash gift that advances the player's own year ---
+const CHRISTMAS_GIFT = 5000;
+function updatePlayerYearLine() {
+    try {
+        const el = document.getElementById('playerYearLine');
+        if (el) el.textContent = `Year ${Math.max(1, Math.floor(Number(data?.playerYear) || 1))}`;
+    } catch {}
+}
+function performChristmas() {
+    // Cash gift lands as a normal ledger entry (totals, undo, saves, and
+    // the leaderboard all follow), and the personal year advances by one.
+    updateTotals();
+    data.playerYear = Math.max(1, Math.floor(Number(data?.playerYear) || 1)) + 1;
+    const cashBefore = ledgerLen('cash');
+    addCashTransactionValue(CHRISTMAS_GIFT);
+    updatePlayerYearLine();
+    const added = ledgerLen('cash') - cashBefore;
+    if (added > 0) {
+        pushUndoAction({
+            label: `🎄 Christmas gift +$${CHRISTMAS_GIFT.toLocaleString()} (Year ${data.playerYear})`,
+            cash: added,
+            loan: 0,
+            year: 1
+        });
+        saveQuantitiesToLocalStorage();
+        sayStatus(`🎄 Merry Christmas! +$${CHRISTMAS_GIFT.toLocaleString()} cash — now Year ${data.playerYear}.`);
+    }
+}
 // Cash can never go below zero via spending. Epsilon absorbs float noise.
 function wouldGoNegativeCash(numericValue) {
     return numericValue < 0 && (getCurrentCashTotal() + numericValue) < -0.005;
@@ -724,7 +752,8 @@ function pushUndoAction(action) {
         cash,
         loan,
         qty: action.qty || null,
-        ridge: action.ridge || null
+        ridge: action.ridge || null,
+        year: Math.max(0, Math.floor(Number(action.year) || 0)) || null
     });
     while (log.length > MAX_UNDO_ACTIONS) log.shift();
 }
@@ -770,6 +799,11 @@ function undoLastAction() {
             data.ranchRidgeBonus = getRanchRidgeBonusFromSelections(counts);
         }
         if (a.qty && a.qty.targetClass) applyQtyDelta(a.qty.targetClass, -(Number(a.qty.delta) || 0));
+        // Christmas advances the personal year; undoing it takes the year back.
+        if (a.year) {
+            data.playerYear = Math.max(1, (Math.floor(Number(data.playerYear) || 1) - Math.floor(Number(a.year) || 0)));
+            updatePlayerYearLine();
+        }
     } catch (err) {
         console.warn('undoLastAction failed to fully reverse', a, err);
     }
@@ -3785,6 +3819,8 @@ function getBaseState() {
         // undo reverses the whole action (all ledger legs + qty/ridge
         // deltas), never a single leg. Cleared on reset (fresh game).
         actionLog: [],
+        // Personal year counter (Christmas advances it). Resets each game.
+        playerYear: 1,
         username: ''
     };
 }
@@ -3811,7 +3847,9 @@ function normalizeSavedState(savedData) {
         actionLog: Array.isArray(saved.actionLog)
             ? saved.actionLog.filter(a => a && typeof a === 'object').slice(-MAX_UNDO_ACTIONS)
             : [],
-        ranchRidgeSelections: normalizeRidgeCounts(saved.ranchRidgeSelections)
+        ranchRidgeSelections: normalizeRidgeCounts(saved.ranchRidgeSelections),
+        // Personal year counter: whole numbers, never below Year 1.
+        playerYear: Math.max(1, Math.floor(Number(saved.playerYear) || baseState.playerYear))
     };
 }
 
@@ -4003,6 +4041,7 @@ function loadFromLocalStorage() {
         // console.log("Loaded transactions for loan:", loadedData.transactions.loan);
         updateTotals();
         calculateNet();
+        updatePlayerYearLine();
         updateUpgradedRidgesDisplay();
         recordHistoryPoint(getCurrentTotalWorthFromDOM() || 0);
     } else {
@@ -4026,6 +4065,7 @@ function loadFromLocalStorage() {
         populateRollTable();
         updateTotals();
         calculateNet();
+        updatePlayerYearLine();
         recordHistoryPoint(getCurrentTotalWorthFromDOM() || 0);
     }
     startGameClock();
@@ -4727,6 +4767,7 @@ async function performReset(opts = {}) {
     // Update totals and other calculations
     updateTotals(); // Updates all totals
     calculateNet();
+    updatePlayerYearLine();
     // updateNetCash();
     // Repopulate the roll table
     populateRollTable();
@@ -4813,12 +4854,13 @@ window.addEventListener('DOMContentLoaded', (event) => {
     });
 
     calculateNet(); // Initial calculation on page load
+    updatePlayerYearLine();
     updateUpgradedRidgesDisplay();
     wireManualInterestCell();
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '1.9';
+    const GAME_VERSION = '2.0';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
@@ -4848,11 +4890,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 handleTransaction('cashInput', 'cash-transaction', 'cash-total');
             });
         });
+        document.getElementById('christmasBtn')?.addEventListener('click', () => {
+            performChristmas();
+            cashInput.blur();
+        });
 
         // Make roll table payout buttons clickable to add as cash transactions.
         // Use event delegation so it keeps working even if buttons are created later.
-        const rollTable = document.querySelector('.roll-table');
-        if (rollTable && rollTable.dataset.rollClickBound !== '1') {
+        const rollTable = document.querySelector('.roll-table');        if (rollTable && rollTable.dataset.rollClickBound !== '1') {
             rollTable.dataset.rollClickBound = '1';
             rollTable.addEventListener('click', (e) => {
                 let btn = e.target;
