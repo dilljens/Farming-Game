@@ -3656,11 +3656,35 @@ function populateRollTable() {
     const rollRows = document.querySelectorAll('.roll-table tr:not(:first-child)');
   
     rollRows.forEach((row, index) => {
+      if (row.hasAttribute('data-corn-row')) {
+        // The Corn row (added by the Corn ×2 toggle) pays doubled corn on
+        // the grain quantity with grain's harvester bonus — never a manual
+        // tap state of its own.
+        const cornQty = quantities.Grain || 0;
+        const cornHr = roomHarvest();
+        const cornMult = 1 + Math.min(quantities.Harvester, cornHr.equipCap) * cornHr.equipRate;
+        baseValues.Grain.forEach((value, rollIndex) => {
+          const profit = cornQty * value * cornMult * 2;
+          const payoutCell = row.cells[rollIndex + 1];
+          if (!payoutCell) return;
+          let payoutButton = payoutCell.querySelector('button.roll-cell-button');
+          if (!payoutButton) {
+            payoutCell.textContent = '';
+            payoutButton = document.createElement('button');
+            payoutButton.type = 'button';
+            payoutButton.className = 'roll-cell-button';
+            payoutCell.appendChild(payoutButton);
+          }
+          payoutButton.textContent = numberWithCommasAndDecimals(profit);
+        });
+        return;
+      }
       const assetType = row.cells[0].textContent.split(' ')[0]; // Get the asset type (Hay, Grain, etc.) without suffix
       const quantity = quantities[assetType] || 0; // Get the quantity for this asset type
 
             // Hay tiers + equipment bonuses are host settings (room doc);
             // defaults reproduce today's game (5+ => 1.5x, 10+ => 2x, +20%/unit cap 5).
+            // (The Corn row above computes its own bonus inline.)
             const harvestRules = roomHarvest();
             let multiplier = 1;
             if (assetType === 'Hay') {
@@ -3671,11 +3695,12 @@ function populateRollTable() {
                 multiplier += Math.min(quantities.Harvester, harvestRules.equipCap) * harvestRules.equipRate;
             }
 
-            // Manual multiplier from tapping
+            // Manual multiplier from tapping (Hay alone keeps a ×2 tap
+            // state; corn doubles through its own row, never via Grain).
             const state = parseInt(row.cells[0].getAttribute('data-state') || 0);
             let manualMultiplier = 1;
             if (state === 1) manualMultiplier = 0.5;
-            else if (state === 2 && (assetType === 'Hay' || assetType === 'Grain')) manualMultiplier = 2;
+            else if (state === 2 && assetType === 'Hay') manualMultiplier = 2;
   
       // Calculate and populate the cells for each roll
       baseValues[assetType].forEach((value, rollIndex) => {
@@ -4780,7 +4805,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '1.7';
+    const GAME_VERSION = '1.8';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
@@ -5016,10 +5041,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
         td.addEventListener('click', () => {
             const asset = td.textContent.split(' ')[0];
             let state = parseInt(td.getAttribute('data-state') || 0);
-            if (asset === 'Fruit' || asset === 'Cows') {
-                state = (state + 1) % 2; // Only 0 and 1
+            if (asset === 'Hay') {
+                state = (state + 1) % 3; // 0, 1, 2 — only Hay keeps a ×2 tap state
             } else {
-                state = (state + 1) % 3; // 0, 1, 2
+                state = (state + 1) % 2; // Corn doubles via its own row, never by tapping Grain
             }
             td.setAttribute('data-state', state);
             updateAssetDisplay(td, state);
@@ -5028,9 +5053,12 @@ window.addEventListener('DOMContentLoaded', (event) => {
         });
     });
 
-    // Toggle circles for doubled Hay/Grain above the roll table: same state
-    // as tapping the asset name (2 = doubled, anything else = off). Fruit
-    // and Cows have no double tier, so they get no toggle.
+    // Toggle circles above the roll table. Hay ×2 flips the Hay tap state;
+    // Corn ×2 adds its own Corn row (doubled corn payouts) right under the
+    // Grain row instead of doubling all grain — corn is only part of grain.
+    // The Corn row uses the grain quantity and the same harvester bonus as
+    // grain; tapping Grain itself never doubles (0/1 only, like Fruit/Cows).
+    let cornDoubled = false;
     function rollAssetState(asset) {
         const td = [...document.querySelectorAll('.roll-table tr:not(:first-child) td:first-child')]
             .find(c => c.textContent.split(' ')[0] === asset);
@@ -5045,7 +5073,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
             btn.textContent = `${on ? '●' : '○'} ${label}`;
         };
         paint('dblHayBtn', rollAssetState('Hay').state === 2, 'Hay ×2');
-        paint('dblGrainBtn', rollAssetState('Grain').state === 2, 'Grain ×2');
+        paint('dblCornBtn', cornDoubled, 'Corn ×2');
     }
     function setDoubled(asset, on) {
         const { td } = rollAssetState(asset);
@@ -5055,8 +5083,44 @@ window.addEventListener('DOMContentLoaded', (event) => {
         populateRollTable();
         syncDoubleToggles();
     }
+    function setCornDoubled(on) {
+        cornDoubled = on;
+        ensureCornRow();
+        populateRollTable();
+        syncDoubleToggles();
+    }
+    // The Corn row lives right under Grain and is rebuilt on demand — never
+    // tappable (the tap handler list is captured at load, before it exists).
+    function ensureCornRow() {
+        const table = document.querySelector('.roll-table');
+        let row = table?.querySelector('tr[data-corn-row]');
+        if (!cornDoubled) {
+            if (row) row.remove();
+            return;
+        }
+        if (!table) return;
+        if (!row) {
+            row = document.createElement('tr');
+            row.setAttribute('data-corn-row', '1');
+            const nameTd = document.createElement('td');
+            nameTd.textContent = 'Corn';
+            row.appendChild(nameTd);
+            for (let i = 0; i < 6; i++) {
+                const td = document.createElement('td');
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'roll-cell-button';
+                btn.textContent = '0';
+                td.appendChild(btn);
+                row.appendChild(td);
+            }
+            const grainRow = rollAssetState('Grain').td?.closest('tr');
+            if (grainRow && grainRow.nextSibling) grainRow.parentNode.insertBefore(row, grainRow.nextSibling);
+            else table.appendChild(row);
+        }
+    }
     document.getElementById('dblHayBtn')?.addEventListener('click', () => setDoubled('Hay', rollAssetState('Hay').state !== 2));
-    document.getElementById('dblGrainBtn')?.addEventListener('click', () => setDoubled('Grain', rollAssetState('Grain').state !== 2));
+    document.getElementById('dblCornBtn')?.addEventListener('click', () => setCornDoubled(!cornDoubled));
     syncDoubleToggles();
 
     function updateAssetDisplay(td, state) {
