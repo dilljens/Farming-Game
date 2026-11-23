@@ -1001,27 +1001,13 @@ function updateActionButtonStates() {
         setButtonDisabled(payPerAcreBtn, disabled);
     }
 
-    // Short on cash — sits left of Pay Per Acre: borrows the $1,000
-    // increment covering the current pay-mode total and pays it in one
-    // tap. When cash covers, it just opens the pay modal instead.
+    // Short on cash just opens the Pay Per Acre modal in pay mode: the
+    // player picks a preset or types the exact total, then Pays (or
+    // Borrows when short). Nothing moves until they confirm inside.
     const shortOnCashBtn = document.getElementById('shortOnCashBtn');
     if (shortOnCashBtn) {
-        const total = currentPayPerAcreTotal();
-        if (!(total > 0)) {
-            shortOnCashBtn.title = 'Pick a pay option first (open Pay Per Acre)';
-            setButtonDisabled(shortOnCashBtn, true);
-        } else if (cashTotal >= total) {
-            shortOnCashBtn.title = `Cash covers the $${total.toLocaleString()} — opens Pay Per Acre`;
-            setButtonDisabled(shortOnCashBtn, false);
-        } else {
-            const loan = expenseLoanAmount(total);
-            const keep = loan - total;
-            const capOk = getCurrentLoanTotal() + loan <= debtCap();
-            shortOnCashBtn.title = capOk
-                ? `Borrows $${loan.toLocaleString()} (pays $${total.toLocaleString()}, you keep $${keep.toLocaleString()})`
-                : `Debt cap $${debtCap().toLocaleString()} blocks this loan`;
-            setButtonDisabled(shortOnCashBtn, !capOk);
-        }
+        shortOnCashBtn.title = 'Opens Pay Per Acre — pick an amount or type the exact total';
+        setButtonDisabled(shortOnCashBtn, false);
     }
 
     // Gain Per Acre
@@ -2585,6 +2571,18 @@ document.addEventListener('click', (e) => {
 });
 
 // --- Custom Buy — buy property from another player at custom price ---
+// Open-offer choice shared by both trade modals: anyone sharing this trade
+// room may accept, first come first served. The inbox is room-scoped, so
+// "anyone" always means the room the offer is posted in (or the lobby).
+function addOpenOfferOption(sel) {
+    const openOpt = document.createElement('option');
+    openOpt.value = 'OPEN';
+    openOpt.textContent = currentRoomCode ? `Anyone in room ${currentRoomCode} (open offer)` : 'Anyone online (open offer)';
+    sel.appendChild(openOpt);
+}
+function isOpenOfferValue(sel) {
+    return sel && sel.value === 'OPEN';
+}
 function refreshCustomBuySellers() {
     const sel = document.getElementById('customBuySeller');
     if (!sel) return;
@@ -2592,6 +2590,7 @@ function refreshCustomBuySellers() {
     const prev = sel.value;
     sel.innerHTML = '';
     const others = (latestLeaderboardData || []).filter(p => (p.username || '').trim() !== myUsername && p.username !== 'Enter name');
+    addOpenOfferOption(sel);
     if (others.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
@@ -2610,10 +2609,13 @@ function refreshCustomBuySellers() {
             sel.appendChild(opt);
         });
     }
-    if (prev) {
-        const hasPrev = [...sel.options].some(o => o.value === prev);
-        if (hasPrev) sel.value = prev;
-    }
+    // Default to a named counterparty when one exists (preserves the old
+    // pre-select behavior); otherwise fall back to the placeholder so an
+    // open offer never posts by accident from a stale default.
+    const wantBuy = prev && [...sel.options].some(o => o.value === prev) ? prev
+        : ([...sel.options].find(o => o.value && o.value !== 'OPEN' && o.value !== 'BANK')?.value
+            ?? ([...sel.options].some(o => o.value === '') ? '' : sel.options[0]?.value));
+    if (wantBuy !== undefined) sel.value = wantBuy;
     updateCustomBuyPreview();
 }
 function getAssetQtyKey(asset) {
@@ -2647,6 +2649,10 @@ function myAssetQty(asset) {
 // createdBy were buyer-created (Custom Buy), so the seller accepts those.
 function canAcceptTrade(t, myUid) {
     if (!t || t.status !== 'pending' || !myUid) return false;
+    // Open offers: anyone except the creator may claim, first come first
+    // served. Visibility is already scoped by the room collections the
+    // inbox listens to, so "anyone" means anyone sharing the trade room.
+    if (t.open === true) return (t.createdBy || t.buyerUid || t.sellerUid) !== myUid;
     if (t.buyerUid !== myUid && t.sellerUid !== myUid) return false;
     const creator = t.createdBy || t.buyerUid;
     return myUid !== creator;
@@ -2660,11 +2666,15 @@ function updateCustomBuyPreview() {
     const qty = parseInt(document.getElementById('customBuyQty')?.value || '1', 10);
     const price = Math.round(parseFloat(String(document.getElementById('customBuyPrice')?.value || '0').replace(/,/g, '')) || 0);
     const opt = sellerSel?.selectedOptions?.[0];
-    const sellerName = opt?.dataset?.username || opt?.textContent?.split(' —')[0] || 'seller';
-    const sellerData = (latestLeaderboardData || []).find(p => (p._id && p._id === opt?.dataset?.uid) || p.username === sellerName);
-    const sellerQty = getSellerQty(sellerData, asset);
+    const isOpen = isOpenOfferValue(sellerSel);
+    const sellerName = isOpen ? 'Anyone (open offer)' : (opt?.dataset?.username || opt?.textContent?.split(' —')[0] || 'seller');
+    const sellerData = isOpen ? undefined : (latestLeaderboardData || []).find(p => (p._id && p._id === opt?.dataset?.uid) || p.username === sellerName);
+    const sellerQty = isOpen ? qty : getSellerQty(sellerData, asset);
     const myCash = getCurrentCashTotal();
-    preview.innerHTML = `You: cash $${myCash.toLocaleString()} → $${(myCash - price).toLocaleString()} after pay<br>Seller ${sellerName}: ${asset} ${sellerQty} → ${sellerQty - qty} after sale<br>Price: $${price.toLocaleString()} for ${qty} × ${asset}`;
+    const roomScope = currentRoomCode ? `room ${currentRoomCode}` : 'the lobby';
+    preview.innerHTML = isOpen
+        ? `You: cash $${myCash.toLocaleString()} → $${(myCash - price).toLocaleString()} after pay<br>Anyone in ${roomScope} may accept<br>Price: $${price.toLocaleString()} for ${qty} × ${asset}`
+        : `You: cash $${myCash.toLocaleString()} → $${(myCash - price).toLocaleString()} after pay<br>Seller ${sellerName}: ${asset} ${sellerQty} → ${sellerQty - qty} after sale<br>Price: $${price.toLocaleString()} for ${qty} × ${asset}`;
     let err = '';
     if (!sellerSel || !sellerSel.value) err = 'Pick a seller.';
     else if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
@@ -2828,11 +2838,21 @@ function renderTradeInbox(trades) {
         html += `<div class="font-bold mb-1">Incoming trade offers</div>`;
         incoming.forEach(t => {
             // Direction-aware line: buy offers want my goods, sell offers offer theirs.
-            const line = t.buyerUid === myUid
+            // Open offers name no counterparty: the acceptor takes the empty side.
+            const isOpen = t.open === true;
+            const line = isOpen
+                ? (!t.buyerUid
+                    ? `${t.sellerName} offers ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()} — open to anyone`
+                    : `${t.buyerName} wants ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()} — open to anyone`)
+                : (t.buyerUid === myUid
                 ? `${t.sellerName} offers ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()}`
-                : `${t.buyerName} wants ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()}`;
+                : `${t.buyerName} wants ${t.qty} ${t.asset} for $${Number(t.price).toLocaleString()}`);
+            const role = isOpen ? (!t.buyerUid ? 'buyer' : 'seller') : (t.buyerUid === myUid ? 'buyer' : 'seller');
+            // Merged inbox: tag offers that live outside my current trade room.
+            const scopeTag = (t.roomCode && t.roomCode !== tradeRoomCode())
+                ? ` (${t.roomCode === LOBBY_ROOM_CODE ? 'lobby' : `room ${t.roomCode}`})` : '';
             html += `<div class="flex items-center justify-between gap-2 py-1 border-b border-yellow-100">
-                <span>${line} — you are ${t.buyerUid === myUid ? 'buyer' : 'seller'}</span>
+                <span>${line}${scopeTag} — you are ${role}</span>
                 <span class="flex gap-1">
                   <button data-accept="${t.id}" class="px-2 py-1 bg-green-600 text-white rounded text-xs">Accept</button>
                   <button data-reject="${t.id}" class="px-2 py-1 bg-gray-300 rounded text-xs">Reject</button>
@@ -2883,10 +2903,11 @@ function renderTradeInbox(trades) {
 
 async function acceptTrade(tradeId) {
     if (!tradeId) return;
-    const ref = doc(db, 'rooms', tradeRoomCode(), 'trades', tradeId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return;
-    const t = { id: snap.id, ...snap.data() };
+    // The doc lives under the room it was created in, which may differ
+    // from my current room - resolve across inbox-known, mine, lobby.
+    const found = await getTradeDoc(tradeId);
+    if (!found) return;
+    const { ref, data: t } = found;
     const myUid = auth.currentUser?.uid;
     if (!canAcceptTrade(t, myUid)) return;
     // Refuse offers from before my current game (pending across a reset).
@@ -2895,7 +2916,9 @@ async function acceptTrade(tradeId) {
         if (s) s.textContent = `Offer ${t.qty} ${t.asset} is from a previous game — ask for a re-offer.`;
         return;
     }
-    const iAmBuyer = t.buyerUid === myUid;
+    // Open offers have one side unfilled: the acceptor takes whichever side
+    // is open (buyer when no buyer yet, seller when no seller yet).
+    const iAmBuyer = t.open === true ? !t.buyerUid : t.buyerUid === myUid;
     if (iAmBuyer) {
         // Buyer accepting a sell offer: must afford it right now.
         if (Number(t.price || 0) !== 0 && wouldGoNegativeCash(-Number(t.price || 0))) {
@@ -2914,26 +2937,51 @@ async function acceptTrade(tradeId) {
     }
     // Write FIRST, apply locally after. If the write fails nothing moved, so
     // retrying the accept can never deduct twice. (The local apply cannot fail
-    // after the check above — same tick, no interleaving.)
+    // after the check above - same tick, no interleaving.)
+    // Open offers also claim the empty side with my identity, so the
+    // creator's settlement poll knows who took it.
+    const claim = { status: 'accepted', updatedAt: new Date().toISOString() };
+    if (t.open === true) {
+        const myName = document.getElementById('editableUsername')?.innerText.trim() || (iAmBuyer ? 'buyer' : 'seller');
+        if (iAmBuyer && !t.buyerUid) { claim.buyerUid = myUid; claim.buyerName = myName; }
+        if (!iAmBuyer && !t.sellerUid) { claim.sellerUid = myUid; claim.sellerName = myName; }
+    }
     try {
-        await setDoc(ref, { status: 'accepted', updatedAt: new Date().toISOString() }, { merge: true });
+        await setDoc(ref, claim, { merge: true });
     } catch (e) {
         console.error('accept write failed', e);
         const s = document.getElementById('roomStatus');
         if (s) s.textContent = 'Accept failed: ' + roomErrorMessage(e);
         return;
     }
+    // Open offers are first-come first-served with no transactions: verify
+    // the claim is still mine after the write, so a simultaneous second
+    // claimer backs out instead of duplicating goods. Last writer wins;
+    // the loser's re-read shows the winner and they move nothing.
+    if (t.open === true) {
+        try {
+            const confirm = await getDoc(ref);
+            const c = confirm.exists() ? confirm.data() : {};
+            const won = iAmBuyer ? c.buyerUid === myUid : c.sellerUid === myUid;
+            if (!won) {
+                const s = document.getElementById('roomStatus');
+                if (s) s.textContent = 'Someone else claimed that open offer first.';
+                startTradeListener();
+                return;
+            }
+        } catch {}
+    }
     // Apply my own side locally (seller removes qty/adds cash, buyer adds
-    // qty/pays) — the counterparty settles via their poll listener.
+    // qty/pays) - the counterparty settles via their poll listener.
     if (applyLocalTrade(t, iAmBuyer ? 'buyer' : 'seller')) markTradeApplied(t.id);
     try { navigator.vibrate && navigator.vibrate([10,30,10]); } catch {}
 }
 async function rejectTrade(tradeId) {
     if (!tradeId) return;
-    const ref = doc(db, 'rooms', tradeRoomCode(), 'trades', tradeId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return;
-    const t = snap.data();
+    const found = await getTradeDoc(tradeId);
+    if (!found) return;
+    const { ref } = found;
+    const t = found.data;
     if (t.status !== 'pending') return;
     // Only the buyer (cancel) or the seller (decline) can reject — not third parties
     const myUid = auth.currentUser?.uid;
@@ -2942,20 +2990,65 @@ async function rejectTrade(tradeId) {
 }
 function startTradeListener() {
     if (tradeListenerUnsub) { try{tradeListenerUnsub();}catch{} tradeListenerUnsub=null; }
+    if (tradeListenerUnsubLobby) { try{tradeListenerUnsubLobby();}catch{} tradeListenerUnsubLobby=null; }
     if (tradeRetryTimer) { clearTimeout(tradeRetryTimer); tradeRetryTimer = null; }
-    // Roomless players trade through the shared lobby room, so this always
-    // listens — scoped to the current room, or the lobby when outside one.
-    // The room filter is load-bearing: without it every room's offers land in
-    // this inbox (and Accept would act on foreign trades).
+    // Inbox listens to the current trade room AND the lobby. Trades live
+    // under the room they were created in, but players drift between rooms -
+    // listening to only one side made cross-room offers invisible and
+    // therefore un-acceptable. Roomless players just get the lobby.
+    // The per-room filter stays load-bearing: without it every room's
+    // offers land in this inbox (and Accept would act on foreign trades).
+    tradeSnapCache.primary = [];
+    tradeSnapCache.lobby = [];
     const tRoom = tradeRoomCode();
-    const q = query(collection(db, 'rooms', tRoom, 'trades'), where('roomCode', '==', tRoom));
-    tradeListenerUnsub = onSnapshot(q, (snap)=>{
+    tradeListenerUnsub = watchTradeRoom(tRoom, 'primary');
+    if (currentRoomCode) tradeListenerUnsubLobby = watchTradeRoom(LOBBY_ROOM_CODE, 'lobby');
+    return tradeListenerUnsub;
+}
+// Second subscription for the lobby (only while in a named room) + merged
+// snapshot cache. renderTradeInbox always sees the union, newest first.
+let tradeListenerUnsubLobby = null;
+const tradeSnapCache = { primary: [], lobby: [] };
+// Last-rendered trades by id - accept/reject resolve the trade's own room
+// from here, so a doc is never fetched from the wrong room's collection.
+let lastTradesById = new Map();
+function mergeAndRenderTrades() {
+    const map = new Map();
+    for (const t of tradeSnapCache.primary) map.set(t.id, t);
+    for (const t of tradeSnapCache.lobby) { if (!map.has(t.id)) map.set(t.id, t); }
+    const trades = [...map.values()];
+    trades.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    lastTradesById = new Map(trades.map((t) => [t.id, t]));
+    renderTradeInbox(trades);
+}
+function watchTradeRoom(roomCode, slot) {
+    const q = query(collection(db, 'rooms', roomCode, 'trades'), where('roomCode', '==', roomCode));
+    return onSnapshot(q, (snap) => {
         const trades = [];
-        snap.forEach(d=> trades.push({ id:d.id, ...d.data()}));
-        // sort recent first
-        trades.sort((a,b)=> new Date(b.createdAt||0)-new Date(a.createdAt||0));
-        renderTradeInbox(trades);
-    }, (e)=> console.error('trade listener', e));
+        snap.forEach((d) => trades.push({ id: d.id, ...d.data() }));
+        tradeSnapCache[slot] = trades;
+        mergeAndRenderTrades();
+    }, (e) => console.error('trade listener', e));
+}
+// A trade doc lives under the room it was created in - which may differ
+// from the room I'm in now. Try the inbox-known room first, then mine,
+// then the lobby.
+function tradeDocRoom(tradeId) {
+    return lastTradesById.get(tradeId)?.roomCode || tradeRoomCode();
+}
+async function getTradeDoc(tradeId) {
+    const rooms = [tradeDocRoom(tradeId), tradeRoomCode(), LOBBY_ROOM_CODE];
+    const seen = new Set();
+    for (const r of rooms) {
+        if (!r || seen.has(r)) continue;
+        seen.add(r);
+        try {
+            const ref = doc(db, 'rooms', r, 'trades', tradeId);
+            const snap = await getDoc(ref);
+            if (snap.exists()) return { ref, data: { id: snap.id, ...snap.data() } };
+        } catch {}
+    }
+    return null;
 }
 
 async function performCustomBuy() {
@@ -2965,13 +3058,14 @@ async function performCustomBuy() {
     const price = Math.round(parseFloat(String(document.getElementById('customBuyPrice')?.value || '0').replace(/,/g, '')) || 0);
     const hint = document.getElementById('customBuyHint');
     const opt = sellerSel?.selectedOptions?.[0];
-    const sellerUid = opt?.dataset?.uid || '';
-    const sellerName = opt?.dataset?.username || '';
+    const isOpen = isOpenOfferValue(sellerSel);
+    const sellerUid = isOpen ? null : (opt?.dataset?.uid || '');
+    const sellerName = isOpen ? 'Anyone (open offer)' : (opt?.dataset?.username || '');
     // re-validate (preview state may be stale)
     updateCustomBuyPreview();
     if (document.getElementById('confirmCustomBuy')?.disabled) return;
-    if (!sellerUid) { if (hint){hint.textContent='Seller not found (no UID).'; hint.classList.remove('hidden');} return; }
-    if (sellerUid === auth.currentUser?.uid) { if (hint){hint.textContent='Cannot buy from yourself.'; hint.classList.remove('hidden');} return; }
+    if (!isOpen && !sellerUid) { if (hint){hint.textContent='Seller not found (no UID).'; hint.classList.remove('hidden');} return; }
+    if (!isOpen && sellerUid === auth.currentUser?.uid) { if (hint){hint.textContent='Cannot buy from yourself.'; hint.classList.remove('hidden');} return; }
     if (price !== 0 && wouldGoNegativeCash(-price)) { if (hint){hint.textContent='Not enough cash.'; hint.classList.remove('hidden');} return; }
     // Roomless trades go through the shared lobby room (created on demand).
     const tRoom = tradeRoomCode();
@@ -2995,6 +3089,7 @@ async function performCustomBuy() {
             sellerUid, sellerName, asset: qtyKey, qty, price,
             roomCode: tRoom,
             status: 'pending',
+            open: isOpen === true,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             // Creator stamp: the counterparty accepts. Buy offers are
@@ -3003,7 +3098,9 @@ async function performCustomBuy() {
         });
         hideCustomBuyModal();
         const status = document.getElementById('roomStatus');
-        if (status) status.textContent = `Offer sent to ${sellerName}: ${qty} ${asset} for $${price.toLocaleString()} — waiting for accept`;
+        if (status) status.textContent = isOpen
+            ? `Open offer posted: ${qty} ${asset} for $${price.toLocaleString()} — anyone in ${tRoom === LOBBY_ROOM_CODE ? 'the lobby' : `room ${tRoom}`} can accept`
+            : `Offer sent to ${sellerName}: ${qty} ${asset} for $${price.toLocaleString()} — waiting for accept`;
     } catch (e) {
         console.error('trade create failed', e);
         if (hint){hint.textContent = 'Offer failed: ' + roomErrorMessage(e); hint.classList.remove('hidden');}
@@ -3019,6 +3116,7 @@ function refreshCustomSellBuyers() {
     const prev = sel.value;
     sel.innerHTML = '';
     const others = (latestLeaderboardData || []).filter(p => (p.username || '').trim() !== myUsername && p.username !== 'Enter name');
+    addOpenOfferOption(sel);
     if (others.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
@@ -3034,10 +3132,10 @@ function refreshCustomSellBuyers() {
             sel.appendChild(opt);
         });
     }
-    if (prev) {
-        const hasPrev = [...sel.options].some(o => o.value === prev);
-        if (hasPrev) sel.value = prev;
-    }
+    const wantSell = prev && [...sel.options].some(o => o.value === prev) ? prev
+        : ([...sel.options].find(o => o.value && o.value !== 'OPEN' && o.value !== 'BANK')?.value
+            ?? ([...sel.options].some(o => o.value === '') ? '' : sel.options[0]?.value));
+    if (wantSell !== undefined) sel.value = wantSell;
     // The bank always buys, instantly, at half of base — no accept needed.
     const bank = document.createElement('option');
     bank.value = 'BANK';
@@ -3075,15 +3173,18 @@ function updateCustomSellPreview() {
     const price = bank ? bankSellPrice(asset, qty)
         : Math.round(parseFloat(String(priceEl?.value || '0').replace(/,/g, '')) || 0);
     const opt = buyerSel?.selectedOptions?.[0];
-    const buyerName = opt?.dataset?.username || opt?.textContent?.split(' (')[0] || 'buyer';
+    const isOpen = isOpenOfferValue(buyerSel);
+    const buyerName = isOpen ? 'Anyone (open offer)' : (opt?.dataset?.username || opt?.textContent?.split(' (')[0] || 'buyer');
     // Ranch cows: only qty above the ridge-bonus floor can be sold.
     const locked = isRanchCowsAsset(asset) ? ranchBonusFloor() : 0;
     const myQty = myAssetQty(asset);
     const sellable = Math.max(0, myQty - locked);
     preview.innerHTML = `You: ${asset} ${myQty} → ${myQty - qty} after sale` +
         (locked > 0 ? ` (${locked} ridge bonus locked)` : '') +
-        (bank ? `<br>Bank pays $${price.toLocaleString()} now — half of $${assetBasePrice(asset).toLocaleString()} base × ${qty}`
-            : `<br>${buyerName} pays $${price.toLocaleString()} for ${qty} × ${asset}`);
+        (isOpen
+            ? `<br>Anyone in ${currentRoomCode ? `room ${currentRoomCode}` : 'the lobby'} may accept for $${price.toLocaleString()} (${qty} × ${asset})`
+            : (bank ? `<br>Bank pays $${price.toLocaleString()} now — half of $${assetBasePrice(asset).toLocaleString()} base × ${qty}`
+            : `<br>${buyerName} pays $${price.toLocaleString()} for ${qty} × ${asset}`));
     let err = '';
     if (!buyerSel || !buyerSel.value) err = 'Pick a buyer.';
     else if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
@@ -3114,8 +3215,9 @@ async function performCustomSell() {
     const price = Math.round(parseFloat(String(document.getElementById('customSellPrice')?.value || '0').replace(/,/g, '')) || 0);
     const hint = document.getElementById('customSellHint');
     const opt = buyerSel?.selectedOptions?.[0];
-    const buyerUid = opt?.dataset?.uid || '';
-    const buyerName = opt?.dataset?.username || '';
+    const isOpen = isOpenOfferValue(buyerSel);
+    const buyerUid = isOpen ? null : (opt?.dataset?.uid || '');
+    const buyerName = isOpen ? 'Anyone (open offer)' : (opt?.dataset?.username || '');
     // re-validate (preview state may be stale)
     updateCustomSellPreview();
     if (document.getElementById('confirmCustomSell')?.disabled) return;
@@ -3133,8 +3235,8 @@ async function performCustomSell() {
         }
         return;
     }
-    if (!buyerUid) { if (hint){hint.textContent='Buyer not found (no UID).'; hint.classList.remove('hidden');} return; }
-    if (buyerUid === auth.currentUser?.uid) { if (hint){hint.textContent='Cannot sell to yourself.'; hint.classList.remove('hidden');} return; }
+    if (!isOpen && !buyerUid) { if (hint){hint.textContent='Buyer not found (no UID).'; hint.classList.remove('hidden');} return; }
+    if (!isOpen && buyerUid === auth.currentUser?.uid) { if (hint){hint.textContent='Cannot sell to yourself.'; hint.classList.remove('hidden');} return; }
     const sellableNow = isRanchCowsAsset(asset) ? sellableRanchCows() : myAssetQty(asset);
     if (sellableNow < qty) { if (hint){hint.textContent=`Only ${sellableNow} sellable ${asset} (ridge bonus can't be sold).`; hint.classList.remove('hidden');} return; }
     // Roomless trades go through the shared lobby room (created on demand).
@@ -3160,13 +3262,16 @@ async function performCustomSell() {
             asset: qtyKey, qty, price,
             roomCode: tRoom,
             status: 'pending',
+            open: isOpen === true,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             createdBy: auth.currentUser.uid
         });
         hideCustomSellModal();
         const status = document.getElementById('roomStatus');
-        if (status) status.textContent = `Offer sent to ${buyerName}: ${qty} ${asset} for $${price.toLocaleString()} — waiting for accept`;
+        if (status) status.textContent = isOpen
+            ? `Open offer posted: ${qty} ${asset} for $${price.toLocaleString()} — anyone in ${tRoom === LOBBY_ROOM_CODE ? 'the lobby' : `room ${tRoom}`} can accept`
+            : `Offer sent to ${buyerName}: ${qty} ${asset} for $${price.toLocaleString()} — waiting for accept`;
     } catch (e) {
         console.error('trade create failed', e);
         if (hint){hint.textContent = 'Offer failed: ' + roomErrorMessage(e); hint.classList.remove('hidden');}
@@ -3790,6 +3895,9 @@ function updateModalForMode() {
 // Function to show the pay per acre modal
 function showPayPerAcreModal() {
     document.getElementById('payPerAcreModal').classList.remove('hidden');
+    // Exact totals are one-shot per visit — never carry a stale value in.
+    const customInput = document.getElementById('payPerAcreCustom');
+    if (customInput) customInput.value = '';
     
     // Restore the selection based on current mode
     const selection = isGainMode ? gainModeSelection : payModeSelection;
@@ -3938,16 +4046,11 @@ document.getElementById('payPerAcreBtn').addEventListener('click', (event) => {
 // the pay modal; cash short → borrow the $1,000 increment and pay it.
 document.getElementById('shortOnCashBtn')?.addEventListener('click', (event) => {
     event.preventDefault();
-    const total = currentPayPerAcreTotal();
-    if (!(total > 0)) return;
-    updateTotals();
-    if (getCurrentCashTotal() >= total) {
-        isGainMode = false;
-        updateModalForMode();
-        showPayPerAcreModal();
-    } else {
-        borrowForExpense(total, 'Per-acre pay');
-    }
+    // Always open the modal: the player enters or picks the amount there.
+    // Pay covers it from cash; the modal's Borrow button covers shortfall.
+    isGainMode = false;
+    updateModalForMode();
+    showPayPerAcreModal();
 });
 
 // Event listener for the gain per acre button
@@ -3956,6 +4059,15 @@ document.getElementById('gainPerAcreBtn').addEventListener('click', (event) => {
     isGainMode = true;
     updateModalForMode();
     showPayPerAcreModal();
+});
+
+// Typing an exact total deselects the preset buttons; clearing it
+// restores the stored preset selection on next open.
+document.getElementById('payPerAcreCustom')?.addEventListener('input', () => {
+    if (payCustomTotal() > 0) {
+        document.querySelectorAll('.pay-acre-button').forEach(btn => btn.classList.remove('selected'));
+    }
+    updatePayPerAcreDisplay();
 });
 
 // Event listener for the confirm pay per acre button
@@ -3969,10 +4081,9 @@ document.getElementById('confirmPayPerAcre').addEventListener('click', (event) =
 // borrows the $1,000 increment, pays, closes on success)
 document.getElementById('borrowPayPerAcreBtn')?.addEventListener('click', (event) => {
     event.preventDefault();
-    const selectedButton = document.querySelector('.pay-acre-button.selected');
-    if (!selectedButton || isGainMode) return;
-    const totalPayment = (getAcresForType(selectedButton.getAttribute('data-pay-type')) || 0)
-        * (parseFloat(selectedButton.getAttribute('data-per-acre')) || 0);
+    if (isGainMode) return;
+    const totalPayment = currentPayPerAcreTotal();
+    if (!(totalPayment > 0)) return;
     if (borrowForExpense(totalPayment, 'Per-acre pay')) hidePayPerAcreModal();
 });
 
@@ -4002,8 +4113,10 @@ document.getElementById('cancelPayOffLoan').addEventListener('click', (event) =>
 });
 
 function updatePayPerAcreDisplay() {
+    // A typed exact total overrides the preset per-acre selection.
+    const custom = payCustomTotal();
     const selectedButton = document.querySelector('.pay-acre-button.selected');
-    if (!selectedButton) {
+    if (!selectedButton && !(custom > 0)) {
         const acresDisplay = document.getElementById('acresDisplay');
         const paymentDisplay = document.getElementById('paymentDisplay');
         if (acresDisplay) acresDisplay.textContent = 'Acres: 0';
@@ -4011,17 +4124,17 @@ function updatePayPerAcreDisplay() {
         return;
     }
     
-    const payType = selectedButton.getAttribute('data-pay-type');
-    const perAcreValue = parseFloat(selectedButton.getAttribute('data-per-acre'));
+    const payType = selectedButton?.getAttribute('data-pay-type');
+    const perAcreValue = parseFloat(selectedButton?.getAttribute('data-per-acre')) || 0;
     
-    const acres = getAcresForType(payType);
-    const totalPayment = acres * perAcreValue;
+    const acres = selectedButton ? getAcresForType(payType) : 0;
+    const totalPayment = custom > 0 ? custom : acres * perAcreValue;
     
     const acresDisplay = document.getElementById('acresDisplay');
     const paymentDisplay = document.getElementById('paymentDisplay');
     
     if (acresDisplay) {
-        acresDisplay.textContent = `Acres: ${acres.toLocaleString()}`;
+        acresDisplay.textContent = custom > 0 ? 'Acres: exact total' : `Acres: ${acres.toLocaleString()}`;
     }
     if (paymentDisplay) {
         paymentDisplay.textContent = `Total Payment: $${totalPayment.toLocaleString()}`;
@@ -4054,8 +4167,11 @@ function updatePayPerAcreDisplay() {
 }
 
 // Add event listeners to pay per acre buttons
+// Picking a preset clears any typed exact total (the two are exclusive).
 document.querySelectorAll('.pay-acre-button').forEach(button => {
     button.addEventListener('click', function() {
+        const customInput = document.getElementById('payPerAcreCustom');
+        if (customInput) customInput.value = '';
         // Remove selected class from all buttons
         document.querySelectorAll('.pay-acre-button').forEach(btn => btn.classList.remove('selected'));
         // Add selected class to clicked button
@@ -4106,17 +4222,17 @@ function getTotalAcres() {
 }
 
 function performPayPerAcre() {
+    const custom = payCustomTotal();
     const selectedButton = document.querySelector('.pay-acre-button.selected');
-    if (!selectedButton) {
+    if (!(custom > 0) && !selectedButton) {
         // alert('Please select a payment option.');
         return;
     }
     
-    const payType = selectedButton.getAttribute('data-pay-type');
-    const perAcreValue = parseFloat(selectedButton.getAttribute('data-per-acre'));
-    
-    const acres = getAcresForType(payType);
-    const totalPayment = acres * perAcreValue;
+    const payType = selectedButton?.getAttribute('data-pay-type');
+    const perAcreValue = parseFloat(selectedButton?.getAttribute('data-per-acre')) || 0;
+    const acres = selectedButton ? getAcresForType(payType) : 0;
+    const totalPayment = custom > 0 ? custom : acres * perAcreValue;
     
     if (totalPayment <= 0) {
         // alert('No acres to process.');
@@ -4158,9 +4274,19 @@ function performPayPerAcre() {
     updateActionButtonStates();
 }
 
+// Exact total the player typed into the Pay Per Acre modal (overrides the
+// preset per-acre buttons). Whole dollars, positive only.
+function payCustomTotal() {
+    const el = document.getElementById('payPerAcreCustom');
+    const n = Math.round(parseFloat(String(el?.value || '').replace(/,/g, '')) || 0);
+    return n > 0 ? n : 0;
+}
 // Current pay-mode total from the stored selection (what the modal opens
-// with), so the cell button can act without opening the modal.
+// with), so the cell button can act without opening the modal. A typed
+// custom total wins over the preset selection.
 function currentPayPerAcreTotal() {
+    const custom = payCustomTotal();
+    if (custom > 0) return custom;
     const perAcre = parseFloat(payModeSelection.perAcre) || 0;
     return (getAcresForType(payModeSelection.payType) || 0) * perAcre;
 }
@@ -4430,7 +4556,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '1.5';
+    const GAME_VERSION = '1.6';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';

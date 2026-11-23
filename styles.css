@@ -84,6 +84,8 @@ input[type="number"] {
     border: 1px solid #ccc;
     box-sizing: border-box;
     background-color: #b4d0fb;
+    color: #111827;
+    caret-color: #111827;
     font-size: 16px; /* Prevents zoom on iOS */
     min-height: 36px;
     vertical-align: middle;
@@ -127,15 +129,31 @@ input[type="number"] {
     color: #b91c1c;
 }
 /* Roomy thumb-sized segments on phones (matches the mobile/desktop
-   switch); desktop keeps the compact control above. */
+   switch); desktop keeps the compact control above. The input gets its
+   own full-width row: in the fixed-layout table each cell is only ~90px
+   wide on a phone, so side-by-side input + buttons collapse the input
+   to a sliver players can't see what they're typing in. */
 @media screen and (max-width: 700px) {
+    .small-input {
+        display: flex;
+        flex-wrap: wrap;
+        white-space: normal;
+    }
     #cashInput, #loanInput {
-        width: calc(100% - 118px);
+        flex: 1 1 100%;
+        width: 100%;
         padding: 8px;
         min-height: 44px;
     }
+    .sign-seg {
+        flex: 1 1 100%;
+        display: flex;
+        margin-left: 0;
+        margin-top: 4px;
+    }
     .sign-seg button {
-        width: 55px;
+        flex: 1;
+        width: auto;
         min-height: 44px;
         padding: 8px 4px;
         font-size: 20px;
