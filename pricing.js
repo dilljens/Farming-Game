@@ -115,9 +115,13 @@ export function normalizeEcon(econ) {
 
 // Live values for the game: custom numbers when their checkbox is on,
 // today's defaults otherwise. Scripts.js reads these (never the raw objects).
+// The minimum down payment is floored at 20% of price no matter what the
+// host sets — a buy always needs real skin in the game.
+export const MIN_DOWN_PCT = 20;
 export function activeEcon(rules) {
     const r = rules && typeof rules === 'object' ? rules : {};
-    return r.customecon === true ? normalizeEcon(r.econ) : { ...DEFAULT_ECON };
+    const econ = r.customecon === true ? normalizeEcon(r.econ) : { ...DEFAULT_ECON };
+    return { ...econ, downPct: Math.max(MIN_DOWN_PCT, econ.downPct) };
 }
 
 export function activeHarvest(rules) {

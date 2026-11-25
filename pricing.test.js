@@ -6,6 +6,7 @@ import {
     DEFAULT_ECON,
     DEFAULT_HARVEST,
     DEFAULT_TUNING,
+    MIN_DOWN_PCT,
     activeEcon,
     activeHarvest,
     applyScenario,
@@ -265,6 +266,11 @@ test('custom numbers apply only when their checkbox is on', () => {
     // Ticked: normalized custom numbers.
     assert.deepEqual(activeEcon({ customecon: true, econ: { debtCap: 80000, interestPct: 5, downPct: 30 } }),
         { debtCap: 80000, interestPct: 5, downPct: 30 });
+    // The minimum down payment never drops below 20%, whatever the host sets.
+    assert.equal(MIN_DOWN_PCT, 20);
+    assert.equal(activeEcon({ customecon: true, econ: { downPct: 0 } }).downPct, 20);
+    assert.equal(activeEcon({ customecon: true, econ: { downPct: 5 } }).downPct, 20);
+    assert.equal(activeEcon({ customecon: true, econ: { downPct: 50 } }).downPct, 50);
     assert.equal(activeHarvest({ customharvest: true, harvest: { equipCap: 3 } }).equipCap, 3);
     assert.equal(activeHarvest({ customharvest: true }).equipCap, DEFAULT_HARVEST.equipCap);
 });

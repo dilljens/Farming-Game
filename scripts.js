@@ -2442,7 +2442,7 @@ function updateScenarioBadge() {
 const SETTING_SPECS = [
     { group: 'econ', key: 'debtCap', label: 'Max loan $', min: 0, max: 500000, step: 5000, def: 50000, desc: 'The biggest loan the bank will give you. Set to 0 for no loans at all (Debt-Free).' },
     { group: 'econ', key: 'interestPct', label: 'Interest %', min: 0, max: 100, step: 1, def: 10, desc: 'Yearly cut added to what you owe. Higher means borrowed money costs more over time.' },
-    { group: 'econ', key: 'downPct', label: 'Min down %', min: 0, max: 100, step: 5, def: 20, desc: 'Cash you must pay up front on every buy — the rest is borrowed. 100 means cash only.' },
+    { group: 'econ', key: 'downPct', label: 'Min down %', min: 20, max: 100, step: 5, def: 20, desc: 'Cash you must pay up front on every buy — the rest is borrowed. Always at least 20%, even if set lower. 100 means cash only.' },
     { group: 'harvest', key: 'hayMidQty', label: 'Hay mid qty', min: 2, max: 20, step: 1, def: 5, desc: 'Hay you must own to reach the middle bonus tier on roll payouts.' },
     { group: 'harvest', key: 'hayMidMult', label: 'Hay mid ×', min: 1, max: 3, step: 0.5, def: 1.5, desc: 'Hay roll payout multiplier once you reach the middle tier.' },
     { group: 'harvest', key: 'hayHighQty', label: 'Hay high qty', min: 3, max: 30, step: 1, def: 10, desc: 'Hay you must own to reach the top bonus tier on roll payouts.' },
@@ -4861,7 +4861,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '2.2';
+    const GAME_VERSION = '2.3';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
@@ -5285,7 +5285,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const bounds = getBuyBounds(currentTotalCost);
         const currentLoanTotal = getCurrentLoanTotal();
         const chosen = parseInt(downPaymentSlider.value) || 0;
-        // No auto-borrowing: the down payment must come out of actual cash.        const shortfall = Math.max(0, chosen - bounds.cash);
+        // No auto-borrowing: the down payment must come out of actual cash.
+        const shortfall = Math.max(0, chosen - bounds.cash);
         const loanOk = currentLoanTotal + Math.round(currentTotalCost - chosen) + shortfall <= debtCap();
         const cashCovers = shortfall <= 0;
         setButtonDisabled(confirmBuy, !(bounds.feasible && loanOk && cashCovers));
