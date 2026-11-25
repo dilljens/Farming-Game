@@ -2670,13 +2670,21 @@ function addOpenOfferOption(sel) {
 function isOpenOfferValue(sel) {
     return sel && sel.value === 'OPEN';
 }
+// Counterparties for a given asset: everyone else in the trade room who
+// actually holds it (besides the bank/open options already listed).
+function counterpartiesHolding(asset) {
+    const mine = (document.getElementById('editableUsername')?.innerText.trim() || '');
+    const inScope = (latestLeaderboardData || []).filter((p) =>
+        (p.username || '').trim() && (p.username || '').trim() !== mine && p.username !== 'Enter name'
+        && (!currentRoomCode || (p.roomCode || '').toUpperCase() === currentRoomCode.toUpperCase()));
+    return inScope.filter((p) => getSellerQty(p, asset) > 0);
+}
 function refreshCustomBuySellers() {
     const sel = document.getElementById('customBuySeller');
     if (!sel) return;
-    const myUsername = document.getElementById('editableUsername')?.innerText.trim() || '';
     const prev = sel.value;
     sel.innerHTML = '';
-    const others = (latestLeaderboardData || []).filter(p => (p.username || '').trim() !== myUsername && p.username !== 'Enter name');
+    const others = counterpartiesHolding(document.getElementById('customBuyAsset')?.value || 'Hay');
     addOpenOfferOption(sel);
     if (others.length === 0) {
         const opt = document.createElement('option');
@@ -2704,6 +2712,28 @@ function refreshCustomBuySellers() {
             ?? ([...sel.options].some(o => o.value === '') ? '' : sel.options[0]?.value));
     if (wantBuy !== undefined) sel.value = wantBuy;
     updateCustomBuyPreview();
+}
+// Every asset the Buy buttons sell is tradeable: options/buyable cards are
+// property, not just crops. Built from the live spreadsheet so a new row
+// is tradeable the moment it gets a Buy button.
+function tradeableAssets() {
+    const names = [...document.querySelectorAll('.buy-btn[data-asset]')]
+        .map((b) => String(b.getAttribute('data-asset') || ''))
+        .filter(Boolean);
+    return [...new Set(names)].map((a) => a.charAt(0).toUpperCase() + a.slice(1));
+}
+function fillAssetSelect(selId) {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = '';
+    for (const name of tradeableAssets()) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name === 'Farm' ? 'Farm Cows' : name === 'Cows' ? 'Ranch Cows' : name;
+        sel.appendChild(opt);
+    }
+    if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
 }
 function getAssetQtyKey(asset) {
     const map = { Hay: 'Hay', Grain: 'Grain', Fruit: 'Fruit', Farm: 'Farm', Cows: 'Cows', Harvester: 'Harvester', Tractor: 'Tractor' };
@@ -2776,6 +2806,7 @@ function updateCustomBuyPreview() {
 // the counterparty dropdowns on open (plus on every snapshot) so they
 // track who's actually online. Selection-preserving via prev-restore.
 function showCustomBuyModal() {
+    fillAssetSelect('customBuyAsset');
     refreshCustomBuySellers();
     resetTradePriceToBase('customBuyPrice', 'customBuyQty', document.getElementById('customBuyAsset')?.value || 'Hay');
     updateCustomBuyPreview();
@@ -3104,6 +3135,7 @@ async function rejectTrade(tradeId) {
 // an 'accepted' trade and the existing settlement machinery takes over
 // (winner auto-applies on poll with a cash recheck, seller settles too).
 function showAuctionModal() {
+    fillAssetSelect('auctionAsset');
     const assetSel = document.getElementById('auctionAsset');
     if (assetSel) assetSel.value = 'Hay';
     const qtyEl = document.getElementById('auctionQty');
@@ -3121,17 +3153,11 @@ function updateAuctionPreview() {
     const asset = document.getElementById('auctionAsset')?.value || 'Hay';
     const qty = parseInt(document.getElementById('auctionQty')?.value || '1', 10);
     const start = Math.round(parseFloat(String(document.getElementById('auctionPrice')?.value || '0').replace(/,/g, '')) || 0);
-    const locked = isRanchCowsAsset(asset) ? ranchBonusFloor() : 0;
-    const myQty = myAssetQty(asset);
-    const sellable = Math.max(0, myQty - locked);
+    const { locked, myQty, sellable, err: stockErr } = sellableCheck(asset, qty);
     const roomScope = currentRoomCode ? `room ${currentRoomCode}` : 'the lobby';
     preview.innerHTML = `Auctioning ${qty} × ${asset}, opens at $${start.toLocaleString()} — anyone in ${roomScope} may bid. You hold ${myQty}.`;
-    let err = '';
-    if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
-    else if (!Number.isFinite(start) || start < 0) err = 'Starting bid must be ≥$0.';
-    else if (sellable < qty) err = locked > 0
-        ? `Only ${sellable} sellable (${locked} ridge bonus locked).`
-        : `You only have ${myQty} ${asset}.`;
+    let err = stockErr;
+    if (!Number.isFinite(start) || start < 0) err = 'Starting bid must be ≥$0.';
     if (hint) { hint.textContent = err; hint.classList.toggle('hidden', !err); }
     const confirm = document.getElementById('confirmAuction');
     if (confirm) confirm.disabled = !!err;
@@ -3372,10 +3398,9 @@ async function performCustomBuy() {
 function refreshCustomSellBuyers() {
     const sel = document.getElementById('customSellBuyer');
     if (!sel) return;
-    const myUsername = document.getElementById('editableUsername')?.innerText.trim() || '';
     const prev = sel.value;
     sel.innerHTML = '';
-    const others = (latestLeaderboardData || []).filter(p => (p.username || '').trim() !== myUsername && p.username !== 'Enter name');
+    const others = counterpartiesHolding(document.getElementById('customSellAsset')?.value || 'Hay');
     addOpenOfferOption(sel);
     if (others.length === 0) {
         const opt = document.createElement('option');
@@ -3410,6 +3435,28 @@ function refreshCustomSellBuyers() {
 function bankSellPrice(asset, qty) {
     return Math.max(0, Math.round(assetBasePrice(asset) * Math.max(0, qty || 0) / 2));
 }
+// Ridge-expansion rows have no qty cell (their qty lives inside Ranch Cows
+// via the bonus), so they can never be directly traded or auctioned — the
+// bearer instrument IS the ranch-cow row. Returns a block reason or ''.
+function ridgeAssetBlock(asset) {
+    return '';
+}
+// Sellable check shared by the sell form, its counterparty rows, and the
+// auction form: ranch cows stop at the ridge-bonus floor (bonus cows are
+// earned property, never sellable stock); everything else can go to zero.
+function sellableCheck(asset, qty) {
+    const locked = isRanchCowsAsset(asset) ? ranchBonusFloor() : 0;
+    const myQty = myAssetQty(asset);
+    const sellable = Math.max(0, myQty - locked);
+    const blocked = ridgeAssetBlock(asset);
+    if (blocked) return { locked, myQty, sellable: 0, err: blocked };
+    let err = '';
+    if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
+    else if (sellable < qty) err = locked > 0
+        ? `Only ${sellable} sellable (${locked} ridge bonus locked).`
+        : `You only have ${myQty} ${asset}.`;
+    return { locked, myQty, sellable, err };
+}
 function isBankBuyer() {
     const opt = document.getElementById('customSellBuyer')?.selectedOptions?.[0];
     return (opt?.dataset?.uid || '') === 'BANK';
@@ -3418,8 +3465,7 @@ function updateCustomSellPreview() {
     const preview = document.getElementById('customSellPreview');
     const hint = document.getElementById('customSellHint');
     if (!preview) return;
-    const buyerSel = document.getElementById('customSellBuyer');
-    const asset = document.getElementById('customSellAsset')?.value || 'Hay';
+    const buyerSel = document.getElementById('customSellBuyer');    const asset = document.getElementById('customSellAsset')?.value || 'Hay';
     const qty = parseInt(document.getElementById('customSellQty')?.value || '1', 10);
     const priceEl = document.getElementById('customSellPrice');
     const bank = isBankBuyer();
@@ -3436,22 +3482,16 @@ function updateCustomSellPreview() {
     const isOpen = isOpenOfferValue(buyerSel);
     const buyerName = isOpen ? 'Anyone (open offer)' : (opt?.dataset?.username || opt?.textContent?.split(' (')[0] || 'buyer');
     // Ranch cows: only qty above the ridge-bonus floor can be sold.
-    const locked = isRanchCowsAsset(asset) ? ranchBonusFloor() : 0;
-    const myQty = myAssetQty(asset);
-    const sellable = Math.max(0, myQty - locked);
+    const { locked, myQty, sellable, err: stockErr } = sellableCheck(asset, qty);
     preview.innerHTML = `You: ${asset} ${myQty} → ${myQty - qty} after sale` +
         (locked > 0 ? ` (${locked} ridge bonus locked)` : '') +
         (isOpen
             ? `<br>Anyone in ${currentRoomCode ? `room ${currentRoomCode}` : 'the lobby'} may accept for $${price.toLocaleString()} (${qty} × ${asset})`
             : (bank ? `<br>Bank pays $${price.toLocaleString()} now — half of $${assetBasePrice(asset).toLocaleString()} base × ${qty}`
             : `<br>${buyerName} pays $${price.toLocaleString()} for ${qty} × ${asset}`));
-    let err = '';
+    let err = stockErr;
     if (!buyerSel || !buyerSel.value) err = 'Pick a buyer.';
-    else if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
     else if (!Number.isFinite(price) || price < 0) err = 'Price must be ≥0.';
-    else if (sellable < qty) err = locked > 0
-        ? `Only ${sellable} sellable (${locked} ridge bonus locked).`
-        : `You only have ${myQty} ${asset}.`;
     if (hint) { hint.textContent = err; hint.classList.toggle('hidden', !err); }
     const confirm = document.getElementById('confirmCustomSell');
     if (confirm) {
@@ -3460,6 +3500,7 @@ function updateCustomSellPreview() {
     }
 }
 function showCustomSellModal() {
+    fillAssetSelect('customSellAsset');
     refreshCustomSellBuyers();
     resetTradePriceToBase('customSellPrice', 'customSellQty', document.getElementById('customSellAsset')?.value || 'Hay');
     updateCustomSellPreview();
@@ -4861,7 +4902,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '2.3';
+    const GAME_VERSION = '2.4';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
