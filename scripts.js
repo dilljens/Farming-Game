@@ -705,8 +705,8 @@ function addLoanTransactionValue(amount) {
         updateTotals();
         const currentLoanTotal = getCurrentLoanTotal();
         if (currentLoanTotal + numericValue > debtCap()) {
-            console.warn('Loan transaction would exceed the debt limit (cap $' + debtCap().toLocaleString() + '). Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + numericValue.toLocaleString() + '.');
-            return; // Silently fail for programmatic calls
+            sayStatus(`Debt cap $${debtCap().toLocaleString()} blocks the $${numericValue.toLocaleString()} loan — pay down debt or ask the host to raise the cap.`);
+            return; // Refuse (programmatic and manual paths share this gate)
         }
     }
 
@@ -990,8 +990,9 @@ function getBuyBounds(totalCost) {
         max = 0;
         feasible = false;
     } else if (effective >= total) {
-        // Cash + borrowing covers everything: any down payment works,
-        // the shortfall is borrowed automatically at confirm.
+        // Cash covers part of it and debt room covers the rest: the full
+        // range stays reachable, but positions above cash need borrowing
+        // first — Confirm gates on actual cash, never on auto-borrow.
         max = total;
         feasible = max >= min;
     } else {
@@ -4860,7 +4861,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '2.1';
+    const GAME_VERSION = '2.2';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
@@ -5230,10 +5231,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
     let lastDownPaymentAmount = 0; // Remember last dollar amount
     let minValidDownPayment = 0;
 
-    // Recompute slider bounds from the CURRENT total cost. The down payment
-    // may draw on cash plus unused debt room (the shortfall is borrowed
-    // automatically at confirm), so a buyer with cash + borrowing power
-    // always gets the full range instead of a collapsed single price.
+    // Recompute slider bounds from the CURRENT total cost. The range spans
+    // what cash plus debt room could cover, but Confirm enforces the down
+    // payment out of actual cash — nothing is borrowed inside the buy.
     // Disables Confirm when even maximum debt makes the purchase impossible.
     function refreshDownPaymentSlider() {
         updateTotals();
@@ -5251,7 +5251,6 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
         document.getElementById('minDownPayment').textContent = Number(downPaymentSlider.min).toLocaleString();
         document.getElementById('maxDownPayment').textContent = Number(downPaymentSlider.max).toLocaleString();
-
         const minVal = parseInt(downPaymentSlider.min);
         const maxVal = parseInt(downPaymentSlider.max);
         // Open where no borrowing is needed when possible: cap the
@@ -5278,37 +5277,30 @@ window.addEventListener('DOMContentLoaded', (event) => {
         updateModalAmounts(parseInt(downPaymentSlider.value));
     }
 
-    // Gate Confirm + hint off the CURRENT bounds (set before the slider
-    // is presented). Called whenever the bounds change — modal open, bulk
-    // select — never per drag tick: every position inside a feasible
-    // [min, max] is affordable by construction, and an infeasible range
-    // disables the slider itself above. The confirm-click handler keeps
-    // its own backstop recheck for econ changes mid-modal.
+    // Gate Confirm + hint off live bounds AND the CURRENT slider value.
+    // Called on open, bulk select, and every drag tick: the range offers
+    // positions the player may not cover, so only this says what's payable.
     function validateBuyConfirm() {
         updateTotals();
         const bounds = getBuyBounds(currentTotalCost);
         const currentLoanTotal = getCurrentLoanTotal();
         const chosen = parseInt(downPaymentSlider.value) || 0;
-        const shortfall = Math.max(0, chosen - bounds.cash);
+        // No auto-borrowing: the down payment must come out of actual cash.        const shortfall = Math.max(0, chosen - bounds.cash);
         const loanOk = currentLoanTotal + Math.round(currentTotalCost - chosen) + shortfall <= debtCap();
-        setButtonDisabled(confirmBuy, !(bounds.feasible && loanOk));
+        const cashCovers = shortfall <= 0;
+        setButtonDisabled(confirmBuy, !(bounds.feasible && loanOk && cashCovers));
 
         const hint = document.getElementById('buyCashHint');
         if (hint) {
             const errorClasses = ['text-red-600'];
             const infoClasses = ['text-yellow-700'];
-            if (bounds.feasible && loanOk) {
-                // Only narrate borrowing when it's unavoidable (the minimum
-                // itself exceeds cash). A slider dragged above cash by choice
-                // needs no commentary — the Cash/Loan After lines show it.
-                if (bounds.min > bounds.cash && shortfall > 0) {
-                    hint.textContent = `Includes $${shortfall.toLocaleString()} borrowed for the down payment`;
-                    hint.classList.remove(...errorClasses);
-                    hint.classList.add(...infoClasses);
-                    hint.classList.remove('hidden');
-                } else {
-                    hint.classList.add('hidden');
-                }
+            if (bounds.feasible && loanOk && cashCovers) {
+                hint.classList.add('hidden');
+            } else if (cashCovers === false && bounds.feasible && loanOk) {
+                hint.textContent = `Down payment needs $${chosen.toLocaleString()} cash — borrow $${shortfall.toLocaleString()} from the Cash section first`;
+                hint.classList.remove(...errorClasses);
+                hint.classList.add(...infoClasses);
+                hint.classList.remove('hidden');
             } else if (!bounds.feasible) {
                 hint.textContent = `Not affordable: $${bounds.min.toLocaleString()} down needed, $${bounds.max.toLocaleString()} available`;
                 hint.classList.remove(...infoClasses);
@@ -5321,7 +5313,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 hint.classList.remove('hidden');
             }
         }
-        return bounds.feasible && loanOk;
+        return bounds.feasible && loanOk && cashCovers;
     }
 
     function showBuyModal(asset, cost, totalCost) {
@@ -5450,23 +5442,23 @@ window.addEventListener('DOMContentLoaded', (event) => {
         document.getElementById('downPaymentSummary').textContent = downPayment.toLocaleString();
         document.getElementById('loanAmount').textContent = loanAmount.toLocaleString();
 
-        // Calculate after purchase (a down-payment shortfall is borrowed,
-        // so cash never drops below $0 even when debt funds part of it)
+        // Straight math: the down payment leaves cash, the remainder lands
+        // on the loan. A position the player can't cover keeps Confirm off.
         updateTotals();
         const currentCash = getCurrentCashTotal();
         const currentLoan = getCurrentLoanTotal();
-        const shortfall = Math.max(0, downPayment - currentCash);
-        const cashAfter = currentCash - downPayment + shortfall;
-        const loanAfter = currentLoan + loanAmount + shortfall;
+        const cashAfter = currentCash - downPayment;
+        const loanAfter = currentLoan + loanAmount;
         document.getElementById('cashAfter').textContent = cashAfter.toLocaleString();
         document.getElementById('loanAfter').textContent = loanAfter.toLocaleString();
     }
 
     downPaymentSlider.addEventListener('input', function() {
         const downPaymentAmount = parseInt(this.value);
-        // Preview only: the range was validated before presentation, so
-        // every reachable position here is affordable and within the cap.
+        // Re-gate on every tick: a dragged position can exceed cash or the
+        // debt room, and only Confirm + hint (never the range) say so.
         updateModalAmounts(downPaymentAmount);
+        validateBuyConfirm();
     });
 
     confirmBuy.addEventListener('click', function() {
@@ -5474,23 +5466,24 @@ window.addEventListener('DOMContentLoaded', (event) => {
         lastDownPaymentAmount = downPayment; // Remember for next time
         const loanAmount = Math.round(currentTotalCost - downPayment);
 
-        // Cash covers the down payment, borrowing the shortfall automatically
-        // when debt room allows (the slider only offers feasible choices).
+        // The player must actually pay the down payment: no borrowing it
+        // inside the buy. Recompute fresh (room econ may have moved) and
+        // refuse with the reason instead of silently covering the gap.
         updateTotals();
-        const currentCash = getCurrentCashTotal();
-        const shortfall = Math.max(0, downPayment - currentCash);
-        const currentLoanTotal = getCurrentLoanTotal();
-
-        // Check if loan would exceed the debt limit (remainder + borrowed down payment)
-        if (currentLoanTotal + loanAmount + shortfall > debtCap()) {
-            // alert('Loan would exceed the debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + loanAmount.toLocaleString() + '.');
+        if (!validateBuyConfirm()) {
+            sayStatus(`Down payment not covered — needs $${downPayment.toLocaleString()} cash on hand.`);
             return;
         }
-
-        // Borrowing covers the shortfall first, so this can never fail, but
-        // keep the guard as a backstop against stale totals.
-        if (currentCash < downPayment - shortfall) {
+        const currentCash = getCurrentCashTotal();
+        if (currentCash < downPayment) {
             showCashFloorWarning(downPayment);
+            return;
+        }
+        const currentLoanTotal = getCurrentLoanTotal();
+
+        // Check if the remainder loan fits the debt limit.
+        if (currentLoanTotal + loanAmount > debtCap()) {
+            // alert('Loan would exceed the debt limit. Current debt: $' + currentLoanTotal.toLocaleString() + ', Additional loan: $' + loanAmount.toLocaleString() + '.');
             return;
         }
 
@@ -5519,20 +5512,11 @@ window.addEventListener('DOMContentLoaded', (event) => {
         qtyIncrease *= purchaseMult;
 
         // All checks passed — now move the money and apply the purchase.
-        // The borrowed shortfall lands first so the down payment can never
-        // trip the cash floor; net effect: buyer spends all available cash
-        // and debts the rest.
+        // The down payment leaves cash (verified above); the remainder
+        // lands on the loan. Net effect matches the Cash/Loan After preview.
         const buyCashBefore = ledgerLen('cash');
         const buyLoanBefore = ledgerLen('loan');
-        if (shortfall > 0) {
-            addCashTransactionValue(shortfall);
-            addLoanTransactionValue(shortfall);
-        }
-        // Add cash transaction (negative for payment). The full down payment
-        // leaves cash — the shortfall was borrowed on top first, so this
-        // nets to spending all available cash and debting the rest.
-        // (Paying only downPayment - shortfall would hand the buyer the
-        // borrowed shortfall as free cash and disagree with the preview.)
+        // Add cash transaction (negative for payment).
         addCashTransactionValue(-downPayment);
         // Add loan transaction (positive for loan)
         addLoanTransactionValue(loanAmount);
