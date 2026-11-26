@@ -74,11 +74,50 @@ input[type="number"] {
     min-height: 44px; /* Minimum touch target size */
 }
 
-/* Cash/loan transaction inputs are text (not number) so mobile keyboards
-   can enter a minus sign; inputmode="numeric" keeps the numeric keypad. */
-.small-input {
-    white-space: nowrap;
+/* Ledger column proportions: memos get room, amounts never wrap. */
+.financial-table .col-note { width: 24%; }
+.financial-table .col-amt { width: 15%; }
+.financial-table .col-total { width: 11%; }
+/* Zebra data rows (header/entry rows use th / .entry-cell, untouched). */
+#financialTable tr:nth-child(even) td:not(.entry-cell) {
+    background-color: #f3f4f6;
 }
+/* Empty ledger cells read as intentional, not broken. */
+#financialTable td:empty::before {
+    content: "—";
+    color: #d1d5db;
+}
+/* Cash/loan entry form cells (one roomy cell per side). */
+.entry-cell {
+    white-space: nowrap;
+    background-color: #f8fafc;
+    padding: 8px;
+    vertical-align: top;
+}
+.entry-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+.entry-head strong {
+    font-size: 15px;
+}
+.undo-btn {
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+    background-color: #e5e7eb;
+    border: 0;
+    border-radius: 9999px;
+    padding: 6px 12px;
+    min-height: 32px;
+    cursor: pointer;
+}
+.undo-btn:hover { background-color: #d1d5db; }
+.undo-btn:active { background-color: #9ca3af; }
+/* Cash/loan entry inputs are text (not number) so mobile keyboards can
+   enter a minus sign; inputmode="numeric" keeps the numeric keypad. */
 #cashInput, #loanInput {
     width: calc(100% - 88px);
     padding: 6px 8px;
@@ -135,10 +174,10 @@ input[type="number"] {
    wide on a phone, so side-by-side input + buttons collapse the input
    to a sliver players can't see what they're typing in. */
 @media screen and (max-width: 700px) {
-    .small-input {
+    .entry-cell {
         white-space: normal;
     }
-    .small-input .small-wrap {
+    .entry-cell .small-wrap {
         display: flex;
         flex-wrap: wrap;
     }
@@ -176,7 +215,7 @@ input[type="number"] {
 /* Cash/loan entry wrapper: invisible on desktop (children lay out exactly
    as before), flex row-stack on phones. Same anonymous-box reason as
    .qty-cell above — the <td> must keep its table display. */
-.small-input .small-wrap {
+.entry-cell .small-wrap {
     display: contents;
 }
 
@@ -525,7 +564,7 @@ input, .editable {
         background-color: #f2f2f2;
     }
 
-    .input-cell input, .small-input input {
+    .input-cell input, .entry-cell input {
         padding: 1px; /* pre-rooms sizing */
     }
 

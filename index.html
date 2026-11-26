@@ -578,14 +578,17 @@
 </div>
 
 <div class="table-wrap"><table class="financial-table" id="financialTable">
-  <!-- Headers -->
+  <colgroup>
+    <col class="col-note" /><col class="col-amt" /><col class="col-total" />
+    <col class="col-note" /><col class="col-amt" /><col class="col-total" />
+  </colgroup>
+  <!-- Entry forms: one roomy cell per side (label + undo + inputs) -->
   <tr>
-    <th class="note-head">Note</th>
-    <th id="cashUndoCell" class="font-semibold cursor-pointer select-none">
-      Cash
-      <div class="undo-hint text-gray-400 font-normal">tap to undo last action</div>
-    </th>
-    <td class="small-input">
+    <td colspan="3" class="entry-cell">
+      <div class="entry-head">
+        <strong>Cash</strong>
+        <button id="cashUndoCell" type="button" class="undo-btn" title="Undo last action">↩ Undo</button>
+      </div>
       <div class="small-wrap">
       <input type="text" id="cashInput" placeholder="Enter Cash value" inputmode="numeric" autocomplete="off" />
       <div class="sign-seg" data-target="cashInput" data-sign="+" role="group" aria-label="Cash entry: subtract or add">
@@ -595,12 +598,11 @@
       <input type="text" id="cashNoteInput" class="tx-note-input" placeholder="Note (optional)" autocomplete="off" maxlength="60" />
       </div>
     </td>
-    <th class="note-head">Note</th>
-    <th id="loanUndoCell" class="font-semibold cursor-pointer select-none">
-      Loan
-      <div class="undo-hint text-gray-400 font-normal">tap to undo last action</div>
-    </th>
-    <td class="small-input">
+    <td colspan="3" class="entry-cell">
+      <div class="entry-head">
+        <strong>Loan</strong>
+        <button id="loanUndoCell" type="button" class="undo-btn" title="Undo last action">↩ Undo</button>
+      </div>
       <div class="small-wrap">
       <input type="text" id="loanInput" placeholder="Enter Loan value" inputmode="numeric" autocomplete="off" />
       <div class="sign-seg" data-target="loanInput" data-sign="+" role="group" aria-label="Loan entry: repay or borrow">
@@ -615,11 +617,11 @@
   <!-- Headers for Transactions and Totals -->
   <tr>
     <th>Note</th>
-    <th>Transaction</th>
-    <th>Cash Total</th>
+    <th>Amount</th>
+    <th>Total</th>
     <th>Note</th>
-    <th>Transaction</th>
-    <th>Loan Total</th>
+    <th>Amount</th>
+    <th>Total</th>
   </tr>
   <tr>
     
