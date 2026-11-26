@@ -19,7 +19,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907f';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName, shuffledRolls } from './pricing.js?v=20261004l';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName, shuffleRollsRandom, shuffledRolls } from './pricing.js?v=20261004l';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -666,6 +666,18 @@ function performChristmas() {
         saveQuantitiesToLocalStorage();
         sayStatus(`🎄 Merry Christmas! +$${CHRISTMAS_GIFT.toLocaleString()} cash — now Year ${data.playerYear}.`);
     }
+    // A new year resets the ×2 toggles: unselect Hay ×2 and Corn ×2 if
+    // either is on (table tap states are left alone). Clicking the toggle
+    // reuses its own handler, so paint, corn-row removal, and repopulate
+    // all follow. Toast only when something actually cleared.
+    try {
+        let cleared = false;
+        for (const id of ['dblHayBtn', 'dblCornBtn']) {
+            const btn = document.getElementById(id);
+            if (btn?.getAttribute('aria-pressed') === 'true') { btn.click(); cleared = true; }
+        }
+        if (cleared) undoToast('🎄 New year — Hay ×2 and Corn ×2 toggles cleared');
+    } catch {}
 }
 // Cash can never go below zero via spending. Epsilon absorbs float noise.
 function wouldGoNegativeCash(numericValue) {
@@ -1833,7 +1845,17 @@ function setScreen(name, opts = {}) {
             if (progressChart) { progressChart.resize(); progressChart.update('none'); }
         } catch {}
     }
+    syncTradeButtons(key);
     try { window.scrollTo({ top: 0, behavior: opts.instant ? 'auto' : 'smooth' }); } catch { window.scrollTo(0, 0); }
+}
+// Buy-from-player / Sell-to-player / Auction live outside the screen
+// panels, so in mobile view they are only shown on the Property screen.
+// Desktop always shows them (the panels all show at once there).
+function syncTradeButtons(key) {
+    const show = document.body.dataset.view !== 'mobile' || key === 'property';
+    for (const id of ['tradeButtons', 'tradeInboxHint']) {
+        document.getElementById(id)?.classList.toggle('trade-hidden', !show);
+    }
 }
 function currentScreenFromUrl() {
     const h = (window.location.hash || '').replace('#', '');
@@ -1863,6 +1885,7 @@ function applyViewMode(mode, opts = {}) {
     try { if (!opts.skipSave) localStorage.setItem('fgViewMode', m); } catch {}
     if (m === 'desktop') {
         for (const panel of document.querySelectorAll('[data-screen-panel]')) panel.classList.remove('screen-hidden');
+        syncTradeButtons();
     } else {
         setScreen(currentScreenFromUrl(), { instant: true, skipSave: true, skipHash: true });
     }
@@ -1977,7 +2000,7 @@ const RULE_DESCRIPTIONS = {
     estate: 'Adds a shared surcharge: crops per unit and farms/equipment per unit owned past the starting grant, cattle per 2 head — all off room-average ownership.',
     balance: 'Crowded crops cost up to $1,000 over base in $100 tickets; ignored ones discount the same way. Hay caps at $20k, fruit floors at $20k.',
     events: 'Each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped. Over-held crops also drift down and under-held crops drift up ($100 tickets, up to ±$500).',
-    shufflerolls: 'Each harvest pays best on a different roll: every crop table is randomly reordered, fixed for the room, same order on every device.',
+    shufflerolls: 'Tables reshuffle after every collected payout: the same six payouts per crop in a fresh random order each time — any roll 1-6 can pay best or worst.',
     customecon: 'Enables your economy numbers below (unticked = $50k cap, 10% interest, 20% down).',
     customharvest: 'Enables your harvest numbers below (unticked = standard hay tiers and equipment bonus).'
 };
@@ -2603,6 +2626,71 @@ function bindSettingsSliders(scope, onCommit) {
 // there is no mid-game tuning. The shared renderer above serves it.
 
 // --- Digital dice — hidden by default, for tables without physical dice ---
+// Classic per-unit roll payouts, ascending: roll 1 pays worst, roll 6 best.
+// The same six numbers per crop; every collected payout deals them into a
+// fresh random order (see reshuffleRollTables), so the best payout can land
+// on any roll 1-6 each time.
+const BASE_ROLL_VALUES = {
+  Hay: [400, 600, 1000, 1500, 2200, 3000],
+  Grain: [800, 1500, 2500, 3800, 5300, 7000],
+  Fruit: [2000, 3500, 6000, 9000, 13000, 17500],
+  Cows: [1400, 2000, 2800, 3800, 5000, 7500]
+};
+// Live per-crop order. Shuffled from the moment the game loads and
+// re-dealt after every collected payout — a fresh random permutation of
+// the same six values, so any roll 1-6 can pay best or worst at any point.
+// Qty edits and dice rolls repaint via populateRollTable() but never
+// reshuffle on their own.
+let liveRollValues = {};
+for (const k of Object.keys(BASE_ROLL_VALUES)) {
+    liveRollValues[k] = shuffleRollsRandom(BASE_ROLL_VALUES[k]);
+}
+function reshuffleRollTables() {
+    liveRollValues = {};
+    for (const k of Object.keys(BASE_ROLL_VALUES)) {
+        liveRollValues[k] = shuffleRollsRandom(BASE_ROLL_VALUES[k]);
+    }
+    clearRollColumn();
+    try { populateRollTable(); } catch {}
+    // One quick pulse so the post-tap reorder reads as intentional.
+    try {
+        const table = document.querySelector('.roll-table');
+        if (table) {
+            table.classList.remove('reshuffled');
+            void table.offsetWidth;
+            table.classList.add('reshuffled');
+        }
+    } catch {}
+}
+// Highlight the table column matching the rolled number so players can
+// find the payout to tap. Cleared whenever the tables reshuffle.
+function paintRollColumn() {
+    const table = document.querySelector('.roll-table');
+    if (!table) return;
+    const n = parseInt(table.dataset.lastRoll || '', 10);
+    table.querySelectorAll('.is-roll-col').forEach((c) => c.classList.remove('is-roll-col'));
+    if (!(n >= 1 && n <= 6)) return;
+    table.querySelectorAll('tr').forEach((row) => {
+        const cell = row.cells[n];
+        if (cell) cell.classList.add('is-roll-col');
+    });
+}
+// Mark the rolled number without needing the digital dice — tapping a 1-6
+// header or settling a digital roll both land here.
+function setRollColumn(n) {
+    const table = document.querySelector('.roll-table');
+    if (!table) return;
+    n = parseInt(n, 10);
+    if (!(n >= 1 && n <= 6)) return;
+    table.dataset.lastRoll = String(n);
+    paintRollColumn();
+}
+function clearRollColumn() {
+    const table = document.querySelector('.roll-table');
+    if (!table) return;
+    delete table.dataset.lastRoll;
+    table.querySelectorAll('.is-roll-col').forEach((c) => c.classList.remove('is-roll-col'));
+}
 let diceHistory = [];
 let diceRolling = false;
 function setDiceDisplay(value) {
@@ -2621,7 +2709,8 @@ function rollDice() {
     const el = document.getElementById('diceDisplay');
     if (!el) { pushDiceHistory(String(roll)); return roll; }
     // Tumble through faces before settling, so rolling the same number
-    // twice in a row still reads as a fresh roll.
+    // twice in a row still reads as a fresh roll. Settling lights up the
+    // matching table column so the payout is easy to find and tap.
     diceRolling = true;
     const btn = document.getElementById('rollDiceBtn');
     if (btn) btn.disabled = true;
@@ -2632,6 +2721,7 @@ function rollDice() {
             clearInterval(iv);
             setDiceDisplay(`🎲 ${roll}`);
             pushDiceHistory(String(roll));
+            try { setRollColumn(roll); } catch {}
             try { navigator.vibrate && navigator.vibrate(10); } catch {}
             diceRolling = false;
             if (btn) btn.disabled = false;
@@ -2650,6 +2740,11 @@ function setDiceVisible(visible) {
 document.getElementById('toggleDiceBtn')?.addEventListener('click', () => setDiceVisible(true));
 document.getElementById('hideDiceBtn')?.addEventListener('click', () => setDiceVisible(false));
 document.getElementById('rollDiceBtn')?.addEventListener('click', () => rollDice());
+// Phones open on the Rolls screen with the dice buried behind an extra tap,
+// so show it by default on small screens (Hide still works afterwards).
+try {
+    if (window.matchMedia?.('(max-width: 600px)').matches) setDiceVisible(true);
+} catch {}
 // haptics for thumb actions (dice/buy/qty/roll)
 document.addEventListener('click', (e) => {
     if (e.target.closest('.buy-btn, .qty-btn, .roll-cell-button, #rollDiceBtn, #confirmBuy, #confirmCustomBuy, #confirmCustomSell, #payPerAcreBtn, #payInterestBtn, #gainPerAcreBtn, #payOffLoanBtn')) {
@@ -3707,27 +3802,22 @@ function numberWithCommasAndDecimals(x) {
 //console.log(numberWithCommasAndDecimals('1107.1')); // Should log '1,107'
 
 function populateRollTable() {
-    // Define the base monetary values for each roll and item type.
-    // Rolls are inverted on purpose: roll 1 pays best, roll 6 pays worst
-    // (1<->6, 2<->5, 3<->4), so low dice are the exciting ones.
-    const baseValues = {
-      Hay: [3000, 2200, 1500, 1000, 600, 400],
-      Grain: [7000, 5300, 3800, 2500, 1500, 800],
-      Fruit: [17500, 13000, 9000, 6000, 3500, 2000],
-      Cows: [7500, 5000, 3800, 2800, 2000, 1400]
-    };
-    // Shuffle rule: each crop's table is randomly reordered (best payout
-    // can land on any roll 1-6). Deterministic per room so every device
-    // shows the identical tables all game.
+    // Base per-unit payouts (see BASE_ROLL_VALUES by the dice). The live
+    // order is a fresh random permutation per crop — shuffled on load and
+    // re-dealt after every collected payout. The legacy room shuffle below
+    // is only a fallback if no live order exists yet.
+    const baseValues = BASE_ROLL_VALUES;
+    // Live order: a fresh random permutation per crop (same six payouts,
+    // new order on load and after every tap).
     const shuffleOn = !!(normalizeRules(currentRoomRules).shufflerolls && currentRoomCode);
     const rollValues = {};
     for (const k of Object.keys(baseValues)) {
-        rollValues[k] = shuffleOn ? shuffledRolls(baseValues[k], k, currentRoomCode) : baseValues[k];
+        if (liveRollValues && liveRollValues[k]) rollValues[k] = liveRollValues[k];
+        else rollValues[k] = shuffleOn ? shuffledRolls(baseValues[k], k, currentRoomCode) : baseValues[k];
     }
     const helpEl = document.querySelector('.roll-help');
-    if (helpEl) helpEl.textContent = shuffleOn
-        ? 'Roll tables are shuffled — the best payout can be any roll 1-6'
-        : 'Tap the names of the asset to 1/2x, 2x, or return to normal';
+    if (helpEl) helpEl.textContent = 'Roll (real dice work too), tap your number above, then tap the payout — any roll 1-6 can pay best or worst, table reshuffles after every payout';
+    try { paintRollColumn(); } catch {}
     
     // Get the quantities from the contenteditable cells
     // Assuming these cells have an id or a specific class to identify them
@@ -3786,10 +3876,15 @@ function populateRollTable() {
 
             // Manual multiplier from tapping (Hay alone keeps a ×2 tap
             // state; corn doubles through its own row, never via Grain).
+            // The Hay ×2 toggle above the table stacks with the tap state,
+            // so toggle × tap-×2 pays ×4.
             const state = parseInt(row.cells[0].getAttribute('data-state') || 0);
             let manualMultiplier = 1;
             if (state === 1) manualMultiplier = 0.5;
             else if (state === 2 && assetType === 'Hay') manualMultiplier = 2;
+            if (assetType === 'Hay' && document.querySelector('.roll-table')?.dataset.hayToggle2 === '1') {
+                manualMultiplier *= 2;
+            }
   
       // Calculate and populate the cells for each roll
       rollValues[assetType].forEach((value, rollIndex) => {
@@ -4949,6 +5044,13 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     btn = btn.closest('button.roll-cell-button');
                 }
                 
+                // Tapping a 1-6 header marks the rolled number (for real
+                // dice or a re-mark) — no payout, just the highlight.
+                const header = e.target.closest?.('th[data-roll]');
+                if (header) {
+                    try { setRollColumn(header.dataset.roll); } catch {}
+                    return;
+                }
                 if (!btn || !btn.classList.contains('roll-cell-button')) {
                     return;
                 }
@@ -4975,6 +5077,15 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     loan: 0
                 });
                 console.log(`Roll payout ${text} added to cash transactions`);
+                // Confirm the tap, then deal a fresh table: same six payouts
+                // per crop in a new random order for the next turn.
+                try {
+                    const row = btn.closest('tr');
+                    const asset = (row?.cells[0]?.textContent || '').split(' ')[0] || 'Crop';
+                    const rollNum = btn.closest('td')?.cellIndex || '?';
+                    undoToast(`+$${value.toLocaleString()} ${asset} · roll ${rollNum} — table reshuffled`);
+                } catch {}
+                reshuffleRollTables();
             });
         }
 
@@ -5153,12 +5264,19 @@ window.addEventListener('DOMContentLoaded', (event) => {
         });
     });
 
-    // Toggle circles above the roll table. Hay ×2 flips the Hay tap state;
-    // Corn ×2 adds its own Corn row (doubled corn payouts) right under the
-    // Grain row instead of doubling all grain — corn is only part of grain.
+    // Toggle circles above the roll table. Hay ×2 is its own multiplier,
+    // independent of tapping the Hay name — toggle (×2) times table tap
+    // (×2) stacks to ×4. Corn ×2 adds its own Corn row (doubled corn
+    // payouts) right under the Grain row instead of doubling all grain —
+    // corn is only part of grain.
     // The Corn row uses the grain quantity and the same harvester bonus as
     // grain; tapping Grain itself never doubles (0/1 only, like Fruit/Cows).
     let cornDoubled = false;
+    // Hay toggle lives on the table's dataset (not the Hay tap state) so
+    // the top-level populateRollTable can stack it with the tap multiplier.
+    function hayToggleOn() {
+        return document.querySelector('.roll-table')?.dataset.hayToggle2 === '1';
+    }
     function rollAssetState(asset) {
         const td = [...document.querySelectorAll('.roll-table tr:not(:first-child) td:first-child')]
             .find(c => c.textContent.split(' ')[0] === asset);
@@ -5172,14 +5290,15 @@ window.addEventListener('DOMContentLoaded', (event) => {
             btn.classList.toggle('is-on', on);
             btn.textContent = `${on ? '●' : '○'} ${label}`;
         };
-        paint('dblHayBtn', rollAssetState('Hay').state === 2, 'Hay ×2');
+        paint('dblHayBtn', hayToggleOn(), 'Hay ×2');
         paint('dblCornBtn', cornDoubled, 'Corn ×2');
     }
-    function setDoubled(asset, on) {
-        const { td } = rollAssetState(asset);
-        if (!td) return;
-        td.setAttribute('data-state', on ? 2 : 0);
-        updateAssetDisplay(td, on ? 2 : 0);
+    function setHayDoubled(on) {
+        const table = document.querySelector('.roll-table');
+        if (!table) return;
+        table.dataset.hayToggle2 = on ? '1' : '0';
+        const { td, state } = rollAssetState('Hay');
+        if (td) updateAssetDisplay(td, state);
         populateRollTable();
         syncDoubleToggles();
     }
@@ -5219,12 +5338,32 @@ window.addEventListener('DOMContentLoaded', (event) => {
             else table.appendChild(row);
         }
     }
-    document.getElementById('dblHayBtn')?.addEventListener('click', () => setDoubled('Hay', rollAssetState('Hay').state !== 2));
+    document.getElementById('dblHayBtn')?.addEventListener('click', () => setHayDoubled(!hayToggleOn()));
     document.getElementById('dblCornBtn')?.addEventListener('click', () => setCornDoubled(!cornDoubled));
     syncDoubleToggles();
 
     function updateAssetDisplay(td, state) {
         const asset = td.textContent.split(' ')[0]; // Get base asset name
+        // Hay's effective multiplier stacks the toggle with the tap state,
+        // so the cell names the real payout (toggle × tap-×2 = ×4).
+        if (asset === 'Hay') {
+            const tap = state === 1 ? 0.5 : state === 2 ? 2 : 1;
+            const eff = tap * (hayToggleOn() ? 2 : 1);
+            if (eff === 1) {
+                td.textContent = asset;
+                td.style.color = '';
+                td.style.backgroundColor = '';
+            } else if (eff === 0.5) {
+                td.textContent = asset + ' x1/2';
+                td.style.color = 'red';
+                td.style.backgroundColor = '';
+            } else {
+                td.textContent = asset + ' x' + eff;
+                td.style.color = 'green';
+                td.style.backgroundColor = '';
+            }
+            return;
+        }
         if (state === 0) {
             td.textContent = asset;
             td.style.color = '';

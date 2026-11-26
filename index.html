@@ -103,7 +103,7 @@
                           <li><strong>Estate</strong> — adds a shared surcharge: crops/farms/equipment per owned unit past the starting grant, cattle per 2 head, all off room averages.</li>
                           <li><strong>Balance</strong> — crowded crops cost up to $1,000 over base in $100 tickets; ignored ones discount the same way. Hay (base $15,000) caps at $20,000; fruit (base $25,000) floors at $20,000.</li>
                           <li><strong>Boom&amp;Bust</strong> — each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped at ±50% of base. Same walk on every device. Off-average crops drift back in $100 tickets up to ±$500.</li>
-                          <li><strong>Shuffle rolls</strong> — each crop's roll table is randomly reordered (best payout can be any roll 1-6), fixed for the room and identical on every device.</li>
+                          <li><strong>Shuffle rolls</strong> — each crop's roll table is randomly reordered (best payout can be any roll 1-6), reshuffled after every collected payout. Works with real dice: tap the 1–6 header for the number rolled, then tap the payout.</li>
                           <li><strong>Economy</strong> — enables the host's economy numbers below (unticked = standard $50k loan cap, 10% interest, 20% min down).</li>
                           <li><strong>Harvest</strong> — enables the host's harvest numbers below (unticked = standard hay tiers and equipment bonuses).</li>
                         </ul>
@@ -358,20 +358,20 @@
       <div id="diceHistory" class="text-xs text-gray-500 mt-2 min-h-[14px]"></div>
       <button id="hideDiceBtn" type="button" class="mt-2 text-xs text-gray-400 hover:text-gray-600">Hide Dice</button>
     </div>
-    <div class="roll-help text-gray-600 text-center">Tap the names of the asset to 1/2x, 2x, or return to normal</div>
+    <div class="roll-help text-gray-600 text-center">🎲 Roll (real dice work too) — tap your number above, then tap the payout</div>
     <div id="doubleToggles" class="text-center my-1 flex items-center justify-center gap-3">
       <button type="button" id="dblHayBtn" class="dbl-toggle" aria-pressed="false" title="Double hay rolls">○ Hay ×2</button>
       <button type="button" id="dblCornBtn" class="dbl-toggle" aria-pressed="false" title="Double corn rolls">○ Corn ×2</button>
     </div>
     <div class="table-wrap"><table class="roll-table">
       <tr>
-        <th>Roll</th>
-        <th>1</th>
-        <th>2</th>
-        <th>3</th>
-        <th>4</th>
-        <th>5</th>
-        <th>6</th>
+        <th>Asset</th>
+        <th data-roll="1" title="Mark as the rolled number">1</th>
+        <th data-roll="2" title="Mark as the rolled number">2</th>
+        <th data-roll="3" title="Mark as the rolled number">3</th>
+        <th data-roll="4" title="Mark as the rolled number">4</th>
+        <th data-roll="5" title="Mark as the rolled number">5</th>
+        <th data-roll="6" title="Mark as the rolled number">6</th>
       </tr>
       <tr>
         <td data-state="0">Hay</td>
@@ -665,7 +665,7 @@
 </div>
 
 <!-- Player Trades — side-by-side buttons pop up the buy/sell forms -->
-<div class="text-center my-3 flex items-center justify-center gap-3 flex-wrap">
+<div id="tradeButtons" class="text-center my-3 flex items-center justify-center gap-3 flex-wrap">
   <button id="customBuyBtn" type="button" class="px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-base">Buy from player</button>
   <button id="customSellBtn" type="button" class="px-5 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-base">Sell to player</button>
   <button id="auctionBtn" type="button" class="px-5 py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-bold text-base">Auction</button>

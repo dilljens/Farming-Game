@@ -30,6 +30,7 @@ import {
     rubberbandMult,
     scenarioName,
     seasonMult,
+    shuffleRollsRandom,
     shuffledRolls
 } from './pricing.js';
 
@@ -617,6 +618,22 @@ test('shuffle rolls: deterministic per room, a true permutation, stable order', 
     // No room (roomless game) => classic order, no surprise reshuffle.
     assert.deepEqual(shuffledRolls(base, 'hay', ''), base);
     assert.deepEqual(shuffledRolls(base, 'hay', null), base);
+});
+
+test('shuffle rolls random: a fresh permutation each roll, input untouched', () => {
+    const base = [800, 1500, 2500, 3800, 5300, 7000];
+    for (let i = 0; i < 10; i++) {
+        const out = shuffleRollsRandom(base);
+        assert.equal(out.length, 6);
+        assert.deepEqual([...out].sort((a, b) => a - b), base, 'same six payouts, new order');
+    }
+    const orders = new Set();
+    for (let i = 0; i < 20; i++) orders.add(JSON.stringify(shuffleRollsRandom(base)));
+    assert.ok(orders.size > 1, 'successive rolls reorder differently');
+    const frozen = [...base];
+    shuffleRollsRandom(frozen);
+    assert.deepEqual(frozen, base, 'input array is not mutated');
+    assert.deepEqual(shuffleRollsRandom([]), []);
 });
 
 test('shuffle rolls flag normalizes like other rules, off by default', () => {

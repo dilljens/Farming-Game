@@ -387,8 +387,10 @@ function mulberry32(seed) {
 // --- Shuffled rolls: randomly reorder a crop's roll table ---
 // Fisher-Yates with the seeded PRNG, so every device derives the identical
 // order from (room, crop) with no sync. Each crop shuffles independently;
-// a roomless game (no room code) keeps the classic order. The shuffle is
-// fixed for the room — it never re-rolls mid-game.
+// a roomless game (no room code) keeps the classic order. This is the
+// legacy fixed-for-the-room order (kept as a fallback). The live game
+// shuffles on load and reshuffles after every collected payout via
+// shuffleRollsRandom below.
 export function shuffledRolls(base, asset, roomCode) {
     const arr = Array.isArray(base) ? [...base] : [];
     const room = String(roomCode || '').toUpperCase();
@@ -397,6 +399,18 @@ export function shuffledRolls(base, asset, roomCode) {
     const rand = mulberry32(hashSeed(`${room}|${key}|rolls`));
     for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(rand() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+// --- Reshuffle-every-roll: fresh random permutation of one crop's table ---
+// True-random Fisher-Yates (Math.random), same six payouts, new order each
+// dice roll. Never mutates the input; each device shuffles its own view.
+export function shuffleRollsRandom(base) {
+    const arr = Array.isArray(base) ? [...base] : [];
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     return arr;

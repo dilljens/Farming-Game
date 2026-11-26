@@ -155,9 +155,19 @@ input[type="number"] {
     .sign-seg button {
         flex: 1;
         width: auto;
-        min-height: 44px;
+        min-height: 48px;
         padding: 8px 4px;
-        font-size: 20px;
+        font-size: 17px;
+    }
+    /* Glyphs alone don't say what they do — spell it out on phones.
+       Desktop keeps the compact −/+ control untouched. */
+    .sign-seg[data-target="cashInput"] button[data-sign="-"]::after { content: " Remove"; }
+    .sign-seg[data-target="cashInput"] button[data-sign="+"]::after { content: " Add"; }
+    .sign-seg[data-target="loanInput"] button[data-sign="-"]::after { content: " Repay"; }
+    .sign-seg[data-target="loanInput"] button[data-sign="+"]::after { content: " Borrow"; }
+    /* Selected side unmistakable in sunlight: solid color + inset ring. */
+    .sign-seg button[aria-pressed="true"] {
+        box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.35);
     }
 }
 
@@ -269,19 +279,73 @@ input[type="number"] {
 .roll-table button.roll-cell-button {
     width: 100%;
     display: block;
-    border: 0;
-    background-color: #e0e0e0;
+    border: 1px solid #9ca3af;
+    border-radius: 8px;
+    background-color: #f8fafc;
+    box-shadow: 0 1px 0 rgba(0,0,0,.08);
     cursor: pointer;
-    padding: 2px;
+    padding: 10px 2px;
+    min-height: 44px;
     font: inherit;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .roll-table button.roll-cell-button:hover {
-    background-color: #d0d0d0;
+    background-color: #e2e8f0;
 }
 
 .roll-table button.roll-cell-button:active {
-    background-color: #c0c0c0;
+    background-color: #cbd5e1;
+    transform: scale(.96);
+}
+
+/* Column matching the last dice roll — find your payout at a glance. */
+.roll-table th.is-roll-col {
+    background-color: #fbbf24;
+}
+/* 1-6 headers are tappable: real-dice players mark their rolled number. */
+.roll-table tr:first-child th[data-roll] {
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+.roll-table tr:first-child th[data-roll]:active {
+    background-color: #fbbf24;
+}
+.roll-table td.is-roll-col button.roll-cell-button {
+    background-color: #fef3c7;
+    border-color: #f59e0b;
+    border-width: 2px;
+}
+
+/* Asset-name tap states (1/2x, 2x) read as pills, not just colored text. */
+.roll-table tr:not(:first-child) td:first-child {
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.roll-table tr:not(:first-child) td:first-child[data-state="1"] {
+    background-color: #fee2e2;
+    outline: 2px solid #ef4444;
+}
+.roll-table tr:not(:first-child) td:first-child[data-state="2"] {
+    background-color: #dcfce7;
+    outline: 2px solid #22c55e;
+}
+
+/* Brief pulse so a reshuffle right after a tap reads as intentional. */
+@keyframes reshufflePulse {
+    0% { background-color: #fef9c3; }
+    100% { background-color: transparent; }
+}
+.roll-table.reshuffled td {
+    animation: reshufflePulse .6s ease-out;
 }
 .editable {
     cursor: text;
@@ -404,6 +468,29 @@ input, .editable {
         border: 1px solid #777777;
         text-align: center;
         padding: 2px;
+    }
+    /* Big payouts (17,500) still fit one line per column on phones. */
+    .roll-table button.roll-cell-button {
+        font-size: 12px;
+        padding: 10px 1px;
+    }
+    .roll-table tr:not(:first-child) td:first-child {
+        font-size: 12px;
+    }
+    /* 1-6 headers are thumb targets for marking real-dice rolls. */
+    .roll-table tr:first-child th[data-roll] {
+        padding: 12px 2px;
+        font-size: 15px;
+    }
+    /* Thumb-sized dice controls. */
+    #rollDiceBtn {
+        min-height: 52px;
+        padding-left: 28px;
+        padding-right: 28px;
+        font-size: 17px;
+    }
+    #diceDisplay {
+        font-size: 64px;
     }
 
     .roll-table th {
@@ -745,6 +832,11 @@ body[data-view="desktop"] [data-screen-panel].screen-hidden {
     display: block;
 }
 [data-screen-panel].screen-hidden {
+    display: none;
+}
+/* Player-trade buttons live outside the screen panels; in mobile view they
+   only belong on the Property screen (synced from setScreen). */
+#tradeButtons.trade-hidden, #tradeInboxHint.trade-hidden {
     display: none;
 }
 
