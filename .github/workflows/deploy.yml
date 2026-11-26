@@ -1,0 +1,89 @@
+name: Deploy farm.ferrumeng.com
+
+# Push-to-deploy: every main push carrying game files syncs the VPS copy
+# that https://farm.ferrumeng.com serves (see backend/AI_BACKEND.md §5.1),
+# so the live site can never drift behind GitHub again.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'scripts.js'
+      - 'styles.css'
+      - 'backend.js'
+      - 'game-time.js'
+      - 'pricing.js'
+      - 'manifest.json'
+      - 'icon-*.svg'
+      - 'vendor/**'
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
+
+# Deploys run one at a time, never cancelled mid-rsync.
+concurrency:
+  group: deploy-farm
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'index.html'
+              - 'scripts.js'
+              - 'styles.css'
+              - 'backend.js'
+              - 'game-time.js'
+              - 'pricing.js'
+              - 'manifest.json'
+              - 'icon-*.svg'
+              - 'vendor/**'
+            backend:
+              - 'backend/**'
+
+  deploy-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.FARMING_DEPLOY_KEY }}
+      - name: Rsync game files to VPS
+        run: |
+          rsync -avz -e "ssh -o StrictHostKeyChecking=accept-new" \
+            index.html scripts.js styles.css backend.js game-time.js pricing.js \
+            manifest.json icon-192.svg icon-512.svg vendor \
+            ubuntu@40.160.241.74:/opt/farming-game/
+      - name: Verify live version matches repo
+        run: |
+          sleep 5
+          repo_token=$(grep -o 'scripts\.js?v=[0-9a-z]*' index.html | head -n 1)
+          live_token=$(curl -s --max-time 20 https://farm.ferrumeng.com/ | grep -o 'scripts\.js?v=[0-9a-z]*' | head -n 1)
+          echo "repo: $repo_token live: $live_token"
+          test -n "$live_token" && test "$repo_token" = "$live_token"
+
+  deploy-backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.FARMING_DEPLOY_KEY }}
+      - name: Rsync backend and re-run stack
+        run: |
+          rsync -avz -e "ssh -o StrictHostKeyChecking=accept-new" \
+            backend/ ubuntu@40.160.241.74:/opt/farming-backend/
+          ssh -o StrictHostKeyChecking=accept-new ubuntu@40.160.241.74 \
+            'cd /opt/farming-backend && ./backend-up.sh'
