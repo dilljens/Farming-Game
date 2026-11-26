@@ -587,20 +587,15 @@ function handleTransaction(inputId, transactionClass, totalClass) {
         // // If no empty cell was found, create a new row
         if (!emptyCellFound) {
             const newRow = table.insertRow(); // Insert below the input cells
-            if (inputId === 'cashInput') {
-                createTransactionCell(newRow, 'cash-transaction', '', false); // Empty, non-editable cell for alignment
-                createTransactionCell(newRow, 'cash-total');
-                createTransactionCell(newRow, 'loan-transaction', '', false); // Empty, non-editable cell for alignment
-                createTransactionCell(newRow, 'loan-total');
-            } else {
-                createTransactionCell(newRow, 'cash-transaction', '', false); // Empty, non-editable cell for alignment
-                createTransactionCell(newRow, 'cash-total');
-                createTransactionCell(newRow, 'loan-transaction', '', false); // Empty, non-editable cell for alignment
-                createTransactionCell(newRow, 'loan-total');
-            }
+            createTransactionCell(newRow, 'cash-note', '', false); // Memo: what the cash move was for
+            createTransactionCell(newRow, 'cash-transaction', '', false); // Empty, non-editable cell for alignment
+            createTransactionCell(newRow, 'cash-total');
+            createTransactionCell(newRow, 'loan-note', '', false); // Memo: what the loan move was for
+            createTransactionCell(newRow, 'loan-transaction', '', false); // Empty, non-editable cell for alignment
+            createTransactionCell(newRow, 'loan-total');
         }
 
-        shiftAndInsertTransaction(inputId,transactionClass,newValue);
+        shiftAndInsertTransaction(inputId,transactionClass,newValue,'Manual entry');
         // Manual entries (typed or quick-button) are single-leg undo actions.
         pushUndoAction({
             label: `Manual ${transactionClass.includes('cash') ? 'cash' : 'loan'} entry $${newValue.toLocaleString()}`,
@@ -653,7 +648,7 @@ function performChristmas() {
     updateTotals();
     data.playerYear = Math.max(1, Math.floor(Number(data?.playerYear) || 1)) + 1;
     const cashBefore = ledgerLen('cash');
-    addCashTransactionValue(CHRISTMAS_GIFT);
+    addCashTransactionValue(CHRISTMAS_GIFT, 'Christmas gift');
     updatePlayerYearLine();
     const added = ledgerLen('cash') - cashBefore;
     if (added > 0) {
@@ -684,7 +679,7 @@ function wouldGoNegativeCash(numericValue) {
     return numericValue < 0 && (getCurrentCashTotal() + numericValue) < -0.005;
 }
 
-function addCashTransactionValue(amount) {
+function addCashTransactionValue(amount, note) {
     if (!data.transactions) data.transactions = { cash: [], loan: [] };
     if (!Array.isArray(data.transactions.cash)) data.transactions.cash = [];
     if (!Array.isArray(data.transactions.loan)) data.transactions.loan = [];
@@ -698,13 +693,13 @@ function addCashTransactionValue(amount) {
         return;
     }
 
-    data.transactions.cash.unshift(String(numericValue));
+    data.transactions.cash.unshift(txEntry(numericValue, note));
     updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
     updateTotals();
     saveQuantitiesToLocalStorage();
 }
 
-function addLoanTransactionValue(amount) {
+function addLoanTransactionValue(amount, note) {
     if (!data.transactions) data.transactions = { cash: [], loan: [] };
     if (!Array.isArray(data.transactions.cash)) data.transactions.cash = [];
     if (!Array.isArray(data.transactions.loan)) data.transactions.loan = [];
@@ -722,7 +717,7 @@ function addLoanTransactionValue(amount) {
         }
     }
 
-    data.transactions.loan.unshift(String(numericValue));
+    data.transactions.loan.unshift(txEntry(numericValue, note));
     updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
     updateTotals();
     saveQuantitiesToLocalStorage();
@@ -828,7 +823,19 @@ function undoLastAction() {
     undoToast(`Undid: ${a.label}`);
 }
 
-function shiftAndInsertTransaction(inputId, transactionClass, numericValue) {
+// Ledger entries are {v, note} objects; legacy saves hold bare numeric
+// strings, which read as valueless notes. txAmount/txNote normalize both.
+function txEntry(value, note) {
+    return { v: String(value), note: String(note || '') };
+}
+function txAmount(entry) {
+    const raw = entry && typeof entry === 'object' ? entry.v : entry;
+    return parseTransactionValue(raw);
+}
+function txNote(entry) {
+    return entry && typeof entry === 'object' ? String(entry.note || '') : '';
+}
+function shiftAndInsertTransaction(inputId, transactionClass, numericValue, note) {
     // Get the value from the input
     const inputElement = document.getElementById(inputId);
     // Prefer the caller-computed value (handleTransaction applies the −/+
@@ -841,16 +848,16 @@ function shiftAndInsertTransaction(inputId, transactionClass, numericValue) {
         const transactionType = transactionClass.includes('cash') ? 'cash' : 'loan';
         
         // Add new transaction to the beginning of the global data array
-        data.transactions[transactionType].unshift(String(parsed));
+        data.transactions[transactionType].unshift(txEntry(parsed, note));
         
         // Select all the transaction cells for cash or loan
         const transactionCells = document.querySelectorAll(`.${transactionClass}`);
         
         // Update only the visible cells (first 10 from data)
         const visibleTransactions = data.transactions[transactionType].slice(0, 10);
-        visibleTransactions.forEach((value, index) => {
+        visibleTransactions.forEach((entry, index) => {
             if (transactionCells[index]) {
-                transactionCells[index].textContent = numberWithCommasAndDecimals(value);
+                transactionCells[index].textContent = numberWithCommasAndDecimals(txAmount(entry));
             }
         });
 
@@ -873,28 +880,34 @@ function syncDOMToData() {
         data.transactions = { cash: [], loan: [] };
     }
     
-    // Rebuild cash transactions from DOM cells, filtering out empty ones
+    // Rebuild cash transactions from DOM cells, filtering out empty ones.
+    // Values come back as fresh entries; keep the old note when the same
+    // value sits at the same position (edits change amounts, not memos).
+    const oldCash = Array.isArray(data.transactions.cash) ? data.transactions.cash : [];
     data.transactions.cash = [];
-    cashCells.forEach((cell) => {
+    cashCells.forEach((cell, i) => {
         const cellValue = cell.textContent.trim();
         if (cellValue !== '') {
             // Parse the formatted value back to a raw number string
             const numericValue = parseTransactionValue(cellValue);
             if (Number.isFinite(numericValue)) {
-                data.transactions.cash.push(String(numericValue));
+                const keep = txAmount(oldCash[i]) === numericValue ? txNote(oldCash[i]) : '';
+                data.transactions.cash.push(txEntry(numericValue, keep));
             }
         }
     });
     
     // Rebuild loan transactions from DOM cells, filtering out empty ones
+    const oldLoan = Array.isArray(data.transactions.loan) ? data.transactions.loan : [];
     data.transactions.loan = [];
-    loanCells.forEach((cell) => {
+    loanCells.forEach((cell, i) => {
         const cellValue = cell.textContent.trim();
         if (cellValue !== '') {
             // Parse the formatted value back to a raw number string
             const numericValue = parseTransactionValue(cellValue);
             if (Number.isFinite(numericValue)) {
-                data.transactions.loan.push(String(numericValue));
+                const keep = txAmount(oldLoan[i]) === numericValue ? txNote(oldLoan[i]) : '';
+                data.transactions.loan.push(txEntry(numericValue, keep));
             }
         }
     });
@@ -970,7 +983,7 @@ function createTransactionCell(row, className, value = '', isEditable = false) {
 
 function getCurrentCashTotal() {
     if (data && data.transactions && Array.isArray(data.transactions.cash)) {
-        return data.transactions.cash.reduce((sum, val) => sum + (parseTransactionValue(val) || 0), 0);
+        return data.transactions.cash.reduce((sum, entry) => sum + (txAmount(entry) || 0), 0);
     }
     const cashTotalCell = document.querySelector('.cash-total');
     return cashTotalCell ? (parseTransactionValue(cashTotalCell.textContent) || 0) : 0;
@@ -978,7 +991,7 @@ function getCurrentCashTotal() {
 
 function getCurrentLoanTotal() {
     if (data && data.transactions && Array.isArray(data.transactions.loan)) {
-        return data.transactions.loan.reduce((sum, val) => sum + (parseTransactionValue(val) || 0), 0);
+        return data.transactions.loan.reduce((sum, entry) => sum + (txAmount(entry) || 0), 0);
     }
     const loanTotalCell = document.querySelector('.loan-total');
     return loanTotalCell ? (parseTransactionValue(loanTotalCell.textContent) || 0) : 0;
@@ -1135,12 +1148,12 @@ function updateTotals() {
 
     if (data && data.transactions) {
         // Sum all cash transactions from global data object
-        cashTotal = data.transactions.cash.reduce((sum, val) => {
-            return sum + (parseTransactionValue(val) || 0);
+        cashTotal = data.transactions.cash.reduce((sum, entry) => {
+            return sum + (txAmount(entry) || 0);
         }, 0);
         // Sum all loan transactions from global data object
-        loanTotal = data.transactions.loan.reduce((sum, val) => {
-            return sum + (parseTransactionValue(val) || 0);
+        loanTotal = data.transactions.loan.reduce((sum, entry) => {
+            return sum + (txAmount(entry) || 0);
         }, 0);
     }
 
@@ -2989,7 +3002,7 @@ function applyLocalTrade(trade, role) {
     let cur = parseInt(cell.textContent || '0', 10) || 0;
     if (role === 'buyer') {
         if (price !== 0 && wouldGoNegativeCash(-price)) return false;
-        if (price !== 0) addCashTransactionValue(-price);
+        if (price !== 0) addCashTransactionValue(-price, `Bought ${qty} ${asset}`);
         cell.textContent = String(cur + qty);
     } else {
         // seller: bonus cows aren't sellable stock — only qty above the
@@ -2997,7 +3010,7 @@ function applyLocalTrade(trade, role) {
         const floor = isRanchCowsAsset(asset) ? ranchBonusFloor() : 0;
         if (cur - floor < qty) return false;
         cell.textContent = String(cur - qty);
-        if (price !== 0) addCashTransactionValue(price);
+        if (price !== 0) addCashTransactionValue(price, `Sold ${qty} ${asset}`);
     }
     // Trades settle as one undoable action (cash leg + qty move together).
     pushUndoAction({
@@ -3964,6 +3977,17 @@ function getBaseState() {
 
 let data = getBaseState();
 
+// Legacy saves hold bare numeric strings; current entries are {v, note}
+// objects. Normalize both into objects so every reader sees one shape.
+function normalizeLedger(savedList, fallback) {
+    if (!Array.isArray(savedList)) return fallback;
+    return savedList.map((e) => {
+        if (e && typeof e === 'object') {
+            return { v: String(e.v ?? ''), note: String(e.note || '') };
+        }
+        return { v: String(e ?? ''), note: '' };
+    });
+}
 function normalizeSavedState(savedData) {
     const baseState = getBaseState();
     const saved = savedData && typeof savedData === 'object' ? savedData : {};
@@ -3973,12 +3997,8 @@ function normalizeSavedState(savedData) {
         game: normalizeGame(saved.game, baseState.game.createdAt),
         qty: { ...baseState.qty, ...(saved.qty || {}) },
         transactions: {
-            cash: Array.isArray(saved.transactions?.cash)
-                ? saved.transactions.cash
-                : baseState.transactions.cash,
-            loan: Array.isArray(saved.transactions?.loan)
-                ? saved.transactions.loan
-                : baseState.transactions.loan
+            cash: normalizeLedger(saved.transactions?.cash, baseState.transactions.cash),
+            loan: normalizeLedger(saved.transactions?.loan, baseState.transactions.loan)
         },
         // Undo journal survives reload (capped); drop malformed entries.
         actionLog: Array.isArray(saved.actionLog)
@@ -4218,18 +4238,21 @@ function updateTransactionLists(transactionsData) {
     // Define a function to update a single transaction list
     const updateSingleTransactionList = (transactions, transactionClass) => {
         const safeTransactions = Array.isArray(transactions) ? transactions : [];
+        const noteClass = transactionClass.includes('cash') ? 'cash-note' : 'loan-note';
         // Limit transactions to last 10
         const limitedTransactions = safeTransactions.slice(0, 10);
-        limitedTransactions.forEach((transactionValue, index) => {
+        limitedTransactions.forEach((entry, index) => {
             // Table layout in index.html:
             // Row 0 = cash/loan inputs
-            // Row 1 = Transaction / Total headers
+            // Row 1 = Note / Transaction / Total headers
             // Row 2 = first transaction row
             let row = table.rows[index + 2];
             if (!row) {
                 row = table.insertRow();
+                createTransactionCell(row, 'cash-note', '', false);
                 createTransactionCell(row, 'cash-transaction', '', false);
                 createTransactionCell(row, 'cash-total');
+                createTransactionCell(row, 'loan-note', '', false);
                 createTransactionCell(row, 'loan-transaction', '', false);
                 createTransactionCell(row, 'loan-total', '', false);
             }
@@ -4238,8 +4261,17 @@ function updateTransactionLists(transactionsData) {
             const transactionCell = row.querySelector(`.${transactionClass}`);
             if (transactionCell) {
                 // Apply formatting only if the value is not an empty string
-                const cellContent = transactionValue === '' ? '' : numberWithCommasAndDecimals(transactionValue);
+                const amount = txAmount(entry);
+                const cellContent = !Number.isFinite(amount) ? '' : numberWithCommasAndDecimals(amount);
                 transactionCell.textContent = cellContent;
+            }
+            // And its memo: what the transaction was for.
+            const noteCell = row.querySelector(`.${noteClass}`);
+            if (noteCell) {
+                const note = txNote(entry);
+                noteCell.textContent = note;
+                if (note) noteCell.title = note;
+                else noteCell.removeAttribute('title');
             }
         });
     };
@@ -4421,8 +4453,8 @@ function performPayOffLoan() {
     // Subtract from both cash and loan
     const payoffCashBefore = ledgerLen('cash');
     const payoffLoanBefore = ledgerLen('loan');
-    addCashTransactionValue(-payoffAmount);
-    addLoanTransactionValue(-payoffAmount);
+    addCashTransactionValue(-payoffAmount, 'Pay off loan');
+    addLoanTransactionValue(-payoffAmount, 'Pay off loan');
     pushUndoAction({
         label: `Pay off loan $${payoffAmount.toLocaleString()}`,
         cash: ledgerLen('cash') - payoffCashBefore,
@@ -4682,7 +4714,7 @@ function performPayPerAcre() {
     const acreCashBefore = ledgerLen('cash');
     if (isGainMode) {
         // For gain mode, just add the amount
-        addCashTransactionValue(totalPayment);
+        addCashTransactionValue(totalPayment, 'Gain per acre');
         pushUndoAction({
             label: `Per-acre gain $${totalPayment.toLocaleString()}`,
             cash: ledgerLen('cash') - acreCashBefore,
@@ -4701,7 +4733,7 @@ function performPayPerAcre() {
             return;
         }
         // Pay the amount
-        addCashTransactionValue(-totalPayment);
+        addCashTransactionValue(-totalPayment, 'Pay per acre');
         pushUndoAction({
             label: `Per-acre pay $${totalPayment.toLocaleString()}`,
             cash: ledgerLen('cash') - acreCashBefore,
@@ -4739,9 +4771,9 @@ function borrowForExpense(expense, label) {
     if (getCurrentLoanTotal() + loan > debtCap()) return false;
     const cashBefore = ledgerLen('cash');
     const loanBefore = ledgerLen('loan');
-    addLoanTransactionValue(loan);
-    addCashTransactionValue(loan);
-    addCashTransactionValue(-amount);
+    addLoanTransactionValue(loan, 'Borrowed');
+    addCashTransactionValue(loan, 'Borrowed');
+    addCashTransactionValue(-amount, label);
     pushUndoAction({
         label: `${label} $${amount.toLocaleString()} — borrowed $${loan.toLocaleString()} (keep $${(loan - amount).toLocaleString()})`,
         cash: ledgerLen('cash') - cashBefore,
@@ -4928,12 +4960,13 @@ function clearTransactionsExceptFirst(transactionClass) {
     const rows = Array.from(table.rows).filter(row => row.querySelector(`.${transactionClass}`));
     
     // Remove all rows except the first one with transaction class
+    const noteClass = transactionClass.includes('cash') ? 'cash-note' : 'loan-note';
     rows.forEach((row, index) => {
         if (index > 0) {
             row.remove();
         } else {
             // Clear the content of the first row's cells
-            const cells = row.querySelectorAll(`.${transactionClass}`);
+            const cells = row.querySelectorAll(`.${transactionClass}, .${noteClass}`);
             cells.forEach(cell => {
                 cell.textContent = '';
                 // Transaction cells are no longer editable
@@ -5070,7 +5103,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
                 // Sandbox preview blocks confirm(), so just add automatically.
                 const rollCashBefore = ledgerLen('cash');
-                addCashTransactionValue(value);
+                const tapRow = btn.closest('tr');
+                const tapAsset = (tapRow?.cells[0]?.textContent || '').split(' ')[0] || 'Crop';
+                const tapRoll = btn.closest('td')?.cellIndex || '?';
+                addCashTransactionValue(value, `${tapAsset} roll ${tapRoll}`);
                 pushUndoAction({
                     label: `Roll payout $${value.toLocaleString()}`,
                     cash: ledgerLen('cash') - rollCashBefore,
@@ -5080,10 +5116,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 // Confirm the tap, then deal a fresh table: same six payouts
                 // per crop in a new random order for the next turn.
                 try {
-                    const row = btn.closest('tr');
-                    const asset = (row?.cells[0]?.textContent || '').split(' ')[0] || 'Crop';
-                    const rollNum = btn.closest('td')?.cellIndex || '?';
-                    undoToast(`+$${value.toLocaleString()} ${asset} · roll ${rollNum} — table reshuffled`);
+                    undoToast(`+$${value.toLocaleString()} ${tapAsset} · roll ${tapRoll} — table reshuffled`);
                 } catch {}
                 reshuffleRollTables();
             });
@@ -5177,7 +5210,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
             // Pay the interest
             const interestCashBefore = ledgerLen('cash');
-            addCashTransactionValue(-interest);
+            addCashTransactionValue(-interest, 'Pay interest');
             // A typed-in amount is spent — snap back to auto calc.
             manualInterestOverride = null;
             updateInterest();
@@ -5698,9 +5731,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const buyCashBefore = ledgerLen('cash');
         const buyLoanBefore = ledgerLen('loan');
         // Add cash transaction (negative for payment).
-        addCashTransactionValue(-downPayment);
+        addCashTransactionValue(-downPayment, `Buy ${qtyIncrease} ${currentAsset}`);
         // Add loan transaction (positive for loan)
-        addLoanTransactionValue(loanAmount);
+        addLoanTransactionValue(loanAmount, `Buy ${qtyIncrease} ${currentAsset} loan`);
         // One undoable action: every ledger leg plus the qty/ridge gains, so
         // undo can never refund the money while keeping the asset.
         pushUndoAction({

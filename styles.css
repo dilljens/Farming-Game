@@ -492,6 +492,16 @@ input, .editable {
         font-size: 12px;
         padding: 10px 1px;
     }
+    /* Six financial columns on a phone: amounts never wrap mid-number,
+       memos wrap small underneath their side. */
+    .financial-table .cash-transaction, .financial-table .loan-transaction,
+    .financial-table .cash-total, .financial-table .loan-total {
+        white-space: nowrap;
+        font-size: 12px;
+    }
+    .financial-table .cash-note, .financial-table .loan-note {
+        font-size: 10px;
+    }
     .roll-table tr:not(:first-child) td:first-child {
         font-size: 12px;
     }
@@ -604,6 +614,21 @@ input, .editable {
     opacity: 0.45;
     filter: grayscale(1);
     cursor: not-allowed;
+}
+
+/* Transaction memos: what each ledger line was for. Small and wrappable
+   so six columns still fit a phone screen; full text on tap via title. */
+.cash-note, .loan-note {
+    font-size: 11px;
+    line-height: 1.3;
+    color: #4b5563;
+    white-space: normal;
+    word-break: break-word;
+}
+.note-head {
+    font-size: 11px;
+    color: #6b7280;
+    font-weight: 600;
 }
 
 .asset-cell {
