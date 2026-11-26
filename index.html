@@ -14,7 +14,7 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" href="./icon-192.svg">
     <link rel="apple-touch-icon" href="./icon-192.svg">
-    <link rel="stylesheet" href="./styles.css?v=20261122j">
+    <link rel="stylesheet" href="./styles.css?v=20261126a">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -424,9 +424,11 @@
       <td class="asset-cell"><button class="buy-btn" data-asset="hay">Buy</button> Hay</td>
       <td class="acres">0</td>
       <td class="qty-cell">
+        <div class="qty-wrap">
         <button class="qty-btn qty-minus" data-target="qty-hay">-</button>
         <button class="qty-btn qty-plus" data-target="qty-hay">+</button>
         <span contenteditable="true" class="editable qty-hay">1</span>
+        </div>
       </td>
       <td class="cost-cell"><span class="cost-price">15,000</span><div class="market-note"></div></td>
       <td class="net">0</td>
@@ -435,9 +437,11 @@
       <td class="asset-cell"><button class="buy-btn" data-asset="grain">Buy</button> Grain</td>
       <td class="acres">0</td>
       <td class="qty-cell">
+        <div class="qty-wrap">
         <button class="qty-btn qty-minus" data-target="qty-grain">-</button>
         <button class="qty-btn qty-plus" data-target="qty-grain">+</button>
         <span contenteditable="true" class="editable qty-grain">1</span>
+        </div>
       </td>
       <td class="cost-cell"><span class="cost-price">20,000</span><div class="market-note"></div></td>
       <td class="net">0</td>
@@ -446,9 +450,11 @@
       <td class="asset-cell"><button class="buy-btn" data-asset="fruit">Buy</button> Fruit</td>
       <td class="acres">0</td>
       <td class="qty-cell">
+        <div class="qty-wrap">
         <button class="qty-btn qty-minus" data-target="qty-fruit">-</button>
         <button class="qty-btn qty-plus" data-target="qty-fruit">+</button>
         <span contenteditable="true" class="editable qty-fruit">1</span>
+        </div>
       </td>
       <td class="cost-cell"><span class="cost-price">25,000</span><div class="market-note"></div></td>
       <td class="net">0</td>
@@ -457,9 +463,11 @@
       <td class="asset-cell"><button class="buy-btn" data-asset="farm">Buy</button> Farm Cows</td>
       <td class="acres"></td>
       <td class="qty-cell">
+        <div class="qty-wrap">
         <button class="qty-btn qty-minus" data-target="qty-farm">-</button>
         <button class="qty-btn qty-plus" data-target="qty-farm">+</button>
         <span contenteditable="true" class="editable qty-farm">1</span>
+        </div>
       </td>
       <td class="cost-cell"><span class="cost-price">5,000</span><div class="market-note"></div></td>
       <td class="net">0</td>
@@ -468,9 +476,11 @@
       <td class="asset-cell"><button class="buy-btn" data-asset="cows">Buy</button> Ranch Cows</td>
       <td class="acres"></td>
       <td class="qty-cell">
+        <div class="qty-wrap">
         <button class="qty-btn qty-minus" data-target="qty-cows">-</button>
         <button class="qty-btn qty-plus" data-target="qty-cows">+</button>
         <span contenteditable="true" class="editable qty-cows">1</span>
+        </div>
       </td>
       <td class="cost-cell"><span class="cost-price">10,000</span><div class="market-note"></div></td>
       <td class="net">0</td>
@@ -479,9 +489,11 @@
       <td class="asset-cell"><button class="buy-btn" data-asset="harvester">Buy</button> Harvester</td>
       <td></td>
       <td class="qty-cell">
+        <div class="qty-wrap">
         <button class="qty-btn qty-minus" data-target="qty-harvester">-</button>
         <button class="qty-btn qty-plus" data-target="qty-harvester">+</button>
         <span contenteditable="true" class="editable qty-harvester">1</span>
+        </div>
       </td>
       <td class="cost-cell"><span class="cost-price">10,000</span><div class="market-note"></div></td>
       <td class="net">0</td>
@@ -490,9 +502,11 @@
       <td class="asset-cell"><button class="buy-btn" data-asset="tractor">Buy</button> Tractor</td>
       <td></td>
       <td class="qty-cell">
+        <div class="qty-wrap">
         <button class="qty-btn qty-minus" data-target="qty-tractor">-</button>
         <button class="qty-btn qty-plus" data-target="qty-tractor">+</button>
         <span contenteditable="true" class="editable qty-tractor">1</span>
+        </div>
       </td>
       <td class="cost-cell"><span class="cost-price">10,000</span><div class="market-note"></div></td>
       <td class="net">0</td>
@@ -568,10 +582,12 @@
       <div class="undo-hint text-gray-400 font-normal">tap to undo last action</div>
     </th>
     <td class="small-input">
+      <div class="small-wrap">
       <input type="text" id="cashInput" placeholder="Enter Cash value" inputmode="numeric" autocomplete="off" />
       <div class="sign-seg" data-target="cashInput" data-sign="+" role="group" aria-label="Cash entry: subtract or add">
         <button type="button" data-sign="-" data-target="cashInput" aria-pressed="false" title="Subtract cash">−</button>
         <button type="button" data-sign="+" data-target="cashInput" aria-pressed="true" title="Add cash">+</button>
+      </div>
       </div>
     </td>
     <th id="loanUndoCell" class="font-semibold cursor-pointer select-none">
@@ -579,10 +595,12 @@
       <div class="undo-hint text-gray-400 font-normal">tap to undo last action</div>
     </th>
     <td class="small-input">
+      <div class="small-wrap">
       <input type="text" id="loanInput" placeholder="Enter Loan value" inputmode="numeric" autocomplete="off" />
       <div class="sign-seg" data-target="loanInput" data-sign="+" role="group" aria-label="Loan entry: repay or borrow">
         <button type="button" data-sign="-" data-target="loanInput" aria-pressed="false" title="Repay loan">−</button>
         <button type="button" data-sign="+" data-target="loanInput" aria-pressed="true" title="Borrow">+</button>
+      </div>
       </div>
     </td>
   </tr>

@@ -136,9 +136,11 @@ input[type="number"] {
    to a sliver players can't see what they're typing in. */
 @media screen and (max-width: 700px) {
     .small-input {
+        white-space: normal;
+    }
+    .small-input .small-wrap {
         display: flex;
         flex-wrap: wrap;
-        white-space: normal;
     }
     #cashInput, #loanInput {
         flex: 1 1 100%;
@@ -169,6 +171,13 @@ input[type="number"] {
     .sign-seg button[aria-pressed="true"] {
         box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.35);
     }
+}
+
+/* Cash/loan entry wrapper: invisible on desktop (children lay out exactly
+   as before), flex row-stack on phones. Same anonymous-box reason as
+   .qty-cell above — the <td> must keep its table display. */
+.small-input .small-wrap {
+    display: contents;
 }
 
 .input-cell {
@@ -352,12 +361,21 @@ input[type="number"] {
     /* Additional styles here */
   }
 
+/* The flexbox lives on an inner wrapper: display:flex on the <td> itself
+   knocks it out of the table layout, and the browser wraps it in an
+   anonymous white box — so the blue only covered the controls. The <td>
+   stays a real table cell (full blue, edge to edge); the wrapper lays out
+   the −/+ buttons and number. */
 .qty-cell {
+    padding: 0 !important;
+    background-color: #b4d0fb;
+}
+.qty-wrap {
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    padding: 2px !important;
     gap: 2px;
+    padding: 2px;
     background-color: #b4d0fb;
 }
 
