@@ -149,6 +149,16 @@ curl -s http://localhost:3002/leaderboard?limit=1 | head -c 200  # expect 200 + 
 Repeat deploys are the same two lines: `rsync` from the laptop, then
 `./backend-up.sh` on the VPS (idempotent — safe to re-run).
 
+### 5.1b Push-to-deploy (the normal path — keeps the site always synced)
+
+`.github/workflows/deploy.yml` deploys on every `main` push: frontend
+file changes rsync `/opt/farming-game/` and verify the live `?v=` token,
+`backend/**` changes also re-run `backend-up.sh`. Cache-buster tokens
+ride the commit SHA (rewritten in the working copy at deploy time, never
+committed), so clients can never pin stale code and nobody has to bump
+tokens by hand. Manual equivalent: `bin/deploy-frontend.sh`. Redeploy
+without a code change via Actions → Run workflow.
+
 ### 5.2 TLS — Caddy site (Docker `ferrum-caddy`, auto-TLS)
 
 TLS comes from the shared `ferrum-caddy` container, **not** host nginx and

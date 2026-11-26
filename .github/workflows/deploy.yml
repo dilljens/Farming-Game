@@ -62,6 +62,12 @@ jobs:
           ssh-private-key: ${{ secrets.FARMING_DEPLOY_KEY }}
       - name: Rsync game files to VPS
         run: |
+          # Cache-buster tokens ride the commit SHA: every deploy gets fresh
+          # ?v= URLs, so phones can never pin stale code. Working copy only
+          # (never committed back — that would loop the pipeline).
+          TOKEN=$(git rev-parse --short HEAD)
+          sed -i -E "s/(\.(js|css)\?v=)[0-9a-z]+/\1$TOKEN/g" index.html scripts.js
+          echo "TOKEN=$TOKEN" >> "$GITHUB_ENV"
           rsync -avz -e "ssh -o StrictHostKeyChecking=accept-new" \
             index.html scripts.js styles.css backend.js game-time.js pricing.js \
             manifest.json icon-192.svg icon-512.svg vendor \
@@ -69,10 +75,9 @@ jobs:
       - name: Verify live version matches repo
         run: |
           sleep 5
-          repo_token=$(grep -o 'scripts\.js?v=[0-9a-z]*' index.html | head -n 1)
           live_token=$(curl -s --max-time 20 https://farm.ferrumeng.com/ | grep -o 'scripts\.js?v=[0-9a-z]*' | head -n 1)
-          echo "repo: $repo_token live: $live_token"
-          test -n "$live_token" && test "$repo_token" = "$live_token"
+          echo "deploy: scripts.js?v=$TOKEN live: $live_token"
+          test -n "$live_token" && test "scripts.js?v=$TOKEN" = "$live_token"
 
   deploy-backend:
     needs: changes
