@@ -30,8 +30,11 @@ docker compose restart rest
 echo "backend up: REST http://localhost:3002  PG localhost:55433/farming"
 echo "waiting for postgrest..."
 for i in $(seq 1 30); do
-  code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3002/leaderboard?limit=1)
+  # Refused connections are expected while postgrest restarts — tolerate
+  # them here (set -e would otherwise abort on the first one) and let the
+  # final check below be the strict gate.
+  code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3002/leaderboard?limit=1 || true)
   if [ "$code" = "200" ]; then break; fi
   sleep 1
 done
-curl -s -o /dev/null -w "rest status: %{http_code}\n" http://localhost:3002/leaderboard?limit=1
+curl -f -s -o /dev/null -w "rest status: %{http_code}\n" http://localhost:3002/leaderboard?limit=1
