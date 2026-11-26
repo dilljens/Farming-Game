@@ -1506,6 +1506,10 @@ function updateLeaderboardTable(data) {
         usernameCell.textContent = entry.username;
         usernameCell.className = 'text-center';
 
+        const roomCell = document.createElement('td');
+        roomCell.textContent = entry.roomCode ? String(entry.roomCode) : '—';
+        roomCell.className = 'text-center';
+
         const networthCell = document.createElement('td');
         networthCell.textContent = parseFloat(entry.networth ?? 0).toLocaleString('en-US'); // Format the number with commas
         networthCell.className = 'text-center';
@@ -1536,6 +1540,7 @@ function updateLeaderboardTable(data) {
 
         // Append cells to the row
         row.appendChild(usernameCell);
+        row.appendChild(roomCell);
         row.appendChild(networthCell);
         row.appendChild(cashCell);
         row.appendChild(debtCell);
@@ -1578,7 +1583,7 @@ function buildChartDatasets(data) {
         const elapsedHistory = buildElapsedHistory(group.history, start, Infinity);
         const color = paletteColor(i, ordered.length);
         return {
-            label: group.username,
+            label: group.roomCode ? `${group.username} (${group.roomCode})` : group.username,
             data: elapsedHistory.map(point => ({ x: point.x, y: point.v })),
             borderColor: color,
             backgroundColor: color,
@@ -4484,10 +4489,10 @@ document.getElementById('resetButton').addEventListener('click', (e) => {
         if (desc) desc.textContent = 'Host will clear this room\'s leaderboard, trades, and start a fresh game for everyone in the room.';
     } else if (currentRoomCode && !isHost) {
         if (title) title.textContent = 'Reset My Game?';
-        if (desc) desc.textContent = 'You are not host — this will only reset your own farm.';
+        if (desc) desc.textContent = 'You are not host — this resets your own farm and leaderboard entry.';
     } else {
         if (title) title.textContent = 'Reset Game';
-        if (desc) desc.textContent = "It's pretty obvious what this button does. You don't really need to read about it.";
+        if (desc) desc.textContent = 'Resets your farm and clears your leaderboard entry.';
     }
     showModal();
 });
@@ -4893,6 +4898,10 @@ if (resetModalTitle) {
 async function performReset(opts = {}) {
     hideModal();
     invalidatePendingLeaderboardSaves();
+    // Game Reset also resets the player's leaderboard entry: delete my doc
+    // so the old score can't linger (with no username set, no re-save
+    // would ever replace it). The normal post-reset save flow re-adds the
+    // fresh game afterwards, queued behind this delete.
     
     const baseState = getBaseState();
     // keep room association if host reset signaled (imposterirl style: resetGameForNewRound keeps room_code)
@@ -4926,6 +4935,14 @@ async function performReset(opts = {}) {
     document.querySelectorAll('.cash-transaction, .loan-transaction').forEach(cell => {
         cell.textContent = '';
     });
+    try {
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+            leaderboardWriteQueue = leaderboardWriteQueue
+                .then(() => deleteDoc(doc(db, 'leaderboard', uid)))
+                .catch((err) => { console.error('Error clearing leaderboard entry', err); return undefined; });
+        }
+    } catch {}
 
     // Remove all rows except the first one for transactions
     clearTransactionsExceptFirst('cash-transaction');

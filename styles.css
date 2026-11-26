@@ -955,6 +955,20 @@ body[data-view="desktop"] [data-screen-panel].screen-hidden {
     display: none;
 }
 
+/* Leaderboard: nine columns crush on phones, so let this table scroll
+   sideways instead of squeezing (other tables keep the fit-to-screen
+   behavior). */
+#leaderboardTableWrap {
+    overflow-x: auto;
+}
+#leaderboardTableWrap table {
+    min-width: 620px;
+}
+@media screen and (min-width: 701px) {
+    #leaderboardTableWrap table {
+        min-width: 0;
+    }
+}
 /* Chart view: fixed-height box so Chart.js can size the canvas.
    Tall enough for legend + axis labels on narrow phones. */
 #leaderboardChartWrap {
