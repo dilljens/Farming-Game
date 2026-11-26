@@ -4997,7 +4997,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // Build stamp: game version + script URL token so "which version am I
     // running" is always answerable on-device (stale-cache diagnosis).
     // Bump GAME_VERSION with each player-facing release.
-    const GAME_VERSION = '2.4';
+    const GAME_VERSION = '2.5';
     try {
         const src = Array.from(document.querySelectorAll('script[src*="scripts.js"]')).map(s => s.src).join(' ');
         const token = (src.match(/scripts\.js\?v=([0-9a-z]+)/) || [])[1] || 'dev';
