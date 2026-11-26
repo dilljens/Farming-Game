@@ -372,8 +372,11 @@ let manualInterestOverride = null;
 // init, before this section of the file executes — same TDZ crash as
 // payModeSelection before it.)
 const EXPENSE_LOAN_STEP = 1000;
+// Short-cash penalty loan: the expense rounded up to the $1,000 step, plus
+// one more $1,000 of pure debt. Cash only ever sees the expense in and
+// out — the borrower keeps nothing.
 function expenseLoanAmount(expense) {
-    return Math.max(EXPENSE_LOAN_STEP, Math.ceil((Number(expense) || 0) / EXPENSE_LOAN_STEP) * EXPENSE_LOAN_STEP);
+    return Math.ceil((Number(expense) || 0) / EXPENSE_LOAN_STEP) * EXPENSE_LOAN_STEP + EXPENSE_LOAN_STEP;
 }
 
 let leaderboardSaveTimer = null;
@@ -1090,11 +1093,10 @@ function updateActionButtonStates() {
             borrowInterestBtn.classList.toggle('hidden', !short);
             if (short) {
                 const loan = expenseLoanAmount(interest);
-                const keep = loan - interest;
                 const capOk = getCurrentLoanTotal() + loan <= debtCap();
-                borrowInterestBtn.textContent = `Borrow $${loan.toLocaleString()} (keep $${keep.toLocaleString()})`;
+                borrowInterestBtn.textContent = `Borrow $${loan.toLocaleString()} (covers $${interest.toLocaleString()})`;
                 const reason = capOk
-                    ? `Pays $${interest.toLocaleString()} interest now; loan $${loan.toLocaleString()}, you keep $${keep.toLocaleString()} cash`
+                    ? `Pays $${interest.toLocaleString()} interest now; the $${loan.toLocaleString()} loan is all debt — you keep $0`
                     : `Debt cap $${debtCap().toLocaleString()} blocks the $${loan.toLocaleString()} loan — pay down debt or ask the host to raise the cap.`;
                 setTappableBtn(borrowInterestBtn, !capOk, reason);
             }
@@ -4626,25 +4628,25 @@ function updatePayPerAcreDisplay() {
         paymentDisplay.textContent = `Total Payment: $${totalPayment.toLocaleString()}`;
     }
 
-    // Short on cash in pay mode? Offer the borrow button: the $1,000
-    // increment covering the expense. Hidden in gain mode and when cash covers.
+    // Short on cash in pay mode? Offer the borrow button: the penalty loan
+    // covering the expense (rounded up plus $1,000 of pure debt, no keep).
+    // Hidden in gain mode and when cash covers.
     const borrowBtn = document.getElementById('borrowPayPerAcreBtn');
     const borrowHint = document.getElementById('borrowPayPerAcreHint');
     if (borrowBtn) {
         updateTotals();
         const loan = expenseLoanAmount(totalPayment);
-        const keep = loan - totalPayment;
         const show = !isGainMode && totalPayment > 0 && getCurrentCashTotal() < totalPayment;
         borrowBtn.classList.toggle('hidden', !show);
         borrowBtn.classList.toggle('inline-flex', show);
         if (borrowHint) borrowHint.classList.toggle('hidden', true);
         if (show) {
             const capOk = getCurrentLoanTotal() + loan <= debtCap();
-            borrowBtn.textContent = `Borrow $${loan.toLocaleString()} (keep $${keep.toLocaleString()})`;
+            borrowBtn.textContent = `Borrow $${loan.toLocaleString()} (covers $${totalPayment.toLocaleString()})`;
             setButtonDisabled(borrowBtn, !capOk);
             if (borrowHint) {
                 borrowHint.textContent = capOk
-                    ? `Pays the $${totalPayment.toLocaleString()} now; you keep $${keep.toLocaleString()} cash.`
+                    ? `Pays the $${totalPayment.toLocaleString()} now; the loan is all debt — you keep $0.`
                     : `Debt cap $${debtCap().toLocaleString()} blocks this loan.`;
                 borrowHint.classList.toggle('hidden', false);
             }
@@ -4776,8 +4778,9 @@ function currentPayPerAcreTotal() {
     const perAcre = parseFloat(payModeSelection.perAcre) || 0;
     return (getAcresForType(payModeSelection.payType) || 0) * perAcre;
 }
-// Borrow the $1,000 increment covering the expense (helper above holds the
-// terms). Blocked by the debt cap. One undoable action covering every leg.
+// Borrow the penalty loan covering the expense (helper above holds the
+// terms). Cash sees only the expense in and out — no keep. Blocked by the
+// debt cap. One undoable action covering every leg.
 function borrowForExpense(expense, label) {
     const amount = Math.round(Number(expense) || 0);
     if (!(amount > 0)) return false;
@@ -4787,10 +4790,10 @@ function borrowForExpense(expense, label) {
     const cashBefore = ledgerLen('cash');
     const loanBefore = ledgerLen('loan');
     addLoanTransactionValue(loan, 'Borrowed');
-    addCashTransactionValue(loan, 'Borrowed');
+    addCashTransactionValue(amount, label);
     addCashTransactionValue(-amount, label);
     pushUndoAction({
-        label: `${label} $${amount.toLocaleString()} — borrowed $${loan.toLocaleString()} (keep $${(loan - amount).toLocaleString()})`,
+        label: `${label} $${amount.toLocaleString()} — borrowed $${loan.toLocaleString()} (kept $0)`,
         cash: ledgerLen('cash') - cashBefore,
         loan: ledgerLen('loan') - loanBefore
     });
@@ -5359,7 +5362,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     }
 
     // Borrow-for-expense button (shown instead of Pay Interest when cash is
-    // short: borrows the $1,000 increment covering the interest, then pays it).
+    // short: borrows the penalty loan covering the interest, then pays it).
     document.getElementById('borrowInterestBtn')?.addEventListener('click', (event) => {
         event.preventDefault();
         updateTotals();
