@@ -618,6 +618,9 @@ input, .editable {
 
 /* Transaction memos: what each ledger line was for. Small and wrappable
    so six columns still fit a phone screen; full text on tap via title. */
+.financial-table th {
+    font-size: 13px;
+}
 .cash-note, .loan-note {
     font-size: 11px;
     line-height: 1.3;
@@ -629,6 +632,36 @@ input, .editable {
     font-size: 11px;
     color: #6b7280;
     font-weight: 600;
+}
+/* Optional memo typed with a manual entry. Block-level so it sits under
+   the amount row on desktop and in the wrap stack on phones. */
+.tx-note-input {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+    font-size: 12px;
+    padding: 4px 6px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+/* Ledger edit mode: editable cells read as editable, toggle reads on. */
+#editLedgerBtn.is-on {
+    background-color: #1f2937;
+    color: #fff;
+}
+#financialTable.editing-ledger .cash-transaction,
+#financialTable.editing-ledger .loan-transaction,
+#financialTable.editing-ledger .cash-note,
+#financialTable.editing-ledger .loan-note {
+    outline: 2px dashed #3b82f6;
+    outline-offset: -2px;
+    cursor: text;
+}
+#financialTable [contenteditable="true"] {
+    background-color: #fffbeb;
+    outline: 2px solid #3b82f6;
+    outline-offset: -2px;
 }
 
 .asset-cell {

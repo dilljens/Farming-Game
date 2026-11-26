@@ -572,6 +572,9 @@
     <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center text-red-600" data-quick-transaction-value="-3000">-3000</button>
     <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center text-red-600" data-quick-transaction-value="-5000">-5000</button>
   </div>
+  <div class="flex justify-end w-full">
+    <button id="editLedgerBtn" type="button" class="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold" aria-pressed="false" title="Fix a past entry amount or its note. Totals, net worth, and the leaderboard recompute.">✏️ Edit entries</button>
+  </div>
 </div>
 
 <div class="table-wrap"><table class="financial-table" id="financialTable">
@@ -589,6 +592,7 @@
         <button type="button" data-sign="-" data-target="cashInput" aria-pressed="false" title="Subtract cash">−</button>
         <button type="button" data-sign="+" data-target="cashInput" aria-pressed="true" title="Add cash">+</button>
       </div>
+      <input type="text" id="cashNoteInput" class="tx-note-input" placeholder="Note (optional)" autocomplete="off" maxlength="60" />
       </div>
     </td>
     <th class="note-head">Note</th>
@@ -603,6 +607,7 @@
         <button type="button" data-sign="-" data-target="loanInput" aria-pressed="false" title="Repay loan">−</button>
         <button type="button" data-sign="+" data-target="loanInput" aria-pressed="true" title="Borrow">+</button>
       </div>
+      <input type="text" id="loanNoteInput" class="tx-note-input" placeholder="Note (optional)" autocomplete="off" maxlength="60" />
       </div>
     </td>
   </tr>

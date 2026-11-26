@@ -517,6 +517,16 @@ function parseTransactionValue(rawValue) {
     return Number.isFinite(n) ? Math.round(n) : NaN;
 }
 
+// Optional memo typed alongside a manual cash/loan entry. Falls back to
+// 'Manual entry' so quick-button taps (empty note box) still self-label.
+function readManualNote(inputId) {
+    try {
+        const el = document.getElementById(inputId === 'cashInput' ? 'cashNoteInput' : 'loanNoteInput');
+        const t = (el?.value || '').trim().slice(0, 60);
+        if (el) el.value = '';
+        return t || 'Manual entry';
+    } catch { return 'Manual entry'; }
+}
 function handleTransaction(inputId, transactionClass, totalClass) {
     const inputElement = document.getElementById(inputId);
     if (inputElement && inputElement.value.trim() !== '') {
@@ -595,7 +605,7 @@ function handleTransaction(inputId, transactionClass, totalClass) {
             createTransactionCell(newRow, 'loan-total');
         }
 
-        shiftAndInsertTransaction(inputId,transactionClass,newValue,'Manual entry');
+        shiftAndInsertTransaction(inputId,transactionClass,newValue,readManualNote(inputId));
         // Manual entries (typed or quick-button) are single-leg undo actions.
         pushUndoAction({
             label: `Manual ${transactionClass.includes('cash') ? 'cash' : 'loan'} entry $${newValue.toLocaleString()}`,
@@ -4954,6 +4964,112 @@ async function resetForRoomStart() {
 }
 
 
+// --- Ledger edit mode: fix a past entry amount or its memo --------------
+// Notes never touch math; amount edits re-run updateTotals() and keep the
+// cash-floor and debt-cap invariants, so calculations (and the leaderboard
+// net worth derived from them) stay consistent. The ledger itself never
+// leaves the device. Edits are corrections, not actions: no undo journal.
+let ledgerEditMode = false;
+function setLedgerEditMode(on) {
+    ledgerEditMode = !!on;
+    const btn = document.getElementById('editLedgerBtn');
+    if (btn) {
+        btn.setAttribute('aria-pressed', String(ledgerEditMode));
+        btn.classList.toggle('is-on', ledgerEditMode);
+        btn.textContent = ledgerEditMode ? '✔️ Done editing' : '✏️ Edit entries';
+    }
+    document.getElementById('financialTable')?.classList.toggle('editing-ledger', ledgerEditMode);
+    if (!ledgerEditMode && document.activeElement?.blur) {
+        try { document.activeElement.blur(); } catch {}
+    }
+}
+// Position of a rendered cell within its side's list is its ledger index:
+// render order always matches data order (newest first, max 10 shown).
+function ledgerCellIndex(cell, cls) {
+    return Array.from(document.querySelectorAll(`#financialTable .${cls}`)).indexOf(cell);
+}
+function armLedgerCell(cell) {
+    cell.contentEditable = 'true';
+    cell.spellcheck = false;
+    cell.dataset.orig = cell.textContent;
+    try { cell.focus(); document.getSelection()?.selectAllChildren(cell); } catch {}
+}
+function paintLedgerCell(cell, entry) {
+    if (cell.classList.contains('cash-note') || cell.classList.contains('loan-note')) {
+        const note = txNote(entry);
+        cell.textContent = note;
+        if (note) cell.title = note;
+        else cell.removeAttribute('title');
+    } else {
+        const amount = txAmount(entry);
+        cell.textContent = Number.isFinite(amount) ? numberWithCommasAndDecimals(amount) : '';
+    }
+}
+function commitLedgerCell(cell, revert) {
+    const isNote = cell.classList.contains('cash-note') || cell.classList.contains('loan-note');
+    const side = cell.classList.contains('cash-note') || cell.classList.contains('cash-transaction') ? 'cash' : 'loan';
+    const cls = isNote ? `${side}-note` : `${side}-transaction`;
+    const i = ledgerCellIndex(cell, cls);
+    const entry = data.transactions?.[side]?.[i];
+    cell.contentEditable = 'false';
+    if (!entry || typeof entry !== 'object') { paintLedgerCell(cell, entry); return; }
+    if (revert) { paintLedgerCell(cell, entry); return; }
+    if (isNote) {
+        entry.note = (cell.textContent || '').trim().slice(0, 60);
+        saveQuantitiesToLocalStorage();
+        paintLedgerCell(cell, entry);
+        return;
+    }
+    const n = parseTransactionValue(cell.textContent);
+    if (!Number.isFinite(n)) {
+        undoToast("Couldn't read that as a number — entry unchanged.");
+        paintLedgerCell(cell, entry);
+        return;
+    }
+    const old = txAmount(entry);
+    if (n !== old) {
+        const diff = n - old;
+        if (side === 'cash' && getCurrentCashTotal() + diff < 0) {
+            undoToast('That would push cash below $0 — entry unchanged.');
+            paintLedgerCell(cell, entry);
+            return;
+        }
+        if (side === 'loan') {
+            const t = getCurrentLoanTotal() + diff;
+            if (t < 0 || t > debtCap()) {
+                undoToast('That breaks the loan bounds ($0 to the debt cap) — entry unchanged.');
+                paintLedgerCell(cell, entry);
+                return;
+            }
+        }
+        entry.v = String(n);
+        updateTotals();
+        saveQuantitiesToLocalStorage();
+    }
+    paintLedgerCell(cell, entry);
+}
+const LEDGER_EDIT_SELECTOR = '.cash-transaction, .loan-transaction, .cash-note, .loan-note';
+document.getElementById('editLedgerBtn')?.addEventListener('click', () => setLedgerEditMode(!ledgerEditMode));
+document.getElementById('financialTable')?.addEventListener('click', (e) => {
+    if (!ledgerEditMode) return;
+    const cell = e.target.closest?.(LEDGER_EDIT_SELECTOR);
+    if (!cell || cell.isContentEditable) return;
+    armLedgerCell(cell);
+});
+document.getElementById('financialTable')?.addEventListener('keydown', (e) => {
+    const cell = e.target.closest?.(LEDGER_EDIT_SELECTOR);
+    if (!cell || !cell.isContentEditable) return;
+    if (e.key === 'Enter') { e.preventDefault(); cell.blur(); }
+    else if (e.key === 'Escape') { cell.dataset.revert = '1'; cell.blur(); }
+});
+document.getElementById('financialTable')?.addEventListener('focusout', (e) => {
+    const cell = e.target.closest?.(LEDGER_EDIT_SELECTOR);
+    if (!cell || !cell.isContentEditable) return;
+    const revert = cell.dataset.revert === '1';
+    delete cell.dataset.revert;
+    delete cell.dataset.orig;
+    commitLedgerCell(cell, revert);
+});
 function clearTransactionsExceptFirst(transactionClass) {
     const table = document.getElementById('financialTable'); // Use the correct ID for your table
     // Avoid relying on the CSS :has() selector (not supported in all browsers).
