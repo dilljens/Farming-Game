@@ -18,6 +18,8 @@ on:
       - 'vendor/**'
       - 'backend/**'
       - '.github/workflows/deploy.yml'
+  # Manual redeploy from the Actions tab (runs everything unconditionally).
+  workflow_dispatch:
 
 # Deploys run one at a time, never cancelled mid-rsync.
 concurrency:
@@ -51,7 +53,7 @@ jobs:
 
   deploy-frontend:
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +76,7 @@ jobs:
 
   deploy-backend:
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
