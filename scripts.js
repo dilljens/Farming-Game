@@ -886,106 +886,21 @@ function shiftAndInsertTransaction(inputId, transactionClass, numericValue, note
     }
 }
 
+// LEGACY DEAD PATHS — do not resurrect. Transactions only ever move through:
+//   writers      -> data.transactions via txEntry(parsed, note)
+//   display      -> updateTransactionLists (reads txAmount/txNote off the entries)
+//   user edits   -> commitLedgerCell (Edit mode; ledger-leg positional, notes tagged)
+//   undo         -> action log (ledger-leg counts only)
+// syncDOMToData rebuilt amounts from raw cell text and guessed notes back by
+// position — the exact desync this file used to suffer from. makeCellEditable
+// edited cells in place with no note binding for the same reason. Both are
+// retired; the ledger is the single source of truth.
 function syncDOMToData() {
-    // Sync visible transaction cells back to the data object
-    const cashCells = document.querySelectorAll('.cash-transaction');
-    const loanCells = document.querySelectorAll('.loan-transaction');
-    
-    // Ensure data.transactions exists
-    if (!data.transactions) {
-        data.transactions = { cash: [], loan: [] };
-    }
-    
-    // Rebuild cash transactions from DOM cells, filtering out empty ones.
-    // Values come back as fresh entries; keep the old note when the same
-    // value sits at the same position (edits change amounts, not memos).
-    const oldCash = Array.isArray(data.transactions.cash) ? data.transactions.cash : [];
-    data.transactions.cash = [];
-    cashCells.forEach((cell, i) => {
-        const cellValue = cell.textContent.trim();
-        if (cellValue !== '') {
-            // Parse the formatted value back to a raw number string
-            const numericValue = parseTransactionValue(cellValue);
-            if (Number.isFinite(numericValue)) {
-                const keep = txAmount(oldCash[i]) === numericValue ? txNote(oldCash[i]) : '';
-                data.transactions.cash.push(txEntry(numericValue, keep));
-            }
-        }
-    });
-    
-    // Rebuild loan transactions from DOM cells, filtering out empty ones
-    const oldLoan = Array.isArray(data.transactions.loan) ? data.transactions.loan : [];
-    data.transactions.loan = [];
-    loanCells.forEach((cell, i) => {
-        const cellValue = cell.textContent.trim();
-        if (cellValue !== '') {
-            // Parse the formatted value back to a raw number string
-            const numericValue = parseTransactionValue(cellValue);
-            if (Number.isFinite(numericValue)) {
-                const keep = txAmount(oldLoan[i]) === numericValue ? txNote(oldLoan[i]) : '';
-                data.transactions.loan.push(txEntry(numericValue, keep));
-            }
-        }
-    });
-    
-    // Save to localStorage after syncing
-    saveQuantitiesToLocalStorage();
+    console.warn('syncDOMToData is retired; ledger is source of truth');
 }
-
 function makeCellEditable(cell) {
-    // Totals are derived values; never allow editing them.
-    if (cell.classList.contains('cash-total') || cell.classList.contains('loan-total')) {
-        cell.contentEditable = 'false';
-        return;
-    }
-
-    cell.contentEditable = 'true';
-    
-    let originalValue = null;
-    
-    // Store original value when editing starts
-    cell.addEventListener('focus', () => {
-        originalValue = parseTransactionValue(cell.textContent);
-    });
-    
-    // Event listener for input events - don't sync on every keystroke to avoid issues with partial input
-    // cell.addEventListener('input', () => {
-    //     syncDOMToData(); // Sync changes back to global data
-    //     updateTotals();
-    // });
-
-    // Event listener for keydown events to handle the Enter key
-    cell.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault(); // Prevent the default Enter key action
-            cell.blur(); // Remove focus from the cell
-        }
-    });
-
-    // Event listener for blur events to sync when editing is finished
-    cell.addEventListener('blur', () => {
-        const newValue = parseTransactionValue(cell.textContent);
-        
-        // Validate and preserve the sign from the original transaction
-        if (Number.isFinite(originalValue) && Number.isFinite(newValue)) {
-            const originalSign = Math.sign(originalValue);
-            const newSign = Math.sign(newValue);
-            
-            if (originalSign !== 0 && newSign !== 0 && originalSign !== newSign) {
-                // Sign changed - preserve the original sign but allow magnitude change
-                const correctedValue = originalSign * Math.abs(newValue);
-                cell.textContent = numberWithCommasAndDecimals(String(correctedValue));
-                // alert('Transaction sign preserved. The sign cannot be changed for existing transactions.');
-            }
-        }
-        
-        syncDOMToData(); // Sync changes back to global data
-        updateTotals(); // Recalculate the total when editing is finished
-        // Reformat all transaction cells with proper number formatting
-        updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
-    });
+    if (cell && cell.classList) cell.contentEditable = 'false';
 }
-
 
 // Call this function after creating a new transaction cell
 function createTransactionCell(row, className, value = '', isEditable = false) {
@@ -1114,6 +1029,22 @@ function updateActionButtonStates() {
         setButtonDisabled(payPerAcreBtn, disabled);
     }
 
+    // Uncle Burt card: disabled (greyed, honest title) when the player can't
+    // cover the financing. useCapture: the gated handler must run before any
+    // other click handler on this button so a disabled press never reaches
+    // the buy.
+    try {
+        const b = document.getElementById('uncleBurtBtn');
+        if (b) {
+            const { down, loan, feasible } = (typeof burtHayBounds === 'function') ? burtHayBounds() : { down: 0, loan: 0, feasible: false };
+            b.disabled = !feasible;
+            b.classList.toggle('opacity-50', !feasible);
+            b.classList.toggle('cursor-not-allowed', !feasible);
+            b.title = feasible
+                ? `Event card: 1 hay for $7,500 ($${down.toLocaleString()} down + $${loan.toLocaleString()} loan)`
+                : 'Event card: 1 hay for $7,500 — not affordable right now';
+        }
+    } catch {}
     // Short on cash just opens the Pay Per Acre modal in pay mode: the
     // player picks a preset or types the exact total, then Pays (or
     // Borrows when short). Nothing moves until they confirm inside.
@@ -3273,16 +3204,33 @@ document.getElementById('rollDiceBtn')?.addEventListener('click', () => rollDice
 try {
     if (window.matchMedia?.('(max-width: 600px)').matches) setDiceVisible(true);
 } catch {}
-// Tap feedback for EVERY button: a quick press flash (CSS class) plus a
-// short haptic when the device has one. Replaces the old narrow selector
-// list, which left most buttons silent.
+// Tap feedback for EVERY button: a dip + ripple at the tap point + a short
+// click-pop, so desktop clicks and phone taps both feel answered. Light
+// buttons ripple white, dark-on-light pills ripple dark (per-button class).
 document.addEventListener('pointerdown', (e) => {
     const btn = e.target.closest?.('button');
     if (!btn || btn.disabled) return;
     btn.classList.add('is-pressed');
     clearTimeout(btn._pressT);
     btn._pressT = setTimeout(() => btn.classList.remove('is-pressed'), 180);
+    try {
+        const r = btn.getBoundingClientRect();
+        const ripple = document.createElement('span');
+        ripple.className = 'tap-ripple';
+        const size = Math.max(r.width, r.height) * 2.2;
+        ripple.style.width = ripple.style.height = `${size}px`;
+        ripple.style.left = `${(e.clientX || r.left + r.width / 2) - r.left}px`;
+        ripple.style.top = `${(e.clientY || r.top + r.height / 2) - r.top}px`;
+        btn.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 360);
+    } catch {}
     try { navigator.vibrate && navigator.vibrate(10); } catch {}
+    try {
+        const pop = btn._tapPop || (btn._tapPop = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA='));
+        pop.currentTime = 0;
+        pop.volume = 0.04;
+        pop.play().catch(() => {});
+    } catch {}
 }, { passive: true });
 
 // --- Custom Buy — buy property from another player at custom price ---
@@ -6457,6 +6405,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // sync with the DOM (double change events) and appear to uncheck itself.
     document.getElementById('dblHayBtn')?.addEventListener('change', (e) => setHayDoubled(!!e.target.checked));
     document.getElementById('dblCornBtn')?.addEventListener('change', (e) => setCornDoubled(!!e.target.checked));
+    document.getElementById('uncleBurtBtn')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        try {
+            const { feasible } = (typeof burtHayBounds === 'function') ? burtHayBounds() : { feasible: false };
+            if (!feasible) { undoToast('Uncle Burt: not affordable right now'); return; }
+        } catch { return; }
+        buyUncleBurtHay();
+    }, true);
     // Roll visibility setting: repaint the table in the chosen mode.
     // The room's Show-rolls rule owns the checkbox: players mirror the host.
     syncRollVisibilityUI();
@@ -6536,6 +6492,58 @@ window.addEventListener('DOMContentLoaded', (event) => {
             showBuyModal(asset, cost, totalCost);
         });
     });
+
+    // --- Uncle Burt card: event card that lets the player buy hay for $7,500 ---
+// Uses the same financing rules as the buy modal (down payment >= 20% min,
+// rest on the loan, debt-cap gated, one undoable action, qty +1, ledger
+// lines carry their own notes so memos never desync from amounts).
+const UNCLE_BURT_HAY_PRICE = 7500;
+function burtHayBounds() {
+    updateTotals();
+    const downPct = Math.min(100, Math.max(0, Number(roomEcon().downPct) || 0)) / 100;
+    const debtRoom = Math.max(0, debtCap() - getCurrentLoanTotal());
+    const down = Math.ceil(UNCLE_BURT_HAY_PRICE * downPct);
+    const loan = Math.max(0, UNCLE_BURT_HAY_PRICE - down);
+    const loanOk = loan <= debtRoom;
+    // Cash floor + down rule + debt cap From the same helpers the modal uses.
+    const cash = getCurrentCashTotal();
+    return { down, loan, feasible: loanOk && cash >= down };
+}
+function buyUncleBurtHay() {
+    updateTotals();
+    const { down, loan, feasible } = burtHayBounds();
+    if (!feasible) {
+        if (getCurrentCashTotal() < down) {
+            showCashFloorWarning(down);
+            sayStatus(`Uncle Burt hay costs $7,500 — you need $${down.toLocaleString()} cash down.`);
+        } else {
+            sayStatus(`Debt cap $${debtCap().toLocaleString()} blocks the $${loan.toLocaleString()} loan leg of Uncle Burt's hay.`);
+        }
+        updateActionButtonStates();
+        return false;
+    }
+    const hayEls = document.querySelectorAll('.qty-hay');
+    const hayCell = hayEls.length ? hayEls[0] : null;
+    if (!hayCell) return false;
+    const cur = parseInt(hayCell.textContent || '0', 10) || 0;
+    const cashBefore = ledgerLen('cash');
+    const loanBefore = ledgerLen('loan');
+    addCashTransactionValue(-down, 'Uncle Burt — hay $7,500 down');
+    if (loan > 0) addLoanTransactionValue(loan, 'Uncle Burt — hay $7,500 loan');
+    hayCell.textContent = String(cur + 1);
+    pushUndoAction({
+        label: `Uncle Burt: bought 1 hay for $7,500 ($${down.toLocaleString()} down + $${loan.toLocaleString()} loan)`,
+        cash: ledgerLen('cash') - cashBefore,
+        loan: ledgerLen('loan') - loanBefore,
+        qty: { targetClass: 'qty-hay', delta: 1 }
+    });
+    calculateNet();
+    populateRollTable();
+    saveQuantitiesToLocalStorage();
+    updateActionButtonStates();
+    undoToast('Uncle Burt sold you 1 hay for $7,500');
+    return true;
+}
 
     // Modal event listeners
     const buyModal = document.getElementById('buyModal');

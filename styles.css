@@ -370,18 +370,40 @@ input[type="number"] {
     border-width: 2px;
 }
 
-/* Universal press feedback: every button dips for a beat so taps always
-   register visibly (haptics ride along in JS where supported). */
+/* Pressed feedback everywhere: a fast dip + ripple + click pop so every
+   tap registers, on desktop and touch. Depressed = :active (instant,
+   works with mouse AND finger); the ripple is a real element so its
+   position matches the tap point. */
 button {
-    transition: transform 90ms ease, filter 90ms ease, background-color 120ms ease;
+    position: relative;
+    overflow: hidden;
+    transition: transform 70ms ease, filter 70ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+button:not(:disabled):active {
+    transform: translateY(1px) scale(0.97);
+    filter: brightness(0.88);
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.28);
 }
 button.is-pressed {
-    transform: scale(0.96);
-    filter: brightness(0.92);
+    transform: translateY(1px) scale(0.97);
+    filter: brightness(0.88);
+}
+button .tap-ripple {
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.55);
+    transform: translate(-50%, -50%) scale(0);
+    animation: tap-ripple 320ms ease-out forwards;
+}
+button.tap-dark .tap-ripple { background: rgba(0, 0, 0, 0.18); }
+@keyframes tap-ripple {
+    to { transform: translate(-50%, -50%) scale(1); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
     button { transition: none; }
-    button.is-pressed { transform: none; }
+    button.is-pressed, button:not(:disabled):active { transform: none; }
+    button .tap-ripple { display: none; }
 }
 
 /* "New deal" banner during the post-payout flash: the numbers on screen are
