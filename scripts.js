@@ -1923,6 +1923,32 @@ function applyViewMode(mode, opts = {}) {
 document.getElementById('viewModeBtn')?.addEventListener('click', () => {
     applyViewMode(currentViewMode() === 'mobile' ? 'desktop' : 'mobile');
 });
+// --- Night mode: light or dark, remembered per device. First visit follows
+// the OS preference. Only flips paint (dataset hook + persisted choice).
+function currentTheme() {
+    try {
+        const saved = localStorage.getItem('fgTheme');
+        if (saved === 'dark' || saved === 'light') return saved;
+    } catch {}
+    try {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+    } catch {}
+    return 'light';
+}
+function applyTheme(mode, opts = {}) {
+    const m = mode === 'dark' ? 'dark' : 'light';
+    try { document.body.dataset.theme = m; } catch {}
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.textContent = m === 'dark' ? '☀️ Light' : '🌙 Dark';
+    try {
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', m === 'dark' ? '#111827' : '#5fd7a9');
+    } catch {}
+    try { if (!opts.skipSave) localStorage.setItem('fgTheme', m); } catch {}
+}
+document.getElementById('themeBtn')?.addEventListener('click', () => {
+    applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+});
 document.querySelectorAll('#screenTabs button[data-screen]').forEach((btn) => {
     btn.addEventListener('click', () => setScreen(btn.dataset.screen));
     btn.title = 'Alt+Z previous screen, Alt+X next screen';
@@ -1984,7 +2010,7 @@ function refreshTabStatus() {
 try {
     new MutationObserver(refreshTabStatus).observe(document.body, { childList: true, subtree: true, characterData: true });
 } catch {}
-window.addEventListener('DOMContentLoaded', () => { applyViewMode(currentViewMode(), { skipSave: true }); refreshTabStatus(); }, { once: true });
+window.addEventListener('DOMContentLoaded', () => { applyViewMode(currentViewMode(), { skipSave: true }); applyTheme(currentTheme(), { skipSave: true }); refreshTabStatus(); }, { once: true });
 
 // --- Chart zoom controls (chartjs-plugin-zoom) ---
 function withZoomableChart(fn) {

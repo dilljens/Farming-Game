@@ -969,6 +969,126 @@ body[data-view="desktop"] [data-screen-panel].screen-hidden {
         min-width: 0;
     }
 }
+/* ================= Night mode =================
+   One dataset hook (body[data-theme="dark"]) restyles the whole game.
+   Only neutral Tailwind utilities are remapped — colored action buttons
+   (buy/sell/pay/trade) keep their colors in both modes. */
+body[data-theme="dark"] {
+    background-color: #111827;
+    color: #e5e7eb;
+    color-scheme: dark;
+}
+/* Tailwind neutrals */
+body[data-theme="dark"] .bg-white { background-color: #1f2937; }
+body[data-theme="dark"] .bg-gray-50 { background-color: #111827; }
+body[data-theme="dark"] .bg-gray-100 { background-color: #1f2937; }
+body[data-theme="dark"] .bg-gray-200 { background-color: #374151; }
+body[data-theme="dark"] .bg-yellow-50 { background-color: #422006; }
+body[data-theme="dark"] .text-black,
+body[data-theme="dark"] .text-gray-900,
+body[data-theme="dark"] .text-gray-800 { color: #f3f4f6; }
+body[data-theme="dark"] .text-gray-700 { color: #d1d5db; }
+body[data-theme="dark"] .text-gray-600,
+body[data-theme="dark"] .text-gray-500 { color: #9ca3af; }
+body[data-theme="dark"] .text-green-700 { color: #4ade80; }
+body[data-theme="dark"] .text-green-800 { color: #86efac; }
+body[data-theme="dark"] .text-red-600 { color: #f87171; }
+body[data-theme="dark"] .text-yellow-800 { color: #fde68a; }
+body[data-theme="dark"] .text-purple-800 { color: #c4b5fd; }
+body[data-theme="dark"] .border-gray-200,
+body[data-theme="dark"] .border-gray-300 { border-color: #4b5563; }
+body[data-theme="dark"] .border-yellow-200 { border-color: #92400e; }
+body[data-theme="dark"] .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #374151; }
+/* Tables */
+body[data-theme="dark"] th {
+    background-color: #1f2937;
+    color: #e5e7eb;
+}
+body[data-theme="dark"] th,
+body[data-theme="dark"] td {
+    border-color: #4b5563;
+}
+body[data-theme="dark"] .roll-table th { background-color: #1f2937; }
+body[data-theme="dark"] .roll-table button.roll-cell-button {
+    background-color: #374151;
+    border-color: #6b7280;
+    color: #f3f4f6;
+    box-shadow: 0 1px 0 rgba(0,0,0,.4);
+}
+body[data-theme="dark"] .roll-table button.roll-cell-button:hover { background-color: #4b5563; }
+body[data-theme="dark"] .roll-table button.roll-cell-button:active { background-color: #6b7280; }
+body[data-theme="dark"] .roll-table th.is-roll-col { background-color: #b45309; }
+body[data-theme="dark"] .roll-table td.is-roll-col button.roll-cell-button {
+    background-color: #92400e;
+    border-color: #f59e0b;
+    color: #fff;
+}
+body[data-theme="dark"] .roll-table tr:not(:first-child) td:first-child[data-state="1"] { background-color: #7f1d1d; }
+body[data-theme="dark"] .roll-table tr:not(:first-child) td:first-child[data-state="2"] { background-color: #14532d; }
+/* Property sheet */
+body[data-theme="dark"] .qty-cell,
+body[data-theme="dark"] .qty-wrap { background-color: #1e3a8a; }
+body[data-theme="dark"] .qty-btn {
+    background-color: #4b5563;
+    border-color: #6b7280;
+    color: #f3f4f6;
+}
+body[data-theme="dark"] .qty-btn:hover { background-color: #6b7280; }
+body[data-theme="dark"] .qty-btn:active { background-color: #9ca3af; }
+body[data-theme="dark"] .highlight { background-color: #065f46; }
+body[data-theme="dark"] .market-note { color: #9ca3af; }
+body[data-theme="dark"] .info-btn { background-color: #374151; color: #e5e7eb; }
+body[data-theme="dark"] .info-btn:active { background-color: #4b5563; }
+body[data-theme="dark"] .info-tip { color: #9ca3af; }
+/* Cash / loan entry */
+body[data-theme="dark"] .entry-cell { background-color: #1f2937; }
+body[data-theme="dark"] #cashInput,
+body[data-theme="dark"] #loanInput {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #f3f4f6;
+    caret-color: #f3f4f6;
+}
+body[data-theme="dark"] .tx-note-input {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #f3f4f6;
+}
+body[data-theme="dark"] .sign-seg { border-color: #6b7280; }
+body[data-theme="dark"] .sign-seg button { background-color: #4b5563; color: #d1d5db; }
+body[data-theme="dark"] .sign-seg button + button { border-color: #6b7280; }
+body[data-theme="dark"] .cash-note,
+body[data-theme="dark"] .loan-note { color: #9ca3af; }
+body[data-theme="dark"] .note-head { color: #9ca3af; }
+body[data-theme="dark"] #financialTable tr:nth-child(even) td:not(.entry-cell) { background-color: #1f2937; }
+body[data-theme="dark"] #financialTable td:empty::before { color: #4b5563; }
+body[data-theme="dark"] #financialTable [contenteditable="true"] { background-color: #422006; }
+body[data-theme="dark"] .undo-btn,
+body[data-theme="dark"] #editLedgerBtn {
+    background-color: #374151;
+    color: #e5e7eb;
+}
+body[data-theme="dark"] .undo-btn:hover,
+body[data-theme="dark"] #editLedgerBtn:hover { background-color: #4b5563; }
+body[data-theme="dark"] #editLedgerBtn.is-on { background-color: #f3f4f6; color: #111827; }
+/* Toggles, tabs, misc chrome */
+body[data-theme="dark"] .dbl-toggle {
+    background-color: #1f2937;
+    border-color: #4b5563;
+    color: #d1d5db;
+}
+body[data-theme="dark"] #screenTabs { background: rgba(17, 24, 39, 0.96); border-color: #374151; }
+body[data-theme="dark"] #screenTabsStatus { color: #d1d5db; }
+body[data-theme="dark"] #screenTabs button[data-screen] {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #d1d5db;
+}
+body[data-theme="dark"] .pay-per-acre-table button.pay-acre-button:not(.selected) {
+    background-color: #374151;
+    color: #e5e7eb;
+    border-color: #4b5563;
+}
 /* Tabbed (mobile) view on a wide screen should breathe: relax the
    phone-sized 600px caps when there is room. Phones are untouched. */
 @media screen and (min-width: 1000px) {

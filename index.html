@@ -27,7 +27,8 @@
   </head>
   
   <body>
-        <script>try{var __m=localStorage.getItem('fgViewMode');if(__m!=='mobile'&&__m!=='desktop'){__m=(window.matchMedia&&window.matchMedia('(max-width: 700px)').matches)?'mobile':'desktop';}document.body.dataset.view=__m;}catch(e){}</script>
+        <script>try{var __m=localStorage.getItem('fgViewMode');if(__m!=='mobile'&&__m!=='desktop'){__m=(window.matchMedia&&window.matchMedia('(max-width: 700px)').matches)?'mobile':'desktop';}document.body.dataset.view=__m;}catch(e){}
+        try{var __t=localStorage.getItem('fgTheme');if(__t!=='dark'&&__t!=='light'){__t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.body.dataset.theme=__t;}catch(e){}</script>
         <!-- Leaderboard Section -->
         <table>
           <tr>
@@ -46,6 +47,9 @@
           </button>
           <button id="viewModeBtn" type="button" class="rounded-full bg-gray-700 px-2.5 py-1 text-m font-semibold text-white shadow-sm hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-600" title="Swap between tabbed mobile view and full desktop view">
             📱 Mobile
+          </button>
+          <button id="themeBtn" type="button" class="rounded-full bg-gray-700 px-2.5 py-1 text-m font-semibold text-white shadow-sm hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-600" title="Swap between light and night mode">
+            🌙 Dark
           </button>
         </div>
 
