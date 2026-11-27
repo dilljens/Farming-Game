@@ -2824,8 +2824,31 @@ function flashRollTable(ms = 1000) {
     buttons.forEach(revealRollAmount);
     clearTimeout(flashRollTable._t);
     flashRollTable._t = setTimeout(() => {
-        buttons.forEach((b) => { if (b.dataset.amount) hideRollAmount(b, b.dataset.amount); });
+        maskAllRollAmounts();
+        // A roll can be marked while the flash is running — keep its column
+        // visible instead of hiding the number they're about to collect.
+        const n = parseInt(document.querySelector('.roll-table')?.dataset.lastRoll || '', 10);
+        if (n >= 1 && n <= 6) revealRollColumn(n);
     }, ms);
+}
+function maskAllRollAmounts() {
+    document.querySelectorAll('.roll-table button.roll-cell-button').forEach((b) => {
+        if (b.dataset.amount) hideRollAmount(b, b.dataset.amount);
+    });
+}
+// Selecting a roll shows exactly what that roll pays right now: every crop's
+// cell in that column unmasks (the rest stay hidden), so the player sees
+// what they could collect without the whole table being public.
+function revealRollColumn(n) {
+    const table = document.querySelector('.roll-table');
+    if (!table) return;
+    const col = parseInt(n, 10);
+    maskAllRollAmounts();
+    if (!(col >= 1 && col <= 6)) return;
+    table.querySelectorAll('tr').forEach((row) => {
+        const cell = row.cells[col];
+        if (cell) cell.querySelectorAll('button.roll-cell-button').forEach(revealRollAmount);
+    });
 }
 function reshuffleRollTables() {
     liveRollValues = {};
@@ -2867,6 +2890,7 @@ function setRollColumn(n) {
     if (!(n >= 1 && n <= 6)) return;
     table.dataset.lastRoll = String(n);
     paintRollColumn();
+    try { revealRollColumn(n); } catch {}
 }
 function clearRollColumn() {
     const table = document.querySelector('.roll-table');
@@ -4041,6 +4065,13 @@ function revealCropRowForQtyClass(targetClass) {
         .find((r) => (r.cells[0]?.textContent || '').split(' ')[0] === crop);
     if (!row) return;
     row.querySelectorAll('button.roll-cell-button').forEach(revealRollAmount);
+}
+// Showing values after a change: a marked roll wins (that's the number the
+// player is about to collect), otherwise the row they just edited.
+function refreshRollReveal(targetClass) {
+    const n = parseInt(document.querySelector('.roll-table')?.dataset.lastRoll || '', 10);
+    if (n >= 1 && n <= 6) { revealRollColumn(n); return; }
+    if (targetClass) revealCropRowForQtyClass(targetClass);
 }
 function populateRollTable() {
     // NEVER re-deals: the order comes from liveRollValues, which only
@@ -5653,7 +5684,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 populateRollTable();
                 // The row you just changed stops being a secret: reveal its
                 // payouts so the ± actually shows up on the roll table.
-                try { revealCropRowForQtyClass(targetClass); } catch {}
+                try { refreshRollReveal(targetClass); } catch {}
                 saveQuantitiesToLocalStorage();
             }
         });
