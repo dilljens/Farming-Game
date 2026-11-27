@@ -969,6 +969,14 @@ body[data-view="desktop"] [data-screen-panel].screen-hidden {
         min-width: 0;
     }
 }
+/* Tabbed (mobile) view on a wide screen should breathe: relax the
+   phone-sized 600px caps when there is room. Phones are untouched. */
+@media screen and (min-width: 1000px) {
+    body[data-view="mobile"] .tables-container,
+    body[data-view="mobile"] table {
+        max-width: 900px;
+    }
+}
 /* Wide desktop: two columns so the page uses the screen. Board and Cash
    span full width (wide tables + chart + entry forms); Rolls and Property
    sit side by side. Below 1000px (or forced desktop on a phone) everything
