@@ -370,6 +370,20 @@ input[type="number"] {
     border-width: 2px;
 }
 
+/* Universal press feedback: every button dips for a beat so taps always
+   register visibly (haptics ride along in JS where supported). */
+button {
+    transition: transform 90ms ease, filter 90ms ease, background-color 120ms ease;
+}
+button.is-pressed {
+    transform: scale(0.96);
+    filter: brightness(0.92);
+}
+@media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+    button.is-pressed { transform: none; }
+}
+
 /* "New deal" banner during the post-payout flash: the numbers on screen are
    the NEXT payouts, not the one just collected. */
 #rollDealBanner {

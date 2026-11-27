@@ -1975,6 +1975,7 @@ function currentViewMode() {
 }
 function applyViewMode(mode, opts = {}) {
     const m = mode === 'desktop' ? 'desktop' : 'mobile';
+    const wasMobile = document.body?.dataset?.view === 'mobile';
     try { document.body.dataset.view = m; } catch {}
     const btn = document.getElementById('viewModeBtn');
     if (btn) btn.textContent = m === 'mobile' ? '🖥️ Desktop page' : '📱 Mobile tabs';
@@ -1984,6 +1985,9 @@ function applyViewMode(mode, opts = {}) {
         syncTradeButtons();
     } else {
         setScreen(currentScreenFromUrl(), { instant: true, skipSave: true, skipHash: true });
+    }
+    if (!opts.skipSave && wasMobile !== (m === 'mobile')) {
+        undoToast(m === 'mobile' ? 'Tabbed view — switch screens with the tabs below' : 'Full page view — everything on one scroll');
     }
 }
 document.getElementById('viewModeBtn')?.addEventListener('click', () => {
@@ -2003,6 +2007,7 @@ function currentTheme() {
 }
 function applyTheme(mode, opts = {}) {
     const m = mode === 'dark' ? 'dark' : 'light';
+    const wasDark = document.body?.dataset?.theme === 'dark';
     try { document.body.dataset.theme = m; } catch {}
     const btn = document.getElementById('themeBtn');
     if (btn) btn.textContent = m === 'dark' ? '☀️ Light' : '🌙 Dark';
@@ -2012,6 +2017,8 @@ function applyTheme(mode, opts = {}) {
     } catch {}
     try { repaintChartForTheme(); } catch {}
     try { if (!opts.skipSave) localStorage.setItem('fgTheme', m); } catch {}
+    // Only announce a real user switch, never the initial paint.
+    if (!opts.skipSave && wasDark !== (m === 'dark')) undoToast(m === 'dark' ? 'Night mode on' : 'Light mode on');
 }
 document.getElementById('themeBtn')?.addEventListener('click', () => {
     applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
@@ -2913,7 +2920,10 @@ function pushDiceHistory(text) {
     diceHistory.unshift(text);
     if (diceHistory.length > 20) diceHistory = diceHistory.slice(0, 20);
     const h = document.getElementById('diceHistory');
-    if (h) h.textContent = diceHistory.join(' • ');
+    if (h) {
+        // Label the strip so the rolled values read as history, not noise.
+        h.textContent = diceHistory.length ? `Recent rolls: ${diceHistory.join(' · ')}` : '';
+    }
 }
 function rollDice() {
     if (diceRolling) return null;
@@ -2948,6 +2958,7 @@ function setDiceVisible(visible) {
     const toggle = document.getElementById('toggleDiceBtn');
     if (comp) comp.classList.toggle('hidden', !visible);
     if (toggle) toggle.classList.toggle('hidden', visible);
+    undoToast(visible ? 'Dice shown — tap Roll 1-6' : 'Dice hidden');
 }
 document.getElementById('toggleDiceBtn')?.addEventListener('click', () => setDiceVisible(true));
 document.getElementById('hideDiceBtn')?.addEventListener('click', () => setDiceVisible(false));
@@ -2957,12 +2968,17 @@ document.getElementById('rollDiceBtn')?.addEventListener('click', () => rollDice
 try {
     if (window.matchMedia?.('(max-width: 600px)').matches) setDiceVisible(true);
 } catch {}
-// haptics for thumb actions (dice/buy/qty/roll)
-document.addEventListener('click', (e) => {
-    if (e.target.closest('.buy-btn, .qty-btn, .roll-cell-button, #rollDiceBtn, #confirmBuy, #confirmCustomBuy, #confirmCustomSell, #payPerAcreBtn, #payInterestBtn, #gainPerAcreBtn, #payOffLoanBtn')) {
-        try { navigator.vibrate && navigator.vibrate(10); } catch {}
-    }
-});
+// Tap feedback for EVERY button: a quick press flash (CSS class) plus a
+// short haptic when the device has one. Replaces the old narrow selector
+// list, which left most buttons silent.
+document.addEventListener('pointerdown', (e) => {
+    const btn = e.target.closest?.('button');
+    if (!btn || btn.disabled) return;
+    btn.classList.add('is-pressed');
+    clearTimeout(btn._pressT);
+    btn._pressT = setTimeout(() => btn.classList.remove('is-pressed'), 180);
+    try { navigator.vibrate && navigator.vibrate(10); } catch {}
+}, { passive: true });
 
 // --- Custom Buy — buy property from another player at custom price ---
 // Open-offer choice shared by both trade modals: anyone sharing this trade
@@ -5235,6 +5251,7 @@ async function resetForRoomStart() {
 // leaves the device. Edits are corrections, not actions: no undo journal.
 let ledgerEditSide = null; // null | 'cash' | 'loan' — each side edits on its own
 function setLedgerEditSide(side) {
+    const prev = ledgerEditSide;
     ledgerEditSide = side === 'cash' || side === 'loan' ? side : null;
     for (const s of ['cash', 'loan']) {
         const btn = document.getElementById(s === 'cash' ? 'editCashBtn' : 'editLoanBtn');
@@ -5252,6 +5269,9 @@ function setLedgerEditSide(side) {
     }
     if (!ledgerEditSide && document.activeElement?.blur) {
         try { document.activeElement.blur(); } catch {}
+    }
+    if (prev !== ledgerEditSide) {
+        undoToast(ledgerEditSide ? `Editing ${ledgerEditSide} entries — tap an amount or note` : 'Done editing');
     }
 }
 function ledgerSideOf(cell) {
@@ -5455,6 +5475,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 // (a typed/pasted sign always wins over the segment).
                 cashInput.value = rawValue.startsWith('-') ? rawValue : '+' + rawValue;
                 handleTransaction('cashInput', 'cash-transaction', 'cash-total');
+                // Confirm the quick amount landed (the ledger row is easy to miss).
+                const n = Math.abs(Number(rawValue) || 0);
+                undoToast(`${rawValue.startsWith('-') ? '−' : '+'}$${n.toLocaleString()} added to cash`);
             });
         });
         document.getElementById('christmasBtn')?.addEventListener('click', () => {
