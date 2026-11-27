@@ -14,7 +14,7 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" href="./icon-192.svg">
     <link rel="apple-touch-icon" href="./icon-192.svg">
-    <link rel="stylesheet" href="./styles.css?v=20261130a">
+    <link rel="stylesheet" href="./styles.css?v=20261130b">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -255,6 +255,7 @@
           <button id="opexCustomBtn" type="button" class="px-4 py-2 rounded-md bg-teal-600 text-white text-sm font-semibold hover:bg-teal-500">Pay</button>
         </div>
         <button id="opexZeroBtn" type="button" class="w-full justify-center rounded-md bg-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-300">Conditional — $0 this roll</button>
+        <button id="opexShortBtn" type="button" class="w-full justify-center rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-600" title="Short on cash: borrows the penalty loan covering the pending expense, then pays it">Short on cash — borrow &amp; pay</button>
         <div class="grid grid-cols-6 gap-2" id="opexQuickRow"></div>
         <button id="opexCancelBtn" type="button" class="w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-red-600 ring-1 ring-inset ring-red-300 hover:bg-red-50">Cancel roll</button>
       </div>
@@ -892,7 +893,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20261130a"></script>
+<script type="module" src="scripts.js?v=20261130b"></script>
 
 <div id="buildStamp" class="text-center text-[10px] text-gray-400 mt-2 mb-1"></div>
 

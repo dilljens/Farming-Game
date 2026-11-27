@@ -5359,6 +5359,50 @@ document.getElementById('opexCancelBtn')?.addEventListener('click', () => {
         row.appendChild(b);
     }
 })();
+// Short on cash: the main-screen flow covers "what I owe" with one tap —
+// interest first (it is the canonical bill), else the custom box amount, else
+// the plain penalty step loan. Same penalty math as the Pay Interest button.
+document.getElementById('opexShortBtn')?.addEventListener('click', () => {
+    updateTotals();
+    const hint = document.getElementById('opexHint');
+    const say = (msg) => { if (hint) { hint.textContent = msg; hint.classList.remove('hidden'); } };
+    const interest = getCurrentInterestValue();
+    let expense = 0;
+    let note = '';
+    if (interest > 0) { expense = interest; note = opexNote(`interest, roll ${opexRoll ?? '?'}`); }
+    else {
+        const customBox = document.getElementById('opexCustom');
+        const custom = Math.round(parseFloat(String(customBox?.value || '').replace(/,/g, '')) || 0);
+        if (custom > 0) { expense = custom; note = opexNote(`custom, roll ${opexRoll ?? '?'}`); }
+    }
+    if (!(expense > 0)) {
+        const step = EXPENSE_LOAN_STEP || 1000;
+        if (getCurrentLoanTotal() + step > debtCap()) {
+            say(`Debt cap $${debtCap().toLocaleString()} blocks even the $${step.toLocaleString()} step loan — pay down debt first.`);
+            updateActionButtonStates();
+            return;
+        }
+        const cashBefore = ledgerLen('cash');
+        const loanBefore = ledgerLen('loan');
+        addLoanTransactionValue(step, 'Borrowed');
+        addCashTransactionValue(step, opexNote(`short on cash, roll ${opexRoll ?? '?'}`));
+        pushUndoAction({ label: `Operating expense · short on cash $${step.toLocaleString()} (borrowed, roll ${opexRoll ?? '?'})`, cash: ledgerLen('cash') - cashBefore, loan: ledgerLen('loan') - loanBefore });
+        updateActionButtonStates();
+        hideOpexGate();
+        undoToast(`Operating expense · short on cash $${step.toLocaleString()} (borrowed) — recorded`);
+        return;
+    }
+    if (borrowForExpense(expense, note)) {
+        manualInterestOverride = null;
+        updateTotals();
+        updateActionButtonStates();
+        hideOpexGate();
+        undoToast(`Operating expense · short on cash $${expense.toLocaleString()} (borrowed) — recorded`);
+    } else {
+        say(`Debt cap $${debtCap().toLocaleString()} blocks the loan — pay down debt first.`);
+        updateActionButtonStates();
+    }
+});
 document.getElementById('opexZeroBtn')?.addEventListener('click', () => {
     const cashBefore = ledgerLen('cash');
     pushUndoAction({
