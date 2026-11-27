@@ -14,7 +14,7 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" href="./icon-192.svg">
     <link rel="apple-touch-icon" href="./icon-192.svg">
-    <link rel="stylesheet" href="./styles.css?v=20261129e">
+    <link rel="stylesheet" href="./styles.css?v=20261130a">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -108,6 +108,7 @@
                           <li><strong>Balance</strong> — crowded crops cost up to $1,000 over base in $100 tickets; ignored ones discount the same way. Hay (base $15,000) caps at $20,000; fruit (base $25,000) floors at $20,000.</li>
                           <li><strong>Boom&amp;Bust</strong> — each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped at ±50% of base. Same walk on every device. Off-average crops drift back in $100 tickets up to ±$500.</li>
                           <li><strong>Shuffle rolls</strong> — each crop's roll table is randomly reordered (best payout can be any roll 1-6), reshuffled after every collected payout. Works with real dice: tap the 1–6 header for the number rolled, then tap the payout.</li>
+                          <li><strong>Show rolls</strong> — host choice, set only in room setup or Room Settings: ON shows every payout on the roll table; OFF keeps values masked (•••) until a player taps one.</li>
                           <li><strong>Economy</strong> — enables the host's economy numbers below (unticked = standard $50k loan cap, 10% interest, 20% min down).</li>
                           <li><strong>Harvest</strong> — enables the host's harvest numbers below (unticked = standard hay tiers and equipment bonuses).</li>
                         </ul>
@@ -244,6 +245,7 @@
   <div class="relative top-10 mx-auto p-5 border w-[92%] max-w-md shadow-lg rounded-md bg-white max-h-[88vh] overflow-y-auto">
     <div class="mt-3 text-left">
       <h3 class="text-lg font-bold text-gray-900">Operating expense — roll <span id="opexRollNum">?</span></h3>
+      <p id="opexGotLine" class="text-sm font-semibold text-gray-800 mt-1"></p>
       <p class="text-xs text-gray-500 mt-1">Required after every roll. Pick one; it posts to the ledger as an operating expense.</p>
       <div class="mt-3 grid gap-2">
         <button id="opexPayAcreBtn" type="button" class="w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500">Pay per acre…</button>
@@ -253,6 +255,8 @@
           <button id="opexCustomBtn" type="button" class="px-4 py-2 rounded-md bg-teal-600 text-white text-sm font-semibold hover:bg-teal-500">Pay</button>
         </div>
         <button id="opexZeroBtn" type="button" class="w-full justify-center rounded-md bg-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-300">Conditional — $0 this roll</button>
+        <div class="grid grid-cols-6 gap-2" id="opexQuickRow"></div>
+        <button id="opexCancelBtn" type="button" class="w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-red-600 ring-1 ring-inset ring-red-300 hover:bg-red-50">Cancel roll</button>
       </div>
       <p id="opexHint" class="text-sm text-red-600 mt-2 hidden">Pick an option above to continue.</p>
     </div>
@@ -411,7 +415,6 @@
     <div id="doubleToggles" class="text-center my-1 flex items-center justify-center gap-3">
       <label class="dbl-check" title="Double hay rolls"><input type="checkbox" id="dblHayBtn" /> Hay ×2</label>
       <label class="dbl-check" title="Double corn rolls"><input type="checkbox" id="dblCornBtn" /> Corn ×2</label>
-      <label class="dbl-check" title="Show every payout, or keep them hidden until tapped"><input type="checkbox" id="rollVisibleChk" /> 👁 Show values</label>
     </div>
     <div class="table-wrap"><table class="roll-table">
       <tr>
@@ -889,7 +892,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20261129e"></script>
+<script type="module" src="scripts.js?v=20261130a"></script>
 
 <div id="buildStamp" class="text-center text-[10px] text-gray-400 mt-2 mb-1"></div>
 

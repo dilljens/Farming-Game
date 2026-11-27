@@ -323,9 +323,9 @@ function startRoomDocListener() {
         // interest, buy bounds, and roll payouts so guests follow the host.
         try { updateTotals(); } catch {}
         try { populateRollTable(); } catch {}
-        // Room visibility rule rides the same doc: sync the checkbox and
-        // repaint so everyone follows the host with no refresh.
-        try { syncRollVisibilityUI(); populateRollTable(); } catch {}
+        // Room visibility rule rides the same doc: repaint so everyone
+        // follows the host with no refresh.
+        try { populateRollTable(); } catch {}
         // host reset signal — mirror imposterirl resetGameForNewRound via room doc
         const resetAt = data.lastHostResetAt;
         if (resetAt && !isHost) {
@@ -2223,7 +2223,7 @@ function setScreen(name, opts = {}) {
             if (progressChart) { progressChart.resize(); progressChart.update('none'); }
         } catch {}
     }
-    try { syncRollVisibilityUI(); } catch {}
+
     syncTradeButtons(key);
     try { window.scrollTo({ top: 0, behavior: opts.instant ? 'auto' : 'smooth' }); } catch { window.scrollTo(0, 0); }
 }
@@ -4367,22 +4367,9 @@ function numberWithCommasAndDecimals(x) {
 // reveal what you earned, not advertise it beforehand. The real amount rides
 // on the button's dataset so collecting needs no recompute.
 const ROLL_MASK = '•••';
-// Payout visibility is a setting you pick: regular (visible) or hidden until
-// tapped. Default is regular, so a fresh device sees the whole table.
-// Roll visibility is a HOST room rule (Show rolls): visible table or masks
-// until tapped. Default ON, so rooms from before the key show values.
-// The checkbox mirrors the host (dimmed for players) and updates live via the
-// room-doc listener.
-function syncRollVisibilityUI() {
-    const visChk = document.getElementById('rollVisibleChk');
-    if (!visChk) return;
-    visChk.checked = rollValuesVisible();
-    visChk.disabled = !isHost;
-    visChk.closest('.dbl-check')?.classList.toggle('host-only', !isHost && !!currentRoomCode);
-    visChk.title = !currentRoomCode ? 'Show every payout, or keep them hidden until tapped'
-        : isHost ? 'Show every payout, or keep them hidden until tapped'
-        : 'Host sets this for the room';
-}
+// Roll visibility is a HOST room rule (Show rolls), set only in room setup
+// or Room Settings: visible table or masks until tapped. Default ON, so rooms
+// from before the key show values.
 function rollValuesVisible() {
     try {
         const r = currentRoomRules;
@@ -5188,11 +5175,19 @@ document.getElementById('payPerAcreCustom')?.addEventListener('input', () => {
 // ledger says what it was for. No dismiss path: the game cannot continue
 // unpaid.
 let opexRoll = null;
+let opexPaid = null; // {asset, amount} — the roll's collected payout
 let opexExpectingPerAcre = false;
-function showOpexGate(roll) {
+function showOpexGate(roll, paid) {
     opexRoll = roll;
+    opexPaid = paid && Number.isFinite(Number(paid.amount)) ? { asset: String(paid.asset || 'Crop'), amount: Number(paid.amount) } : null;
     const num = document.getElementById('opexRollNum');
     if (num) num.textContent = String(roll ?? '?');
+    const got = document.getElementById('opexGotLine');
+    if (got) {
+        got.textContent = opexPaid
+            ? `You collected ${opexPaid.asset} $${opexPaid.amount.toLocaleString()} on roll ${roll}.`
+            : '';
+    }
     const custom = document.getElementById('opexCustom');
     if (custom) custom.value = '';
     const hint = document.getElementById('opexHint');
@@ -5211,6 +5206,7 @@ function showOpexGate(roll) {
 function hideOpexGate() {
     document.getElementById('opexModal')?.classList.add('hidden');
     opexRoll = null;
+    opexPaid = null;
 }
 function opexNote(detail) {
     return detail ? `Operating expense · ${detail}` : 'Operating expense';
@@ -5312,6 +5308,57 @@ document.getElementById('opexCustomBtn')?.addEventListener('click', () => {
     hideOpexGate();
     undoToast(`Operating expense · custom $${n.toLocaleString()} — recorded`);
 });
+document.getElementById('opexCancelBtn')?.addEventListener('click', () => {
+    hideOpexGate();
+    try {
+        const log = ensureActionLog();
+        // The roll's payout is always the newest action (it just happened),
+        // so popping once reverses the roll — never older history.
+        const a = log[log.length - 1];
+        if (a && a.cash > 0 && typeof undoLastAction === 'function') undoLastAction();
+    } catch {}
+    try { maskAllRollAmounts(); clearRollColumn(); } catch {}
+    try { undoToast('Roll cancelled — nothing collected, nothing owed'); } catch {}
+});
+// Quick amounts inside the expense gate pay the expense directly (same
+// signs, same cash/loan math) and close the gate — no typing needed.
+(function wireOpexQuickRow() {
+    const row = document.getElementById('opexQuickRow');
+    if (!row || row.dataset.wired) return;
+    row.dataset.wired = '1';
+    const presets = ['+500', '+1000', '+1500', '+2000', '+3000', '+5000', '-500', '-1000', '-1500', '-2000', '-3000', '-5000'];
+    for (const raw of presets) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        const neg = raw.startsWith('-');
+        b.className = `px-1 py-1 rounded text-xs font-semibold text-center ${neg ? 'text-red-600 bg-red-50 hover:bg-red-100' : 'text-green-700 bg-green-50 hover:bg-green-100'}`;
+        b.textContent = raw;
+        b.setAttribute('data-opex-quick', raw);
+        b.addEventListener('click', () => {
+            const n = Math.abs(Number(raw) || 0);
+            if (!(n > 0)) return;
+            updateTotals();
+            if (raw.startsWith('-')) {
+                if (getCurrentCashTotal() < n) {
+                    const hint = document.getElementById('opexHint');
+                    if (hint) { hint.textContent = 'Not enough cash for that amount — pick a smaller one or use Conditional.'; hint.classList.remove('hidden'); }
+                    return;
+                }
+                const cashBefore = ledgerLen('cash');
+                addCashTransactionValue(-n, opexNote(`quick pay, roll ${opexRoll ?? '?'}`));
+                pushUndoAction({ label: `Operating expense · quick pay $${n.toLocaleString()} (roll ${opexRoll ?? '?'})`, cash: ledgerLen('cash') - cashBefore, loan: 0 });
+            } else {
+                const cashBefore = ledgerLen('cash');
+                addCashTransactionValue(n, opexNote(`quick gain, roll ${opexRoll ?? '?'}`));
+                pushUndoAction({ label: `Operating expense · quick gain $${n.toLocaleString()} (roll ${opexRoll ?? '?'})`, cash: ledgerLen('cash') - cashBefore, loan: 0 });
+            }
+            updateActionButtonStates();
+            hideOpexGate();
+            undoToast(`${raw.startsWith('-') ? '−' : '+'}$${n.toLocaleString()} operating expense — recorded`);
+        });
+        row.appendChild(b);
+    }
+})();
 document.getElementById('opexZeroBtn')?.addEventListener('click', () => {
     const cashBefore = ledgerLen('cash');
     pushUndoAction({
@@ -6102,7 +6149,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 // Mandatory stop: one operating bill per roll, due before the
                 // next one can be marked. No payout-side de-reveal happens
                 // until the expense is handled.
-                try { showOpexGate(tapRoll); } catch {}
+                try { showOpexGate(tapRoll, { asset: tapAsset, amount: value }); } catch {}
 
             });
         }
