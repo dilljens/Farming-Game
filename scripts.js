@@ -2815,6 +2815,18 @@ let liveRollValues = {};
 for (const k of Object.keys(BASE_ROLL_VALUES)) {
     liveRollValues[k] = shuffleRollsRandom(BASE_ROLL_VALUES[k]);
 }
+// After a payout the table re-deals with every value masked. Flash the whole
+// table for a second first, so players see what the new deal looks like
+// before it goes dark again.
+function flashRollTable(ms = 1000) {
+    const buttons = [...document.querySelectorAll('.roll-table button.roll-cell-button')];
+    if (!buttons.length) return;
+    buttons.forEach(revealRollAmount);
+    clearTimeout(flashRollTable._t);
+    flashRollTable._t = setTimeout(() => {
+        buttons.forEach((b) => { if (b.dataset.amount) hideRollAmount(b, b.dataset.amount); });
+    }, ms);
+}
 function reshuffleRollTables() {
     liveRollValues = {};
     for (const k of Object.keys(BASE_ROLL_VALUES)) {
@@ -2822,6 +2834,7 @@ function reshuffleRollTables() {
     }
     clearRollColumn();
     try { populateRollTable(); } catch {}
+    try { flashRollTable(1000); } catch {}
     // One quick pulse so the post-tap reorder reads as intentional.
     try {
         const table = document.querySelector('.roll-table');
