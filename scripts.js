@@ -3019,15 +3019,22 @@ function updateCustomBuyPreview() {
     const sellerQty = isOpen ? qty : getSellerQty(sellerData, asset);
     const myCash = getCurrentCashTotal();
     const roomScope = currentRoomCode ? `room ${currentRoomCode}` : 'the lobby';
+    // Same financing the accept/settle path uses: minimum down, rest on loan.
+    const fin = tradeFinancing(price);
+    const moneyLine = price > 0
+        ? `You pay $${fin.down.toLocaleString()} cash now` +
+          (fin.loan > 0 ? ` + $${fin.loan.toLocaleString()} on your loan` : ' (no loan room left)') +
+          ` — cash $${myCash.toLocaleString()} → $${(myCash - fin.down).toLocaleString()}`
+        : 'No money changes hands';
     preview.innerHTML = isOpen
-        ? `You: cash $${myCash.toLocaleString()} → $${(myCash - price).toLocaleString()} after pay<br>Anyone in ${roomScope} may accept<br>Price: $${price.toLocaleString()} for ${qty} × ${asset}`
-        : `You: cash $${myCash.toLocaleString()} → $${(myCash - price).toLocaleString()} after pay<br>Seller ${sellerName}: ${asset} ${sellerQty} → ${sellerQty - qty} after sale<br>Price: $${price.toLocaleString()} for ${qty} × ${asset}`;
+        ? `${moneyLine}<br>Anyone in ${roomScope} may accept<br>Price: $${price.toLocaleString()} for ${qty} × ${asset}`
+        : `${moneyLine}<br>Seller ${sellerName}: ${asset} ${sellerQty} → ${sellerQty - qty} after sale<br>Price: $${price.toLocaleString()} for ${qty} × ${asset}`;
     let err = '';
     if (!sellerSel || !sellerSel.value) err = 'Pick a seller.';
     else if (!Number.isFinite(qty) || qty <= 0) err = 'Quantity must be ≥1.';
     else if (!Number.isFinite(price) || price < 0) err = 'Price must be ≥0.';
     else if (sellerQty < qty) err = `Seller only has ${sellerQty} ${asset}.`;
-    else if (myCash < price) err = `You need $${price.toLocaleString()} cash (have $${myCash.toLocaleString()}).`;
+    else if (!fin.affordable) err = `You need $${fin.down.toLocaleString()} cash down (have $${myCash.toLocaleString()}).`;
     if (hint) { hint.textContent = err; hint.classList.toggle('hidden', !err); }
     const confirm = document.getElementById('confirmCustomBuy');
     if (confirm) confirm.disabled = !!err;
@@ -3111,6 +3118,21 @@ function isRecentTrade(t, maxAgeMs = 24 * 60 * 60 * 1000) {
     return true;
 }
 
+// Buyer financing for player trades: same terms as buying from the bank —
+// at least downPct% (default 20%) in cash, the rest on the loan up to the
+// debt cap. When the cap leaves less loan room, the cash side grows (the
+// down payment is a minimum, never a fixed 20%). Shared by the accept check,
+// the preview and the actual settle so all three agree.
+function tradeFinancing(price) {
+    const p = Math.max(0, Math.round(Number(price) || 0));
+    if (p === 0) return { price: 0, down: 0, loan: 0, affordable: true };
+    const downPct = Math.min(100, Math.max(0, Number(roomEcon().downPct) || 0)) / 100;
+    const debtRoom = Math.max(0, debtCap() - getCurrentLoanTotal());
+    const minDown = Math.ceil(p * downPct);
+    const loan = Math.max(0, Math.min(p - minDown, debtRoom));
+    const down = p - loan;
+    return { price: p, down, loan, minDown, debtRoom, affordable: down <= getCurrentCashTotal() + 0.005 };
+}
 function applyLocalTrade(trade, role) {
     const qty = Number(trade.qty || 0);
     const price = Number(trade.price || 0);
@@ -3121,10 +3143,14 @@ function applyLocalTrade(trade, role) {
     const cell = document.querySelector(`.${targetClass}`);
     if (!cell) return false;
     const tradeCashBefore = ledgerLen('cash');
+    const tradeLoanBefore = ledgerLen('loan');
     let cur = parseInt(cell.textContent || '0', 10) || 0;
     if (role === 'buyer') {
-        if (price !== 0 && wouldGoNegativeCash(-price)) return false;
-        if (price !== 0) addCashTransactionValue(-price, `Bought ${qty} ${asset}`);
+        // Down payment now, rest on the loan (see tradeFinancing).
+        const fin = tradeFinancing(price);
+        if (!fin.affordable) return false;
+        if (fin.down > 0) addCashTransactionValue(-fin.down, `Bought ${qty} ${asset}`);
+        if (fin.loan > 0) addLoanTransactionValue(fin.loan, `Bought ${qty} ${asset} loan`);
         cell.textContent = String(cur + qty);
     } else {
         // seller: bonus cows aren't sellable stock — only qty above the
@@ -3134,11 +3160,11 @@ function applyLocalTrade(trade, role) {
         cell.textContent = String(cur - qty);
         if (price !== 0) addCashTransactionValue(price, `Sold ${qty} ${asset}`);
     }
-    // Trades settle as one undoable action (cash leg + qty move together).
+    // Trades settle as one undoable action (both ledger legs + qty move).
     pushUndoAction({
         label: `Trade: ${role === 'buyer' ? 'bought' : 'sold'} ${qty} ${asset} $${price.toLocaleString()}`,
         cash: ledgerLen('cash') - tradeCashBefore,
-        loan: 0,
+        loan: ledgerLen('loan') - tradeLoanBefore,
         qty: { targetClass, delta: role === 'buyer' ? qty : -qty }
     });
     calculateNet();
@@ -3289,10 +3315,13 @@ async function acceptTrade(tradeId) {
     // is open (buyer when no buyer yet, seller when no seller yet).
     const iAmBuyer = t.open === true ? !t.buyerUid : t.buyerUid === myUid;
     if (iAmBuyer) {
-        // Buyer accepting a sell offer: must afford it right now.
-        if (Number(t.price || 0) !== 0 && wouldGoNegativeCash(-Number(t.price || 0))) {
+        // Buyer accepting: needs the down payment (min 20%) in cash; the rest
+        // can ride on the loan, bounded by the debt cap.
+        const fin = tradeFinancing(t.price);
+        if (!fin.affordable) {
             const s = document.getElementById('roomStatus');
-            if (s) s.textContent = `You need $${Number(t.price || 0).toLocaleString()} cash to accept.`;
+            if (s) s.textContent = `You need $${fin.down.toLocaleString()} cash down to accept`
+                + (fin.loan > 0 ? ` ($${fin.loan.toLocaleString()} on your loan).` : ' — no loan room left.');
             return;
         }
     } else {
