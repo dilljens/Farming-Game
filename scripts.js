@@ -3101,6 +3101,63 @@ function reshuffleRollTables() {
         }
     } catch {}
 }
+// Active-roll linkage: every ledger entry stamped with `r` belongs to the
+// same event as the roll-table column the roll marked. The table paints the
+// column; rows carrying this roll number get the matching wash + note dot.
+let activeLinkedRoll = null;
+function extractRollTag(note) {
+    const m = String(note || '').match(/roll\s+(\d+)/i);
+    const n = m ? parseInt(m[1], 10) : NaN;
+    return (n >= 1 && n <= 6) ? n : null;
+}
+function setLinkedRoll(n) {
+    activeLinkedRoll = (n >= 1 && n <= 6) ? n : null;
+    try { paintRollColumnLinked(); renderLinkedLedger(); } catch {}
+}
+function clearLinkedRoll() {
+    activeLinkedRoll = null;
+    try { paintRollColumnLinked(); renderLinkedLedger(); } catch {}
+}
+function paintRollColumnLinked() {
+    const linked = document.querySelectorAll('.roll-table .is-linked');
+    linked.forEach((c) => c.classList.remove('is-linked'));
+    if (activeLinkedRoll == null) return;
+    const table = document.querySelector('.roll-table');
+    if (!table) return;
+    table.querySelectorAll('tr').forEach((row) => {
+        const cell = row.cells[activeLinkedRoll];
+        if (!cell) return;
+        if (cell.tagName === 'TH') cell.classList.add('is-linked');
+        else cell.querySelectorAll('button.roll-cell-button').forEach((b) => b.classList.add('is-linked'));
+    });
+}
+function entryRollTag(entry) {
+    return extractRollTag(txNote(entry));
+}
+function renderLinkedLedger() {
+    const table = document.getElementById('financialTable');
+    if (!table) return;
+    table.querySelectorAll('tr[data-linked-roll]').forEach((r) => r.removeAttribute('data-linked-roll'));
+    if (activeLinkedRoll == null) return;
+    const tagged = (entry) => entryRollTag(entry) === activeLinkedRoll;
+    const cashIdx = (data.transactions?.cash || []).map((e, i) => tagged(e) ? i : -1).filter((i) => i >= 0);
+    const loanIdx = (data.transactions?.loan || []).map((e, i) => tagged(e) ? i : -1).filter((i) => i >= 0);
+    if (cashIdx.length === 0 && loanIdx.length === 0) return;
+    // Rows are newest-first, same order as the ledger lists.
+    const rows = [...table.querySelectorAll('tr')].filter((r) => r.querySelector('.cash-transaction') || r.querySelector('.loan-transaction'));
+    let hit = 0;
+    rows.forEach((row) => {
+        const cashCell = row.querySelector('.cash-transaction');
+        const loanCell = row.querySelector('.loan-transaction');
+        const cashPos = cashCell ? [...table.querySelectorAll('.cash-transaction')].indexOf(cashCell) : -1;
+        const loanPos = loanCell ? [...table.querySelectorAll('.loan-transaction')].indexOf(loanCell) : -1;
+        if ((cashPos >= 0 && cashIdx.includes(cashPos)) || (loanPos >= 0 && loanIdx.includes(loanPos))) {
+            row.setAttribute('data-linked-roll', String(activeLinkedRoll));
+            hit++;
+        }
+    });
+    return hit;
+}
 // Highlight the table column matching the rolled number so players can
 // find the payout to tap. Cleared whenever the tables reshuffle.
 function paintRollColumn() {
@@ -4869,6 +4926,7 @@ function updateTransactionLists(transactionsData) {
     // Update both cash and loan transactions
     updateSingleTransactionList(transactionsData.cash, 'cash-transaction');
     updateSingleTransactionList(transactionsData.loan, 'loan-transaction');
+    try { renderLinkedLedger(); } catch {}
 
     // Remove any rows beyond the first 10 transaction rows
     // Row 0 = cash/loan inputs, Row 1 = transaction headers, Row 2 = first transaction
@@ -5150,6 +5208,7 @@ function showOpexGate(roll, paid) {
         got.textContent = opexPaid
             ? `You collected ${opexPaid.asset} $${opexPaid.amount.toLocaleString()} on roll ${roll}.`
             : '';
+        got.classList.toggle('is-linked', !!opexPaid);
     }
     const custom = document.getElementById('opexCustom');
     if (custom) custom.value = '';
@@ -5224,6 +5283,7 @@ document.getElementById('opexInterestBtn')?.addEventListener('click', () => {
     addCashTransactionValue(-interest, opexNote(`interest, roll ${opexRoll ?? '?'}`));
     manualInterestOverride = null;
     updateInterest();
+    try { renderLinkedLedger(); } catch {}
     updateActionButtonStates();
     pushUndoAction({
         label: `Operating expense · interest $${interest.toLocaleString()} (roll ${opexRoll ?? '?'})`,
@@ -5262,6 +5322,7 @@ document.getElementById('opexCustomBtn')?.addEventListener('click', () => {
     }
     const cashBefore = ledgerLen('cash');
     addCashTransactionValue(-n, opexNote(`custom, roll ${opexRoll ?? '?'}`));
+    try { renderLinkedLedger(); } catch {}
     updateActionButtonStates();
     pushUndoAction({
         label: `Operating expense · custom $${n.toLocaleString()} (roll ${opexRoll ?? '?'})`,
@@ -5309,6 +5370,7 @@ document.getElementById('opexCancelBtn')?.addEventListener('click', () => {
                 }
                 const cashBefore = ledgerLen('cash');
                 addCashTransactionValue(-n, opexNote(`quick pay, roll ${opexRoll ?? '?'}`));
+                try { renderLinkedLedger(); } catch {}
                 pushUndoAction({ label: `Operating expense · quick pay $${n.toLocaleString()} (roll ${opexRoll ?? '?'})`, cash: ledgerLen('cash') - cashBefore, loan: 0 });
             } else {
                 const cashBefore = ledgerLen('cash');

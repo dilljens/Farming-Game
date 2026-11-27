@@ -375,7 +375,10 @@ input[type="number"] {
     transform: scale(.96);
 }
 
-/* Column matching the last dice roll — find your payout at a glance. */
+/* Roll-linked rows: the roll-table column for the active roll plus every
+   ledger row belonging to that same roll get the same amber wash, so the
+   payout and its operating expense read as one event. Dot leader on the
+   note ties memo to row. */
 .roll-table th.is-roll-col {
     background-color: #fbbf24;
 }
@@ -394,6 +397,26 @@ input[type="number"] {
     background-color: #fef3c7;
     border-color: #f59e0b;
     border-width: 2px;
+}
+.roll-table td.is-roll-col button.roll-cell-button.is-linked,
+.roll-table th.is-roll-col.is-linked {
+    box-shadow: 0 0 0 2px #b45309, 0 2px 8px rgba(180, 83, 9, 0.5);
+}
+#financialTable tr[data-linked-roll] td.cash-note::before,
+#financialTable tr[data-linked-roll] td.loan-note::before {
+    content: "● ";
+    color: #b45309;
+    font-weight: 700;
+}
+#financialTable tr[data-linked-roll] td {
+    background-color: #fef3c7;
+}
+#financialTable tr[data-linked-roll] td:first-child {
+    box-shadow: inset 4px 0 0 #f59e0b;
+}
+#opexGotLine.is-linked::before {
+    content: "● ";
+    color: #b45309;
 }
 
 /* Pressed feedback everywhere: a fast dip + ripple + click pop so every
