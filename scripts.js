@@ -4016,6 +4016,19 @@ function revealRollAmount(btn) {
     btn.classList.remove('is-masked');
     btn.removeAttribute('aria-label');
 }
+// Which roll-table row a qty stepper feeds (Harvester/Tractor move no row).
+const QTY_CLASS_TO_CROP = {
+    'qty-hay': 'Hay', 'qty-grain': 'Grain', 'qty-fruit': 'Fruit',
+    'qty-farm': 'Cows', 'qty-cows': 'Cows'
+};
+function revealCropRowForQtyClass(targetClass) {
+    const crop = QTY_CLASS_TO_CROP[targetClass];
+    if (!crop) return;
+    const row = [...document.querySelectorAll('.roll-table tr:not(:first-child)')]
+        .find((r) => (r.cells[0]?.textContent || '').split(' ')[0] === crop);
+    if (!row) return;
+    row.querySelectorAll('button.roll-cell-button').forEach(revealRollAmount);
+}
 function populateRollTable() {
     // NEVER re-deals: the order comes from liveRollValues, which only
     // reshuffleRollTables() (a collected payout) replaces. Halving or
@@ -5625,6 +5638,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 qtyCell.textContent = currentQty;
                 calculateNet();
                 populateRollTable();
+                // The row you just changed stops being a secret: reveal its
+                // payouts so the ± actually shows up on the roll table.
+                try { revealCropRowForQtyClass(targetClass); } catch {}
                 saveQuantitiesToLocalStorage();
             }
         });
