@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS leaderboard (
 -- starting blank. Legacy saves have no column value and fall back to local.
 ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS transactions JSONB NOT NULL DEFAULT '{}'::jsonb;
 -- Per-player roll log for the luck chart: {t, v} pairs like history.
+ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS roll_log JSONB NOT NULL DEFAULT '[]'::jsonb;
 -- Personal year counter: the board shows it in place of the room code.
 ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS player_year INTEGER NOT NULL DEFAULT 1;
 
