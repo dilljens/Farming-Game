@@ -19,7 +19,7 @@ import {
     normalizeGame,
     normalizeHistoryPoints
 } from './game-time.js?v=20260907f';
-import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName, shuffleRollsRandom, shuffledRolls } from './pricing.js?v=20261004l';
+import { RULE_KEYS, SCENARIOS, SCENARIO_KEYS, activeEcon, activeHarvest, applyScenario, boardMaxNetWorth, bulkMult, bulkNext, computeMarketPrice, marketBasis, normalizeEcon, normalizeHarvest, normalizeRules, normalizeTuning, scenarioName, shuffleRollsRandom, shuffledRolls, activeDoubles } from './pricing.js?v=20261004l';
 
 // Backend selection lives in backend.js (localStorage 'fgBackendUrl' >
 // window.FG_BACKEND_URL > http://localhost:3002). Firebase config
@@ -1687,6 +1687,9 @@ let currentRoomRules = {};
 function roomEcon() {
     return activeEcon(currentRoomRules);
 }
+function roomDoubles() {
+    return activeDoubles(currentRoomRules);
+}
 function roomHarvest() {
     return activeHarvest(currentRoomRules);
 }
@@ -2615,7 +2618,7 @@ function readSetupRules() {
         flags[box.dataset.setupRule] = !!box.checked;
     });
     const tuned = readSettingsInputs('setup');
-    const rules = { ...flags, econ: tuned.econ, harvest: tuned.harvest, tuning: readSetupTuning() };
+    const rules = { ...flags, econ: tuned.econ, harvest: tuned.harvest, doubles: tuned.doubles, tuning: readSetupTuning() };
     if (setupScenarioKey !== 'custom') rules.scenario = setupScenarioKey;
     return normalizeRules(rules);
 }
@@ -2851,13 +2854,16 @@ const SETTING_SPECS = [
     { group: 'harvest', key: 'hayHighQty', label: 'Hay high qty', min: 3, max: 30, step: 1, def: 10, desc: 'Hay you must own to reach the top bonus tier on roll payouts.' },
     { group: 'harvest', key: 'hayHighMult', label: 'Hay high ×', min: 1, max: 5, step: 0.5, def: 2, desc: 'Hay roll payout multiplier once you reach the top tier.' },
     { group: 'harvest', key: 'equipRate', label: 'Equip +%/unit', min: 0, max: 200, step: 5, def: 20, percent: true, desc: 'Extra crop on every roll for each tractor (hay) or harvester (grain) you own.' },
-    { group: 'harvest', key: 'equipCap', label: 'Equip cap', min: 0, max: 10, step: 1, def: 5, desc: 'Most tractors/harvesters that count toward the bonus. The rest still count for net worth.' }
+    { group: 'harvest', key: 'equipCap', label: 'Equip cap', min: 0, max: 10, step: 1, def: 5, desc: 'Most tractors/harvesters that count toward the bonus. The rest still count for net worth.' },
+    { group: 'doubles', key: 'min', label: 'Doubles at $', min: 0, max: 2000000, step: 25000, def: 250000, desc: 'Net worth any one player must reach before the room may buy in bulk. 0 = always on.' },
+    { group: 'doubles', key: 'mult', label: 'Doubles ×', min: 1, max: 10, step: 1, def: 2, desc: 'How many units one purchase covers once unlocked. Set 1 to switch bulk doubles off entirely.' }
 ];
 const HOST_SETTING_FIELDS = [
     ['econ', 'debtCap'], ['econ', 'interestPct'], ['econ', 'downPct'],
     ['harvest', 'hayMidQty'], ['harvest', 'hayMidMult'],
     ['harvest', 'hayHighQty'], ['harvest', 'hayHighMult'],
-    ['harvest', 'equipRate'], ['harvest', 'equipCap']
+    ['harvest', 'equipRate'], ['harvest', 'equipCap'],
+    ['doubles', 'min'], ['doubles', 'mult']
 ];
 
 // Tap-to-reveal explainer: the ⓘ button toggles its tip without
@@ -2890,7 +2896,9 @@ function renderSettingRows(containerId, scope) {
             lastGroup = spec.group;
             const h = document.createElement('h5');
             h.className = 'mt-2 font-semibold text-gray-500';
-            h.textContent = spec.group === 'econ' ? 'ECONOMY (needs Economy ☑)' : 'HARVEST (needs Harvest ☑)';
+            h.textContent = spec.group === 'econ' ? 'ECONOMY (needs Economy ☑)'
+                : spec.group === 'harvest' ? 'HARVEST (needs Harvest ☑)'
+                : 'BULK DOUBLES (×1 turns them off)';
             box.appendChild(h);
             grid = document.createElement('div');
             grid.className = 'mt-1 grid grid-cols-1 gap-2';
@@ -2961,10 +2969,11 @@ function syncSettingsInputs(scope, rules = currentRoomRules) {
     // draft always edits live (its checkboxes gate on confirm).
     const econ = normalizeEcon(rules.econ);
     const harvest = normalizeHarvest(rules.harvest);
-    const groups = { econ, harvest };
+    const doubles = activeDoubles(rules);
+    const groups = { econ, harvest, doubles };
     const enabled = scope === 'setup'
-        ? { econ: true, harvest: true }
-        : { econ: !!rules.customecon, harvest: !!rules.customharvest };
+        ? { econ: true, harvest: true, doubles: true }
+        : { econ: !!rules.customecon, harvest: !!rules.customharvest, doubles: true };
     for (const [group, key] of HOST_SETTING_FIELDS) {
         const shown = shownSettingValue(group, key, groups[group][key]);
         const num = settingInput(scope, group, key);
@@ -2975,7 +2984,7 @@ function syncSettingsInputs(scope, rules = currentRoomRules) {
 }
 
 function readSettingsInputs(scope) {
-    const out = { econ: {}, harvest: {} };
+    const out = { econ: {}, harvest: {}, doubles: {} };
     for (const [group, key] of HOST_SETTING_FIELDS) {
         const el = settingInput(scope, group, key);
         if (!el) continue;
@@ -6328,7 +6337,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
         const sel = document.getElementById('purchaseMult');
         const hint = document.getElementById('bulkHint');
         const worth = boardMaxNetWorth(marketBoard());
-        const tier = bulkMult(worth, asset);
+        const cfg = roomDoubles();
+        const tier = bulkMult(worth, asset, cfg);
         sel.innerHTML = '';
         for (let m = 1; m <= tier; m++) {
             const opt = document.createElement('option');
@@ -6339,12 +6349,12 @@ window.addEventListener('DOMContentLoaded', (event) => {
         sel.value = '1';
         if (hint) {
             if (tier <= 1) {
-                const first = bulkNext(worth, asset);
+                const first = bulkNext(worth, asset, cfg);
                 hint.textContent = first
                     ? `Bulk buys unlock at $${first.min.toLocaleString()} net worth (${first.mult}x).`
                     : 'Bulk buys unlock with room net-worth benchmarks.';
             } else {
-                const next = bulkNext(worth, asset);
+                const next = bulkNext(worth, asset, cfg);
                 hint.textContent = next
                     ? `Unlocked ${tier}x — next: ${next.mult}x at $${next.min.toLocaleString()}.`
                     : `Max bulk unlocked (${tier}x).`;

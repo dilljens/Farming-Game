@@ -81,6 +81,7 @@ export function normalizeRules(rules) {
     for (const key of RULE_KEYS) out[key] = src[key] === true;
     out.econ = normalizeEcon(src.econ);
     out.harvest = normalizeHarvest(src.harvest);
+    out.doubles = normalizeDoubles(src.doubles);
     out.tuning = normalizeTuning(src.tuning);
     // Scenario stamp survives only when it names a real preset — a stale or
     // forged name drops off and the badge falls back to Standard/Custom.
@@ -210,15 +211,29 @@ export function scenarioName(rules) {
     return anyFlag ? 'Custom' : SCENARIOS.standard.label;
 }
 
-// --- Bulk buys: benchmark-unlocked purchase increments ---
-// Always-on. While ANY one player holds net worth at or above a benchmark,
+// --- Bulk buys: benchmark-unlocked purchase increments (tunable per room) ---
+// While ANY one player holds net worth at or above the room's benchmark,
 // BULK BUYS CAP AT 2x. One benchmark for the whole board: once any player
 // reaches $250k net worth, everyone may buy up to 2x in one purchase.
 // Evaluated live off the leaderboard snapshot, so every device agrees with no
 // extra state — dip back below and the tier locks again.
 export const BULK_TIERS = [
-    { min: 250000, mult: 2 } // one benchmark for everything: 2x at $250k
+    { min: 250000, mult: 2 } // classic: one benchmark, 2x at $250k
 ];
+// Bulk buying is tunable per room: switch it off, move the benchmark, or change how many units one purchase covers.
+export const DEFAULT_DOUBLES = { on: true, min: 250000, mult: 2 };
+export function normalizeDoubles(doubles) {
+    const src = doubles && typeof doubles === 'object' ? doubles : {};
+    return {
+        on: src.on === false ? false : true,
+        min: Math.round(clampNum(src.min, 0, 5000000, DEFAULT_DOUBLES.min) / 1000) * 1000,
+        mult: clampNum(src.mult, 1, 10, DEFAULT_DOUBLES.mult)
+    };
+}
+export function activeDoubles(rules) {
+    const r = rules && typeof rules === 'object' ? rules : {};
+    return normalizeDoubles(r.doubles);
+}
 
 export function boardMaxNetWorth(board) {
     if (!Array.isArray(board) || board.length === 0) return 0;
@@ -234,25 +249,20 @@ function tierApplies(t, key) {
     return !t.assets || t.assets.includes(key);
 }
 
-export function bulkMult(maxNetWorth, asset) {
-    const key = String(asset || '').toLowerCase();
+export function bulkMult(maxNetWorth, asset, doubles) {
+    const cfg = doubles ? normalizeDoubles(doubles) : normalizeDoubles(undefined);
+    if (!cfg.on) return 1;
     const worth = Number(maxNetWorth) || 0;
-    let m = 1;
-    for (const t of BULK_TIERS) {
-        if (worth >= t.min && tierApplies(t, key)) m = Math.max(m, t.mult);
-    }
-    return m;
+    return worth >= cfg.min ? Math.max(1, cfg.mult) : 1;
 }
 
 // Next locked tier for the hint line ({mult, min}), or null when maxed.
-export function bulkNext(maxNetWorth, asset) {
-    const key = String(asset || '').toLowerCase();
+export function bulkNext(maxNetWorth, asset, doubles) {
+    const cfg = doubles ? normalizeDoubles(doubles) : normalizeDoubles(undefined);
+    if (!cfg.on) return null;
     const worth = Number(maxNetWorth) || 0;
-    const cur = bulkMult(worth, asset);
-    for (const t of BULK_TIERS) {
-        if (tierApplies(t, key) && worth < t.min && t.mult > cur) return { mult: t.mult, min: t.min };
-    }
-    return null;
+    if (worth >= cfg.min) return null;            // already unlocked
+    return { mult: Math.max(1, cfg.mult), min: cfg.min };
 }
 
 export function normalizeHarvest(harvest) {
