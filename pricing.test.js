@@ -444,7 +444,7 @@ test('scenarios: badge names presets, standard, and custom', () => {
     assert.equal(scenarioName({ scenario: 'bull', events: false }), 'Bull Market', 'stamp wins while present');
 });
 
-test('bulk tiers: benchmarks unlock increments, hay/grain climb highest', () => {
+test('bulk tiers: benchmarks unlock 2x, and 2x is the ceiling', () => {
     // Below the first benchmark: single only, every asset.
     for (const asset of ['hay', 'grain', 'farm', 'cows', 'tractor']) {
         assert.equal(bulkMult(0, asset), 1, `${asset} @0`);
@@ -455,19 +455,18 @@ test('bulk tiers: benchmarks unlock increments, hay/grain climb highest', () => 
     assert.equal(bulkMult(200000, 'grain'), 2);
     assert.equal(bulkMult(200000, 'farm'), 1, 'non-bulk still single below $250k');
     assert.equal(bulkMult(200000, 'cows'), 1, 'ridges wait for $250k');
-    // $250k: everything unlocks 2x (the documented OTB rule, now enforced),
-    // and hay/grain climb to 3x.
+    // $250k: everything unlocks 2x — the ceiling for every asset.
     for (const asset of ['hay', 'grain', 'farm', 'cows', 'harvester', 'tractor', 'fruit']) {
         assert.ok(bulkMult(250000, asset) >= 2, `${asset} @250k`);
     }
-    assert.equal(bulkMult(250000, 'hay'), 3);
-    assert.equal(bulkMult(300000, 'grain'), 3);
-    assert.equal(bulkMult(300000, 'farm'), 2, 'non-bulk capped at 2x');
-    // $500k: hay reaches 5x, grain caps at 3x, everything else still 2x.
-    assert.equal(bulkMult(500000, 'hay'), 5);
-    assert.equal(bulkMult(5000000, 'grain'), 3, 'grain caps at 3x');
-    assert.equal(bulkMult(5000000, 'fruit'), 2, 'fruit caps at 2x');
-    assert.equal(bulkMult(5000000, 'tractor'), 2, 'never above 2x off-bulk');
+    assert.equal(bulkMult(250000, 'hay'), 2, 'hay stops at 2x');
+    assert.equal(bulkMult(300000, 'grain'), 2, 'grain stops at 2x');
+    assert.equal(bulkMult(300000, 'farm'), 2);
+    // Nothing ever unlocks a third unit, however rich the room gets.
+    assert.equal(bulkMult(500000, 'hay'), 2, 'no 3x/5x tiers any more');
+    assert.equal(bulkMult(5000000, 'grain'), 2, 'grain capped at 2x');
+    assert.equal(bulkMult(5000000, 'fruit'), 2, 'fruit capped at 2x');
+    assert.equal(bulkMult(5000000, 'tractor'), 2, 'never above 2x');
     // Cattle ride the standard tiers: 2x at $250k like everything else.
     assert.equal(bulkMult(250000, 'cows'), 2);
     assert.deepEqual(bulkNext(0, 'cows'), { mult: 2, min: 250000 });
@@ -481,8 +480,9 @@ test('bulk tiers: benchmarks unlock increments, hay/grain climb highest', () => 
 
 test('bulk next: hint line names the coming tier or null at max', () => {
     assert.deepEqual(bulkNext(0, 'hay'), { mult: 2, min: 150000 });
-    assert.deepEqual(bulkNext(200000, 'hay'), { mult: 3, min: 250000 });
-    assert.deepEqual(bulkNext(300000, 'grain'), null, 'grain maxed at 3x');
+    assert.equal(bulkNext(200000, 'hay'), null, 'hay is already maxed at 2x');
+    assert.deepEqual(bulkNext(0, 'farm'), { mult: 2, min: 250000 });
+    assert.deepEqual(bulkNext(300000, 'grain'), null, 'grain maxed at 2x');
     assert.equal(bulkNext(500000, 'hay'), null, 'hay maxed at 5x');
     assert.deepEqual(bulkNext(0, 'farm'), { mult: 2, min: 250000 });
     assert.deepEqual(bulkNext(200000, 'farm'), { mult: 2, min: 250000 });

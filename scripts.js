@@ -1635,7 +1635,10 @@ function buildChartDatasets(data) {
             tension: 0, // straight segments: smoothing overshoots below zero on sharp moves
             pointRadius: 0,
             borderWidth: 2,
-            fill: false
+            fill: false,
+            // Log axis drops points at/below $0; bridge the gap instead of
+            // breaking the line into fragments.
+            spanGaps: true
         };
     });
 }
@@ -1868,6 +1871,12 @@ function createProgressChart() {
                     grid: { display: false }
                 },
                 y: {
+                    // Log scale: net worth spans $5k → $1M+, and a linear axis
+                    // flattened the early game into the floor.
+                    type: 'logarithmic',
+                    // No fixed min: Chart.js fits the smallest positive value, so
+                    // ticks read $10k/$25k/$50k instead of sub-dollar noise.
+                    title: { display: true, text: 'Net worth (log scale)', color: ink.text },
                     ticks: {
                         font: { size: 10 },
                         color: ink.text,
