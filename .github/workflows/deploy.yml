@@ -51,8 +51,25 @@ jobs:
             backend:
               - 'backend/**'
 
+  # node --check skips validation for .js files containing import/export
+  # (silently passes!), so check copies under a .mjs name plus the unit
+  # tests. Deploy jobs wait on this — a broken file never ships.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Syntax-check browser modules
+        run: |
+          cp scripts.js /tmp/scripts.check.mjs && node --check /tmp/scripts.check.mjs
+          cp pricing.js /tmp/pricing.check.mjs && node --check /tmp/pricing.check.mjs
+      - name: Unit tests
+        run: node --test pricing.test.js game-time.test.js
+
   deploy-frontend:
-    needs: changes
+    needs: [changes, validate]
     if: needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -80,7 +97,7 @@ jobs:
           test -n "$live_token" && test "scripts.js?v=$TOKEN" = "$live_token"
 
   deploy-backend:
-    needs: changes
+    needs: [changes, validate]
     if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:

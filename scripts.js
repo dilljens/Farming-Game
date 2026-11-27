@@ -1925,6 +1925,47 @@ document.getElementById('viewModeBtn')?.addEventListener('click', () => {
 });
 document.querySelectorAll('#screenTabs button[data-screen]').forEach((btn) => {
     btn.addEventListener('click', () => setScreen(btn.dataset.screen));
+    btn.title = 'Alt+Z previous screen, Alt+X next screen';
+});
+// Alt+Z / Alt+X steps through the four screens in tab order (wraps).
+// Code-based (not key-based) so Alt+Z is Alt+Z on every layout. Mobile
+// swaps the visible panel; desktop smooth-scrolls to the panel.
+function stepScreen(dir) {
+    const order = SCREEN_KEYS;
+    const mobile = document.body.dataset.view !== 'desktop';
+    let idx;
+    if (mobile) {
+        idx = order.indexOf(currentScreenFromUrl());
+    } else {
+        idx = 0;
+        const y = window.scrollY + window.innerHeight * 0.3;
+        document.querySelectorAll('[data-screen-panel]').forEach((p, i) => {
+            if (p.offsetTop <= y) idx = i;
+        });
+    }
+    if (idx < 0) idx = 2;
+    const next = order[(idx + dir + order.length) % order.length];
+    if (mobile) {
+        setScreen(next);
+        return;
+    }
+    const panel = document.querySelector(`[data-screen-panel="${next}"]`);
+    if (panel) {
+        try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        catch { panel.scrollIntoView(); }
+    }
+    try { if (window.location.hash !== '#' + next) history.replaceState(null, '', '#' + next); } catch {}
+    for (const btn of document.querySelectorAll('#screenTabs button[data-screen]')) {
+        btn.setAttribute('aria-selected', String(btn.dataset.screen === next));
+    }
+}
+document.addEventListener('keydown', (e) => {
+    if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.code !== 'KeyZ' && e.code !== 'KeyX') return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    e.preventDefault();
+    stepScreen(e.code === 'KeyX' ? 1 : -1);
 });
 function refreshTabStatus() {
     // Guarded writes: the observer below watches the whole body, so an
