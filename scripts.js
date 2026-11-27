@@ -655,24 +655,30 @@ function updatePlayerYearLine() {
         if (el) el.textContent = `Year ${Math.max(1, Math.floor(Number(data?.playerYear) || 1))}`;
     } catch {}
 }
-function performChristmas() {
+function performChristmas(gift = CHRISTMAS_GIFT) {
     // Cash gift lands as a normal ledger entry (totals, undo, saves, and
     // the leaderboard all follow), and the personal year advances by one.
+    // A $0 gift is the "no present this year" button: year advances, no ledger
+    // line, nothing to undo.
+    const amount = Math.max(0, Math.round(Number(gift) || 0));
     updateTotals();
     data.playerYear = Math.max(1, Math.floor(Number(data?.playerYear) || 1)) + 1;
     const cashBefore = ledgerLen('cash');
-    addCashTransactionValue(CHRISTMAS_GIFT, 'Christmas gift');
+    if (amount > 0) addCashTransactionValue(amount, 'Christmas gift');
     updatePlayerYearLine();
     const added = ledgerLen('cash') - cashBefore;
     if (added > 0) {
         pushUndoAction({
-            label: `🎄 Christmas gift +$${CHRISTMAS_GIFT.toLocaleString()} (Year ${data.playerYear})`,
+            label: `🎄 Christmas gift +$${amount.toLocaleString()} (Year ${data.playerYear})`,
             cash: added,
             loan: 0,
             year: 1
         });
         saveQuantitiesToLocalStorage();
-        sayStatus(`🎄 Merry Christmas! +$${CHRISTMAS_GIFT.toLocaleString()} cash — now Year ${data.playerYear}.`);
+        sayStatus(`🎄 Merry Christmas! +$${amount.toLocaleString()} cash — now Year ${data.playerYear}.`);
+    } else {
+        saveQuantitiesToLocalStorage();
+        sayStatus(`🎄 No gift this year — now Year ${data.playerYear}.`);
     }
     // A new year resets the ×2 toggles: unselect Hay ×2 and Corn ×2 if
     // either is on (table tap states are left alone). Unchecking by hand
@@ -1398,6 +1404,9 @@ function sendDataToServerAfterSeed(totalWorth, username, generation) {
         gameCreatedAt: data.game.createdAt,
         gameDurationMs: data.game.durationMs,
         roomCode: currentRoomCode || null,
+        // Personal year (Christmas advances it) so the board can rank by
+        // "which year are they in" instead of room code.
+        playerYear: Math.max(1, Math.floor(Number(data.playerYear) || 1)),
         updatedAt: new Date()
     };
 
@@ -1537,9 +1546,10 @@ function updateLeaderboardTable(data) {
         usernameCell.textContent = entry.username;
         usernameCell.className = 'text-center';
 
-        const roomCell = document.createElement('td');
-        roomCell.textContent = entry.roomCode ? String(entry.roomCode) : '—';
-        roomCell.className = 'text-center';
+        const yearCell = document.createElement('td');
+        const year = Math.max(1, Math.floor(Number(entry.playerYear) || 1));
+        yearCell.textContent = `Year ${year}`;
+        yearCell.className = 'text-center';
 
         const networthCell = document.createElement('td');
         networthCell.textContent = parseFloat(entry.networth ?? 0).toLocaleString('en-US'); // Format the number with commas
@@ -1571,7 +1581,7 @@ function updateLeaderboardTable(data) {
 
         // Append cells to the row
         row.appendChild(usernameCell);
-        row.appendChild(roomCell);
+        row.appendChild(yearCell);
         row.appendChild(networthCell);
         row.appendChild(cashCell);
         row.appendChild(debtCell);
@@ -1613,8 +1623,12 @@ function buildChartDatasets(data) {
         // Infinity buffer: true elapsed wall time, no gap compression.
         const elapsedHistory = buildElapsedHistory(group.history, start, Infinity);
         const color = paletteColor(i, ordered.length);
+        // Label by the player's year (matches the board's Year column).
+        const src = (latestLeaderboardData || []).find((p) => (p.username || '') === group.username
+            && ((p.roomCode ?? null) === (group.roomCode ?? null)));
+        const year = Math.max(1, Math.floor(Number(src?.playerYear) || 1));
         return {
-            label: group.roomCode ? `${group.username} (${group.roomCode})` : group.username,
+            label: `${group.username} (Y${year})`,
             data: elapsedHistory.map(point => ({ x: point.x, y: point.v })),
             borderColor: color,
             backgroundColor: color,
@@ -1796,10 +1810,22 @@ function createProgressChart() {
             responsive: true,
             maintainAspectRatio: false,
             interaction: { mode: 'nearest', intersect: false },
+            // Breathing room so the legend never sits on top of axis labels.
+            layout: { padding: { top: 6, right: 8, bottom: 4, left: 4 } },
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { boxWidth: 12, boxHeight: 12, font: { size: 11 }, color: ink.text }
+                    // Cap the legend height: many players wrap onto several
+                    // rows and used to overlap the plot / neighbouring UI.
+                    maxHeight: 70,
+                    labels: {
+                        boxWidth: 12,
+                        boxHeight: 12,
+                        padding: 10,
+                        usePointStyle: true,
+                        font: { size: 11 },
+                        color: ink.text
+                    }
                 },
                 tooltip: {
                     backgroundColor: ink.tooltipBg,
@@ -1947,11 +1973,9 @@ function setScreen(name, opts = {}) {
 // Buy-from-player / Sell-to-player / Auction live outside the screen
 // panels, so in mobile view they are only shown on the Property screen.
 // Desktop always shows them (the panels all show at once there).
-function syncTradeButtons(key) {
-    const show = document.body.dataset.view !== 'mobile' || key === 'property';
-    for (const id of ['tradeButtons', 'tradeInboxHint']) {
-        document.getElementById(id)?.classList.toggle('trade-hidden', !show);
-    }
+function syncTradeButtons() {
+    // Trade buttons now sit beside the auction/offer board, so they follow the
+    // board rather than being gated per screen. Kept as a hook for setScreen.
 }
 function currentScreenFromUrl() {
     const h = (window.location.hash || '').replace('#', '');
@@ -2862,14 +2886,18 @@ function revealRollColumn(n) {
         if (cell) cell.querySelectorAll('button.roll-cell-button').forEach(revealRollAmount);
     });
 }
+// A deal is live until a payout is taken from it. After that the table keeps
+// showing the SAME numbers (the ones you collected from) and only re-deals
+// when you mark your next roll — so anything on screen is always collectable.
+let rollDealCollected = false;
 function reshuffleRollTables() {
     liveRollValues = {};
     for (const k of Object.keys(BASE_ROLL_VALUES)) {
         liveRollValues[k] = shuffleRollsRandom(BASE_ROLL_VALUES[k]);
     }
+    rollDealCollected = false;
     clearRollColumn();
     try { populateRollTable(); } catch {}
-    try { flashRollTable(1000); } catch {}
     // One quick pulse so the post-tap reorder reads as intentional.
     try {
         const table = document.querySelector('.roll-table');
@@ -2900,6 +2928,8 @@ function setRollColumn(n) {
     if (!table) return;
     n = parseInt(n, 10);
     if (!(n >= 1 && n <= 6)) return;
+    // Marking a roll starts the next deal: a fresh table for the new turn.
+    if (rollDealCollected) reshuffleRollTables();
     table.dataset.lastRoll = String(n);
     paintRollColumn();
     try { revealRollColumn(n); } catch {}
@@ -4823,6 +4853,28 @@ document.getElementById('payPerAcreCustom')?.addEventListener('input', () => {
 });
 
 // Event listener for the confirm pay per acre button
+// Mount St. Helens: the eruption preset — $100 for every acre held, paid in
+// one tap (Total × $100 preset, then the normal pay path so undo/ledger and
+// cash-floor rules still apply).
+document.getElementById('mtStHelensBtn')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    isGainMode = false;
+    updateModalForMode();
+    const preset = document.querySelector('.pay-acre-button[data-pay-type="total"][data-per-acre="100"]');
+    if (preset) preset.click();
+    const acres = getAcresForType('total');
+    const total = acres * 100;
+    if (!(total > 0)) { sayStatus('No acres to charge yet.'); return; }
+    updateTotals();
+    const cash = getCurrentCashTotal();
+    if (cash < total) {
+        sayStatus(`🌋 Mount St. Helens needs $${total.toLocaleString()} — short $${(total - cash).toLocaleString()}. Use Borrow to cover it.`);
+        return;
+    }
+    document.getElementById('confirmPayPerAcre')?.click();
+    undoToast(`🌋 Mount St. Helens — paid $100/acre on ${acres} acres ($${total.toLocaleString()})`);
+});
+
 document.getElementById('confirmPayPerAcre').addEventListener('click', (event) => {
     event.preventDefault();
     performPayPerAcre();
@@ -5484,6 +5536,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
             performChristmas();
             cashInput.blur();
         });
+        document.getElementById('christmasZeroBtn')?.addEventListener('click', () => {
+            performChristmas(0);
+            cashInput.blur();
+        });
 
         // Make roll table payout buttons clickable to add as cash transactions.
         // Use event delegation so it keeps working even if buttons are created later.
@@ -5533,8 +5589,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     loan: 0
                 });
                 console.log(`Roll payout ${text} added to cash transactions`);
-                // Flip the mask for a beat so the player sees what they took,
-                // then the reshuffle re-masks the whole table.
+                // Show exactly what was taken, and keep the deal on screen: the
+                // numbers stay collectable until a new roll is marked, so the
+                // table can never disagree with the cash that came in.
                 try { revealRollAmount(btn); } catch {}
                 // A tap-double covers exactly one roll: clear the ½×/2× tap
                 // states now that this payout has been taken, so nobody
@@ -5550,12 +5607,17 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     });
                     if (clearedTap) syncDoubleToggles();
                 } catch {}
-                // Confirm the tap, then deal a fresh table: same six payouts
-                // per crop in a new random order for the next turn.
+                // Spot the value just collected, mask the rest of THIS deal.
+                // The re-deal waits for the next roll selection.
                 try {
-                    undoToast(`+$${value.toLocaleString()} ${tapAsset} · roll ${tapRoll} collected — new deal below`);
+                    maskAllRollAmounts();
+                    revealRollAmount(btn);
+                    rollDealCollected = true;
                 } catch {}
-                reshuffleRollTables();
+                try {
+                    undoToast(`+$${value.toLocaleString()} ${tapAsset} · roll ${tapRoll} collected — mark your next roll for a new table`);
+                } catch {}
+
             });
         }
 
@@ -5814,8 +5876,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
             else table.appendChild(row);
         }
     }
-    document.getElementById('dblHayBtn')?.addEventListener('change', () => setHayDoubled(!hayToggleOn()));
-    document.getElementById('dblCornBtn')?.addEventListener('change', () => setCornDoubled(!cornDoubled));
+    // Derive state FROM the checkbox: flipping our own copy could drift out of
+    // sync with the DOM (double change events) and appear to uncheck itself.
+    document.getElementById('dblHayBtn')?.addEventListener('change', (e) => setHayDoubled(!!e.target.checked));
+    document.getElementById('dblCornBtn')?.addEventListener('change', (e) => setCornDoubled(!!e.target.checked));
     syncDoubleToggles();
 
     function updateAssetDisplay(td, state) {

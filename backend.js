@@ -43,6 +43,8 @@ const COLUMN_MAP = {
         harvester: 'harvester', tractor: 'tractor', history: 'history',
         gameId: 'game_id', gameCreatedAt: 'game_created_at',
         gameDurationMs: 'game_duration_ms', roomCode: 'room_code',
+        // Personal year, shown on the leaderboard instead of the room code.
+        playerYear: 'player_year',
         // Ledger (amounts + memos) syncs with the player's board row.
         transactions: 'transactions',
         updatedAt: 'updated_at'

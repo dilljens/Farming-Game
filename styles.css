@@ -1017,9 +1017,7 @@ body[data-view="desktop"] [data-screen-panel].screen-hidden {
 }
 /* Player-trade buttons live outside the screen panels; in mobile view they
    only belong on the Property screen (synced from setScreen). */
-#tradeButtons.trade-hidden, #tradeInboxHint.trade-hidden {
-    display: none;
-}
+/* Trade buttons live beside the auction board now — always visible. */
 
 /* Leaderboard: nine columns crush on phones, so let this table scroll
    sideways instead of squeezing (other tables keep the fit-to-screen
@@ -1234,11 +1232,22 @@ body[data-theme="dark"] .pay-per-acre-table button.pay-acre-button:not(.selected
    Tall enough for legend + axis labels on narrow phones. */
 #leaderboardChartWrap {
     position: relative;
-    height: 340px;
+    /* Tall enough for plot + legend without the legend riding over the plot
+       or sliding under the fixed tab bar on phones. */
+    height: clamp(280px, 46vh, 380px);
     max-width: 100%;
     margin-top: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
 }
 
 #leaderboardChartWrap canvas {
     max-width: 100%;
+}
+@media screen and (max-width: 700px) {
+    #leaderboardChartWrap {
+        height: clamp(260px, 40vh, 320px);
+        /* keep the legend clear of the fixed bottom tab bar */
+        margin-bottom: 24px;
+    }
 }
