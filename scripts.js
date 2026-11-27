@@ -1911,7 +1911,7 @@ function applyViewMode(mode, opts = {}) {
     const m = mode === 'desktop' ? 'desktop' : 'mobile';
     try { document.body.dataset.view = m; } catch {}
     const btn = document.getElementById('viewModeBtn');
-    if (btn) btn.textContent = m === 'mobile' ? '📱 Mobile' : '🖥️ Desktop';
+    if (btn) btn.textContent = m === 'mobile' ? '🖥️ Desktop page' : '📱 Mobile tabs';
     try { if (!opts.skipSave) localStorage.setItem('fgViewMode', m); } catch {}
     if (m === 'desktop') {
         for (const panel of document.querySelectorAll('[data-screen-panel]')) panel.classList.remove('screen-hidden');

@@ -969,6 +969,25 @@ body[data-view="desktop"] [data-screen-panel].screen-hidden {
         min-width: 0;
     }
 }
+/* Wide desktop: two columns so the page uses the screen. Board and Cash
+   span full width (wide tables + chart + entry forms); Rolls and Property
+   sit side by side. Below 1000px (or forced desktop on a phone) everything
+   stays single-column. */
+@media screen and (min-width: 1000px) {
+    body[data-view="desktop"] .tables-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 24px;
+        align-items: start;
+        max-width: 1400px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    body[data-view="desktop"] #screen-board,
+    body[data-view="desktop"] #screen-cash {
+        grid-column: 1 / -1;
+    }
+}
 /* Chart view: fixed-height box so Chart.js can size the canvas.
    Tall enough for legend + axis labels on narrow phones. */
 #leaderboardChartWrap {
