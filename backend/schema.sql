@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS leaderboard (
     room_code TEXT,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- The ledger (amount + memo per line, both sides) rides along so a second
+-- device or a fresh install restores the player's transactions instead of
+-- starting blank. Legacy saves have no column value and fall back to local.
+ALTER TABLE leaderboard ADD COLUMN IF NOT EXISTS transactions JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS trades (
     id TEXT PRIMARY KEY,

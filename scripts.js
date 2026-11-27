@@ -1394,6 +1394,12 @@ function sendDataToServerAfterSeed(totalWorth, username, generation) {
         harvester: harvesterQty,
         tractor: tractorQty,
         history: Array.isArray(myHistoryCache) ? myHistoryCache : [],
+        // Amounts + memos travel with the row so the ledger survives a device
+        // switch. Only my own doc is written, so nothing leaks between players.
+        transactions: {
+            cash: Array.isArray(data.transactions?.cash) ? data.transactions.cash : [],
+            loan: Array.isArray(data.transactions?.loan) ? data.transactions.loan : []
+        },
         gameId: data.game.id,
         gameCreatedAt: data.game.createdAt,
         gameDurationMs: data.game.durationMs,
@@ -1446,6 +1452,31 @@ function ensureHistorySeeded() {
     return historySeedPromise;
 }
 
+// Does this device hold a real ledger yet? The fresh-game baseline is one
+// $5,000 line per side with no memos — anything else is player data.
+function hasLocalLedgerData() {
+    try {
+        const cash = data.transactions?.cash || [];
+        const loan = data.transactions?.loan || [];
+        const meaningful = (list) => list.some((e) => txNote(e) || Math.abs(txAmount(e) || 0) !== 5000)
+            || list.length > 1;
+        return meaningful(cash) || meaningful(loan);
+    } catch { return false; }
+}
+// Pull the synced ledger for THIS game into an empty device.
+function adoptSyncedLedger(storedData, isDifferentGame) {
+    if (isDifferentGame) return;                 // stale row from an old game
+    if (hasLocalLedgerData()) return;            // this device is authoritative
+    const remote = storedData?.transactions;
+    if (!remote || typeof remote !== 'object') return;
+    const cash = normalizeLedger(remote.cash, []);
+    const loan = normalizeLedger(remote.loan, []);
+    if (cash.length === 0 && loan.length === 0) return;
+    data.transactions = { cash, loan };
+    saveQuantitiesToLocalStorage();
+    updateTransactionLists({ cash, loan });
+    updateTotals();
+}
 async function seedHistoryCache(generation) {
     if (!auth.currentUser) return;
     try {
@@ -1470,6 +1501,10 @@ async function seedHistoryCache(generation) {
             myHistoryCache = storedPoints;
         }
         historySeedFailed = false;
+        // Restore the synced ledger on a device that has none yet (fresh
+        // install / browser): amounts and memos come back together. A device
+        // that already has entries keeps them — this never overwrites play.
+        try { adoptSyncedLedger(storedData, isDifferentGame); } catch {}
     } catch (err) {
         if (generation !== historySeedGeneration) return;
         console.error('Error loading net worth history:', err);
@@ -3965,7 +4000,26 @@ function numberWithCommasAndDecimals(x) {
 // Example usage:
 //console.log(numberWithCommasAndDecimals('1107.1')); // Should log '1,107'
 
+// Payout cells stay masked (•••) until the player taps one: rolling should
+// reveal what you earned, not advertise it beforehand. The real amount rides
+// on the button's dataset so collecting needs no recompute.
+const ROLL_MASK = '•••';
+function hideRollAmount(btn, formatted) {
+    btn.dataset.amount = formatted;
+    btn.textContent = ROLL_MASK;
+    btn.classList.add('is-masked');
+    btn.setAttribute('aria-label', 'Tap to reveal this payout');
+}
+function revealRollAmount(btn) {
+    if (!btn || !btn.dataset.amount) return;
+    btn.textContent = btn.dataset.amount;
+    btn.classList.remove('is-masked');
+    btn.removeAttribute('aria-label');
+}
 function populateRollTable() {
+    // NEVER re-deals: the order comes from liveRollValues, which only
+    // reshuffleRollTables() (a collected payout) replaces. Halving or
+    // doubling a crop repaints amounts and must leave the deal untouched.
     // Base per-unit payouts (see BASE_ROLL_VALUES by the dice). The live
     // order is a fresh random permutation per crop — shuffled on load and
     // re-dealt after every collected payout. The legacy room shuffle below
@@ -4018,11 +4072,10 @@ function populateRollTable() {
             payoutButton.className = 'roll-cell-button';
             payoutCell.appendChild(payoutButton);
           }
-          payoutButton.textContent = numberWithCommasAndDecimals(profit);
+          hideRollAmount(payoutButton, numberWithCommasAndDecimals(profit));
         });
         return;
-      }
-      const assetType = row.cells[0].textContent.split(' ')[0]; // Get the asset type (Hay, Grain, etc.) without suffix
+      }      const assetType = row.cells[0].textContent.split(' ')[0]; // Get the asset type (Hay, Grain, etc.) without suffix
       const quantity = quantities[assetType] || 0; // Get the quantity for this asset type
 
             // Hay tiers + equipment bonuses are host settings (room doc);
@@ -4066,7 +4119,7 @@ function populateRollTable() {
                         payoutCell.appendChild(payoutButton);
                 }
 
-                payoutButton.textContent = numberWithCommasAndDecimals(profit); // Populate the button with formatted profit
+                hideRollAmount(payoutButton, numberWithCommasAndDecimals(profit)); // value kept, masked until tapped
       });
     });
   }
@@ -5373,7 +5426,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 // Debug logging to trace roll button clicks
                 console.log('Roll button clicked');
 
-                const text = (btn.textContent || '').trim();
+                const text = (btn.dataset.amount || btn.textContent || '').trim();
                 if (!text) return;
 
                 const numericText = text.replace(/,/g, '');
@@ -5395,6 +5448,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     loan: 0
                 });
                 console.log(`Roll payout ${text} added to cash transactions`);
+                // Flip the mask for a beat so the player sees what they took,
+                // then the reshuffle re-masks the whole table.
+                try { revealRollAmount(btn); } catch {}
                 // A tap-double covers exactly one roll: clear the ½×/2× tap
                 // states now that this payout has been taken, so nobody
                 // carries a multiplier into the next turn by accident.

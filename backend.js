@@ -43,6 +43,8 @@ const COLUMN_MAP = {
         harvester: 'harvester', tractor: 'tractor', history: 'history',
         gameId: 'game_id', gameCreatedAt: 'game_created_at',
         gameDurationMs: 'game_duration_ms', roomCode: 'room_code',
+        // Ledger (amounts + memos) syncs with the player's board row.
+        transactions: 'transactions',
         updatedAt: 'updated_at'
     },
     trades: {

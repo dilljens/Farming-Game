@@ -370,6 +370,13 @@ input[type="number"] {
     border-width: 2px;
 }
 
+/* Masked payouts: unknown until tapped. */
+.roll-table button.roll-cell-button.is-masked {
+    color: #9ca3af;
+    letter-spacing: 2px;
+    font-weight: 600;
+}
+
 /* Asset-name tap states (1/2x, 2x) read as pills, not just colored text. */
 .roll-table tr:not(:first-child) td:first-child {
     border-radius: 8px;
@@ -1060,7 +1067,8 @@ body[data-theme="dark"] .roll-table button.roll-cell-button {
     color: #ffffff;
     box-shadow: 0 1px 0 rgba(0,0,0,.4);
 }
-body[data-theme="dark"] .roll-table button.roll-cell-button:hover { background-color: #4b5563; }
+body[data-theme="dark"] .roll-table button.roll-cell-button:hover { background-color: #475569; }
+body[data-theme="dark"] .roll-table button.roll-cell-button.is-masked { color: #94a3b8; }
 body[data-theme="dark"] .roll-table button.roll-cell-button:active { background-color: #6b7280; }
 body[data-theme="dark"] .roll-table th.is-roll-col { background-color: #b45309; }
 body[data-theme="dark"] .roll-table td.is-roll-col button.roll-cell-button {
