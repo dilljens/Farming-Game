@@ -4292,8 +4292,25 @@ function numberWithCommasAndDecimals(x) {
 // reveal what you earned, not advertise it beforehand. The real amount rides
 // on the button's dataset so collecting needs no recompute.
 const ROLL_MASK = '•••';
+// Payout visibility is a setting you pick: regular (visible) or hidden until
+// tapped. Default is regular, so a fresh device sees the whole table.
+const ROLL_VISIBLE_KEY = 'fgRollVisible';
+function rollValuesVisible() {
+    try {
+        const saved = localStorage.getItem(ROLL_VISIBLE_KEY);
+        if (saved === '0') return false;
+        if (saved === '1') return true;
+    } catch {}
+    return true; // regular rolls: values shown
+}
 function hideRollAmount(btn, formatted) {
     btn.dataset.amount = formatted;
+    if (rollValuesVisible()) {
+        btn.textContent = formatted;
+        btn.classList.remove('is-masked');
+        btn.removeAttribute('aria-label');
+        return;
+    }
     btn.textContent = ROLL_MASK;
     btn.classList.add('is-masked');
     btn.setAttribute('aria-label', 'Tap to reveal this payout');
@@ -6106,6 +6123,16 @@ window.addEventListener('DOMContentLoaded', (event) => {
     // sync with the DOM (double change events) and appear to uncheck itself.
     document.getElementById('dblHayBtn')?.addEventListener('change', (e) => setHayDoubled(!!e.target.checked));
     document.getElementById('dblCornBtn')?.addEventListener('change', (e) => setCornDoubled(!!e.target.checked));
+    // Roll visibility setting: repaint the table in the chosen mode.
+    const visChk = document.getElementById('rollVisibleChk');
+    if (visChk) {
+        visChk.checked = rollValuesVisible();
+        visChk.addEventListener('change', (e) => {
+            try { localStorage.setItem(ROLL_VISIBLE_KEY, e.target.checked ? '1' : '0'); } catch {}
+            try { populateRollTable(); } catch {}
+            undoToast(e.target.checked ? 'Roll values shown' : 'Roll values hidden until tapped');
+        });
+    }
     syncDoubleToggles();
 
     function updateAssetDisplay(td, state) {
