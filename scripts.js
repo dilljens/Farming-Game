@@ -4736,6 +4736,21 @@ function loadFromLocalStorage() {
         localStorage.setItem('farmingGameData', JSON.stringify(data));
         // Restore this device's roll log so the charts survive reloads.
         try { rollLog = Array.isArray(loadedData?.rolls) ? loadedData.rolls.slice(-500) : []; } catch { rollLog = []; }
+        // Blank slate: the peek browser had started a half-finished game (localStorage
+        // from an old deploy with stray quantities). Fresh visitors get Hay 1 / Grain 1 /
+        // everything else 0 — matching the in-repo defaults in index.html.
+        try {
+            // Fresh installs: localStorage exists (settings were touched) but
+            // no farm was ever started, so every qty is 0 including Hay/Grain.
+            // A real played game always has Hay/Grain >= 1 (or Christmas
+            // history) — without that, reset to the in-repo starting farm.
+            const q = loadedData.qty || {};
+            const touched = ['Hay', 'Grain', 'Fruit', 'Farm', 'Cows', 'Harvester', 'Tractor']
+                .map((k) => Number(q[k]) || 0);
+            const farmStarted = touched[0] >= 1 || touched[1] >= 1
+                || (Array.isArray(loadedData.transactions?.cash) && loadedData.transactions.cash.length > 1);
+            if (!farmStarted) data.qty = { ...baseState.qty };
+        } catch {}
         // Apply quantity data to the page
         document.querySelector('.qty-hay').textContent = data.qty.Hay.toString();
         document.querySelector('.qty-grain').textContent = data.qty.Grain.toString();
