@@ -212,13 +212,12 @@ export function scenarioName(rules) {
 
 // --- Bulk buys: benchmark-unlocked purchase increments ---
 // Always-on. While ANY one player holds net worth at or above a benchmark,
-// BULK BUYS CAP AT 2x. Once the room leader passes a benchmark, every player
-// may buy up to 2x in one purchase: hay/grain unlock at $150k, everything else
-// at $250k. Evaluated live off the leaderboard snapshot, so every device
-// agrees with no extra state — dip back below and the tier locks again.
+// BULK BUYS CAP AT 2x. One benchmark for the whole board: once any player
+// reaches $250k net worth, everyone may buy up to 2x in one purchase.
+// Evaluated live off the leaderboard snapshot, so every device agrees with no
+// extra state — dip back below and the tier locks again.
 export const BULK_TIERS = [
-    { min: 150000, mult: 2, assets: ['hay', 'grain'] },
-    { min: 250000, mult: 2 }
+    { min: 250000, mult: 2 } // one benchmark for everything: 2x at $250k
 ];
 
 export function boardMaxNetWorth(board) {

@@ -1803,7 +1803,18 @@ function createProgressChart() {
     // chartjs-plugin-zoom (UMD) exposes itself as ChartZoom; register it so
     // wheel/pinch zoom and drag pan are available on the progress chart.
     if (typeof ChartZoom !== 'undefined') Chart.register(ChartZoom);
-    const datasets = buildChartDatasets(latestLeaderboardData);
+    // Archive selection: past games only have this player's own history.
+    const src = (typeof currentChartSource === 'function') ? currentChartSource() : { current: true };
+    let datasets = buildChartDatasets(latestLeaderboardData);
+    if (!src.current) {
+        const start = Number(data?.game?.createdAt) || Date.now();
+        const pts = buildElapsedHistory(src.history || [], start, Infinity)
+            .map((p) => ({ x: p.x, y: p.v }));
+        datasets = pts.length ? [{
+            label: 'This game (past)', data: pts, borderColor: '#2563eb', backgroundColor: '#2563eb',
+            tension: 0, pointRadius: 0, borderWidth: 2, fill: false, spanGaps: true
+        }] : [];
+    }
     const initialWindow = getChartWindowForDatasets(datasets);
     const ink = chartInk();
     const yRange = chartWorthRange(datasets);
@@ -1923,6 +1934,126 @@ function chartWorthRange(datasets) {
     while (peak > max) max *= 2;
     return { min: CHART_MIN_WORTH, max };
 }
+// --- Past-game archive: every finished game's own history + rolls, so the
+// Chart view can look back at earlier games on this device.
+const GAME_ARCHIVE_KEY = 'fgGameArchive';
+const GAME_ARCHIVE_MAX = 10;
+function readGameArchive() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(GAME_ARCHIVE_KEY) || '[]');
+        return Array.isArray(raw) ? raw.filter(g => g && g.id) : [];
+    } catch { return []; }
+}
+function archiveCurrentGame() {
+    try {
+        const history = Array.isArray(myHistoryCache) ? myHistoryCache : [];
+        const rolls = Array.isArray(rollLog) ? rollLog : [];
+        if (!history.length && !rolls.length) return;
+        const id = data?.game?.id || String(data?.game?.createdAt || '');
+        if (!id) return;
+        const list = readGameArchive().filter(g => g.id !== id);
+        list.unshift({
+            id,
+            createdAt: data.game.createdAt,
+            durationMs: data.game.durationMs,
+            year: Math.max(1, Number(data.playerYear) || 1),
+            history: history.slice(-600),
+            rolls: rolls.slice(-500)
+        });
+        localStorage.setItem(GAME_ARCHIVE_KEY, JSON.stringify(list.slice(0, GAME_ARCHIVE_MAX)));
+    } catch {}
+}
+function currentChartSource() {
+    const sel = document.getElementById('chartGameSelect');
+    const id = sel?.value || 'current';
+    if (id === 'current') return { current: true, history: myHistoryCache || [], rolls: rollLog || [] };
+    const g = readGameArchive().find(x => x.id === id);
+    return g ? { current: false, history: g.history || [], rolls: g.rolls || [] } : { current: true, history: myHistoryCache || [], rolls: rollLog || [] };
+}
+function fillChartGameSelect() {
+    const sel = document.getElementById('chartGameSelect');
+    if (!sel) return;
+    const keep = sel.value || 'current';
+    sel.innerHTML = '';
+    const cur = document.createElement('option');
+    cur.value = 'current';
+    cur.textContent = 'This game';
+    sel.appendChild(cur);
+    readGameArchive().forEach((g, i) => {
+        const opt = document.createElement('option');
+        opt.value = g.id;
+        const when = g.createdAt ? new Date(g.createdAt).toLocaleDateString() : 'earlier';
+        opt.textContent = `Game ${i + 1} · ${when} · Year ${g.year || 1}`;
+        sel.appendChild(opt);
+    });
+    if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+// --- Roll charts: what came up over time, and the frequency bin.
+let rollChart = null;
+let rollFreqChart = null;
+const ROLL_LABELS = ['1', '2', '3', '4', '5', '6'];
+function refreshRollCharts() {
+    const src = currentChartSource();
+    const rolls = (src.rolls || []).filter(r => Number(r.v) >= 1 && Number(r.v) <= 6);
+    const ink = chartInk();
+    // Rolls over time: one dot per roll, y = face value.
+    const canvas1 = document.getElementById('rollChart');
+    if (canvas1 && typeof Chart !== 'undefined') {
+        const points = rolls.map(r => ({ x: Number(r.t) || 0, y: Number(r.v) }));
+        if (!rollChart) {
+            rollChart = new Chart(canvas1.getContext('2d'), {
+                type: 'scatter',
+                data: { datasets: [{ label: 'Roll', data: points, backgroundColor: '#16a34a', pointRadius: 3 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { backgroundColor: ink.tooltipBg, titleColor: ink.tooltipText, bodyColor: ink.tooltipText } },
+                    scales: {
+                        x: { type: 'linear', ticks: { color: ink.text, maxTicksLimit: 5, callback: (v) => new Date(Number(v)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, grid: { color: ink.grid } },
+                        y: { min: 0.5, max: 6.5, ticks: { color: ink.text, stepSize: 1, callback: (v) => ROLL_LABELS[Math.round(v) - 1] || '' }, grid: { color: ink.grid } }
+                    }
+                }
+            });
+        } else {
+            rollChart.data.datasets[0].data = points;
+            rollChart.options.scales.x.ticks.color = ink.text;
+            rollChart.options.scales.y.ticks.color = ink.text;
+            rollChart.update('none');
+        }
+    }
+    // Frequency: how many of each face — 1 is the worst roll, 6 the best.
+    const canvas2 = document.getElementById('rollFreqChart');
+    if (canvas2 && typeof Chart !== 'undefined') {
+        const counts = [1, 2, 3, 4, 5, 6].map(v => rolls.filter(r => Number(r.v) === v).length);
+        const colors = ['#b91c1c', '#dc2626', '#f59e0b', '#84cc16', '#16a34a', '#15803d'];
+        if (!rollFreqChart) {
+            rollFreqChart = new Chart(canvas2.getContext('2d'), {
+                type: 'bar',
+                data: { labels: ROLL_LABELS, datasets: [{ label: 'Rolls', data: counts, backgroundColor: colors }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { backgroundColor: ink.tooltipBg, titleColor: ink.tooltipText, bodyColor: ink.tooltipText } },
+                    scales: {
+                        x: { ticks: { color: ink.text }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { color: ink.text, precision: 0 }, grid: { color: ink.grid } }
+                    }
+                }
+            });
+        } else {
+            rollFreqChart.data.datasets[0].data = counts;
+            rollFreqChart.options.scales.x.ticks.color = ink.text;
+            rollFreqChart.options.scales.y.ticks.color = ink.text;
+            rollFreqChart.update('none');
+        }
+    }
+}
+document.getElementById('chartGameSelect')?.addEventListener('change', () => {
+    // Rebuild the net-worth chart for the chosen game, then the roll charts.
+    try { if (progressChart) { progressChart.destroy(); progressChart = null; } } catch {}
+    try { createProgressChart(); } catch {}
+    try { refreshRollCharts(); } catch {}
+    undoToast(document.getElementById('chartGameSelect')?.value === 'current' ? 'Showing this game' : 'Showing an earlier game');
+});
+
 // Chart.js needs colors in JS (CSS can't reach the canvas): keep them in
 // one place so light/night mode match the rest of the page.
 function chartInk() {
@@ -1971,6 +2102,8 @@ function showLeaderboardView(view) {
 
     if (isChart) {
         createProgressChart(); // lazy: first switch to Chart view
+        try { fillChartGameSelect(); } catch {}
+        try { refreshRollCharts(); } catch {}
         if (progressChart) {
             progressChart.resize();
             progressChart.update('none');
@@ -2965,6 +3098,8 @@ function setRollColumn(n) {
     // Marking a roll starts the next deal: a fresh table for the new turn.
     if (rollDealCollected) reshuffleRollTables();
     table.dataset.lastRoll = String(n);
+    // Marking a face is how real-dice tables record their roll.
+    if (typeof recordRoll === 'function') { try { recordRoll(n); } catch {} }
     paintRollColumn();
     try { revealRollColumn(n); } catch {}
 }
@@ -2989,9 +3124,22 @@ function pushDiceHistory(text) {
         h.textContent = diceHistory.length ? `Recent rolls: ${diceHistory.join(' · ')}` : '';
     }
 }
+// --- Roll log: every roll (digital or marked from real dice) is recorded so
+// the charts can show what came up, when, and how the distribution looked.
+let rollLog = []; // [{t, v}]
+function recordRoll(v) {
+    const n = Math.floor(Number(v));
+    if (!(n >= 1 && n <= 6)) return;
+    rollLog.push({ t: Date.now(), v: n });
+    if (rollLog.length > 500) rollLog = rollLog.slice(-500);
+    try { if (typeof data === 'object' && data) data.rolls = rollLog; } catch {}
+    try { refreshRollCharts(); } catch {}
+}
 function rollDice() {
     if (diceRolling) return null;
     const roll = Math.floor(Math.random() * 6) + 1; // 1-6 only
+    // Logging happens in setRollColumn (the settle path), so a digital roll and
+    // a hand-marked roll can never be counted twice.
     const el = document.getElementById('diceDisplay');
     if (!el) { pushDiceHistory(String(roll)); return roll; }
     // Tumble through faces before settling, so rolling the same number
@@ -4352,7 +4500,11 @@ function normalizeSavedState(savedData) {
             : [],
         ranchRidgeSelections: normalizeRidgeCounts(saved.ranchRidgeSelections),
         // Personal year counter: whole numbers, never below Year 1.
-        playerYear: Math.max(1, Math.floor(Number(saved.playerYear) || baseState.playerYear))
+        playerYear: Math.max(1, Math.floor(Number(saved.playerYear) || baseState.playerYear)),
+        // Roll log rides the save so the charts survive a reload.
+        rolls: Array.isArray(saved.rolls)
+            ? saved.rolls.filter(r => r && Number(r.v) >= 1 && Number(r.v) <= 6).slice(-500)
+            : []
     };
 }
 
@@ -4507,6 +4659,8 @@ function loadFromLocalStorage() {
         // Persist the normalized game metadata so legacy saves keep one stable
         // creation time and game id across both load paths and future reloads.
         localStorage.setItem('farmingGameData', JSON.stringify(data));
+        // Restore this device's roll log so the charts survive reloads.
+        try { rollLog = Array.isArray(loadedData?.rolls) ? loadedData.rolls.slice(-500) : []; } catch { rollLog = []; }
         // Apply quantity data to the page
         document.querySelector('.qty-hay').textContent = data.qty.Hay.toString();
         document.querySelector('.qty-grain').textContent = data.qty.Grain.toString();
@@ -5247,6 +5401,8 @@ if (resetModalTitle) {
 async function performReset(opts = {}) {
     hideModal();
     invalidatePendingLeaderboardSaves();
+    // Keep this game's chart data before the reset clears it.
+    try { archiveCurrentGame(); } catch {}
     // Game Reset also resets the player's leaderboard entry: delete my doc
     // so the old score can't linger (with no username set, no re-save
     // would ever replace it). The normal post-reset save flow re-adds the

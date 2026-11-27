@@ -1232,22 +1232,46 @@ body[data-theme="dark"] .pay-per-acre-table button.pay-acre-button:not(.selected
    Tall enough for legend + axis labels on narrow phones. */
 #leaderboardChartWrap {
     position: relative;
-    /* Tall enough for plot + legend without the legend riding over the plot
-       or sliding under the fixed tab bar on phones. */
-    height: clamp(280px, 46vh, 380px);
     max-width: 100%;
     margin-top: 8px;
     margin-bottom: 16px;
-    overflow: hidden;
+}
+/* The net-worth plot keeps its own sized box; the mini charts below follow
+   in normal flow instead of being clipped by a fixed-height parent. */
+.chart-main-wrap {
+    position: relative;
+    height: clamp(280px, 46vh, 380px);
 }
 
 #leaderboardChartWrap canvas {
     max-width: 100%;
 }
+/* Extra charts under the net-worth graph: rolls and their frequency. */
+.chart-mini-title {
+    margin-top: 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+    text-align: center;
+}
+body[data-theme="dark"] .chart-mini-title { color: #cbd5e1; }
+.chart-mini-wrap {
+    position: relative;
+    height: 150px;
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+#chartGameSelect {
+    max-width: 190px;
+    background-color: #f9fafb;
+    color: #374151;
+}
 @media screen and (max-width: 700px) {
-    #leaderboardChartWrap {
+    .chart-main-wrap {
         height: clamp(260px, 40vh, 320px);
-        /* keep the legend clear of the fixed bottom tab bar */
+    }
+    /* keep the chart stack clear of the fixed bottom tab bar */
+    #leaderboardChartWrap {
         margin-bottom: 24px;
     }
 }

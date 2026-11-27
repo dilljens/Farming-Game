@@ -450,11 +450,12 @@ test('bulk tiers: benchmarks unlock 2x, and 2x is the ceiling', () => {
         assert.equal(bulkMult(0, asset), 1, `${asset} @0`);
         assert.equal(bulkMult(149999, asset), 1, `${asset} @149999`);
     }
-    // $150k: hay/grain unlock 2x early; the rest wait for $250k.
-    assert.equal(bulkMult(150000, 'hay'), 2);
-    assert.equal(bulkMult(200000, 'grain'), 2);
-    assert.equal(bulkMult(200000, 'farm'), 1, 'non-bulk still single below $250k');
-    assert.equal(bulkMult(200000, 'cows'), 1, 'ridges wait for $250k');
+    // One benchmark for everything: nothing unlocks before $250k.
+    assert.equal(bulkMult(150000, 'hay'), 1, 'hay waits for $250k too');
+    assert.equal(bulkMult(200000, 'grain'), 1);
+    assert.equal(bulkMult(200000, 'farm'), 1);
+    assert.equal(bulkMult(200000, 'cows'), 1);
+    assert.equal(bulkMult(249999, 'hay'), 1);
     // $250k: everything unlocks 2x — the ceiling for every asset.
     for (const asset of ['hay', 'grain', 'farm', 'cows', 'harvester', 'tractor', 'fruit']) {
         assert.ok(bulkMult(250000, asset) >= 2, `${asset} @250k`);
@@ -479,8 +480,8 @@ test('bulk tiers: benchmarks unlock 2x, and 2x is the ceiling', () => {
 });
 
 test('bulk next: hint line names the coming tier or null at max', () => {
-    assert.deepEqual(bulkNext(0, 'hay'), { mult: 2, min: 150000 });
-    assert.equal(bulkNext(200000, 'hay'), null, 'hay is already maxed at 2x');
+    assert.deepEqual(bulkNext(0, 'hay'), { mult: 2, min: 250000 });
+    assert.equal(bulkNext(300000, 'hay'), null, 'hay is maxed at 2x');
     assert.deepEqual(bulkNext(0, 'farm'), { mult: 2, min: 250000 });
     assert.deepEqual(bulkNext(300000, 'grain'), null, 'grain maxed at 2x');
     assert.equal(bulkNext(500000, 'hay'), null, 'hay maxed at 5x');
