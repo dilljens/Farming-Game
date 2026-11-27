@@ -1806,6 +1806,7 @@ function createProgressChart() {
     const datasets = buildChartDatasets(latestLeaderboardData);
     const initialWindow = getChartWindowForDatasets(datasets);
     const ink = chartInk();
+    const yRange = chartWorthRange(datasets);
     progressChart = new Chart(canvas.getContext('2d'), {
         type: 'line',
         data: { datasets },
@@ -1874,8 +1875,8 @@ function createProgressChart() {
                     // Log scale: net worth spans $5k → $1M+, and a linear axis
                     // flattened the early game into the floor.
                     type: 'logarithmic',
-                    // No fixed min: Chart.js fits the smallest positive value, so
-                    // ticks read $10k/$25k/$50k instead of sub-dollar noise.
+                    min: yRange.min,
+                    max: yRange.max,
                     title: { display: true, text: 'Net worth (log scale)', color: ink.text },
                     ticks: {
                         font: { size: 10 },
@@ -1890,6 +1891,12 @@ function createProgressChart() {
                             return `$${n}`;
                         }
                     },
+                    // Human breakpoints rather than Chart.js's log defaults.
+                    afterBuildTicks: (axis) => {
+                        axis.ticks = WORTH_TICKS
+                            .filter((v) => v >= yRange.min && v <= yRange.max)
+                            .map((v) => ({ value: v }));
+                    },
                     grid: { color: ink.grid }
                 }
             }
@@ -1898,6 +1905,24 @@ function createProgressChart() {
     progressChart.$defaultWindow = initialWindow;
 }
 
+// Log-axis breakpoints sized for this game: most games end between $100k and
+// $1M, so the axis always reaches $1M and uses round money steps in between.
+const WORTH_TICKS = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2500000, 5000000];
+const CHART_MIN_WORTH = 1000;   // below this the log axis gets noisy
+const CHART_DEFAULT_MAX = 1000000;
+function chartWorthRange(datasets) {
+    let peak = 0;
+    for (const d of datasets || []) {
+        for (const p of d.data || []) {
+            const v = Number(p && p.y);
+            if (Number.isFinite(v) && v > peak) peak = v;
+        }
+    }
+    // Always show the full $1M board; grow in tidy steps if someone passes it.
+    let max = CHART_DEFAULT_MAX;
+    while (peak > max) max *= 2;
+    return { min: CHART_MIN_WORTH, max };
+}
 // Chart.js needs colors in JS (CSS can't reach the canvas): keep them in
 // one place so light/night mode match the rest of the page.
 function chartInk() {
