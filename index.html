@@ -14,7 +14,7 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" href="./icon-192.svg">
     <link rel="apple-touch-icon" href="./icon-192.svg">
-    <link rel="stylesheet" href="./styles.css?v=20261126a">
+    <link rel="stylesheet" href="./styles.css?v=20261127d">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -363,10 +363,10 @@
       <div id="diceHistory" class="text-xs text-gray-500 mt-2 min-h-[14px]"></div>
       <button id="hideDiceBtn" type="button" class="mt-2 text-xs text-gray-400 hover:text-gray-600">Hide Dice</button>
     </div>
-    <div class="roll-help text-gray-600 text-center">🎲 Roll (real dice work too) — tap your number above, then tap the payout</div>
+    <div class="roll-help text-gray-600 text-center">🎲 Roll (real dice work too) — tap your number above, then tap the payout. Tap a crop name to halve or double it for one roll.</div>
     <div id="doubleToggles" class="text-center my-1 flex items-center justify-center gap-3">
-      <button type="button" id="dblHayBtn" class="dbl-toggle" aria-pressed="false" title="Double hay rolls">○ Hay ×2</button>
-      <button type="button" id="dblCornBtn" class="dbl-toggle" aria-pressed="false" title="Double corn rolls">○ Corn ×2</button>
+      <label class="dbl-check" title="Double hay rolls"><input type="checkbox" id="dblHayBtn" /> Hay ×2</label>
+      <label class="dbl-check" title="Double corn rolls"><input type="checkbox" id="dblCornBtn" /> Corn ×2</label>
     </div>
     <div class="table-wrap"><table class="roll-table">
       <tr>
@@ -560,7 +560,6 @@
 <div id="quickTransactionButtons" class="mt-1 mb-1 flex flex-col items-center gap-2">
   <div class="flex justify-center w-full gap-2 flex-wrap">
     <button id="christmasBtn" type="button" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold">🎄 Christmas +$5,000</button>
-    <button id="editLedgerBtn" type="button" class="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-bold" aria-pressed="false" title="Fix a past entry amount or its note. Totals, net worth, and the leaderboard recompute.">✏️ Edit entries</button>
   </div>
   <div class="grid grid-cols-6 gap-2">
     <button type="button" class="w-20 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm font-semibold text-center text-green-700" data-quick-transaction-value="500">+500</button>
@@ -590,7 +589,10 @@
     <td colspan="3" class="entry-cell">
       <div class="entry-head">
         <strong>Cash</strong>
-        <button id="cashUndoCell" type="button" class="undo-btn" title="Undo last action">↩ Undo</button>
+        <div class="entry-actions">
+          <button id="cashUndoCell" type="button" class="undo-btn" title="Undo last action">↩ Undo</button>
+          <button id="editCashBtn" type="button" class="undo-btn edit-btn" data-side="cash" aria-pressed="false" title="Fix a past cash amount or its note. Totals and net worth recompute.">✏️ Edit</button>
+        </div>
       </div>
       <div class="small-wrap">
       <input type="text" id="cashInput" placeholder="Enter Cash value" inputmode="numeric" autocomplete="off" />
@@ -604,7 +606,10 @@
     <td colspan="3" class="entry-cell">
       <div class="entry-head">
         <strong>Loan</strong>
-        <button id="loanUndoCell" type="button" class="undo-btn" title="Undo last action">↩ Undo</button>
+        <div class="entry-actions">
+          <button id="loanUndoCell" type="button" class="undo-btn" title="Undo last action">↩ Undo</button>
+          <button id="editLoanBtn" type="button" class="undo-btn edit-btn" data-side="loan" aria-pressed="false" title="Fix a past loan amount or its note. Totals and net worth recompute.">✏️ Edit</button>
+        </div>
       </div>
       <div class="small-wrap">
       <input type="text" id="loanInput" placeholder="Enter Loan value" inputmode="numeric" autocomplete="off" />
@@ -845,7 +850,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20261126a"></script>
+<script type="module" src="scripts.js?v=20261127d"></script>
 
 <div id="buildStamp" class="text-center text-[10px] text-gray-400 mt-2 mb-1"></div>
 

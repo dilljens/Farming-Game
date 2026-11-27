@@ -675,14 +675,14 @@ function performChristmas() {
         sayStatus(`🎄 Merry Christmas! +$${CHRISTMAS_GIFT.toLocaleString()} cash — now Year ${data.playerYear}.`);
     }
     // A new year resets the ×2 toggles: unselect Hay ×2 and Corn ×2 if
-    // either is on (table tap states are left alone). Clicking the toggle
-    // reuses its own handler, so paint, corn-row removal, and repopulate
-    // all follow. Toast only when something actually cleared.
+    // either is on (table tap states are left alone). Unchecking by hand
+    // reuses each checkbox's own change handler, so paint, corn-row removal,
+    // and repopulate all follow. Toast only when something actually cleared.
     try {
         let cleared = false;
         for (const id of ['dblHayBtn', 'dblCornBtn']) {
-            const btn = document.getElementById(id);
-            if (btn?.getAttribute('aria-pressed') === 'true') { btn.click(); cleared = true; }
+            const box = document.getElementById(id);
+            if (box?.checked) { box.checked = false; box.dispatchEvent(new Event('change')); cleared = true; }
         }
         if (cleared) undoToast('🎄 New year — Hay ×2 and Corn ×2 toggles cleared');
     } catch {}
@@ -1759,6 +1759,7 @@ function createProgressChart() {
     if (typeof ChartZoom !== 'undefined') Chart.register(ChartZoom);
     const datasets = buildChartDatasets(latestLeaderboardData);
     const initialWindow = getChartWindowForDatasets(datasets);
+    const ink = chartInk();
     progressChart = new Chart(canvas.getContext('2d'), {
         type: 'line',
         data: { datasets },
@@ -1769,9 +1770,12 @@ function createProgressChart() {
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { boxWidth: 12, boxHeight: 12, font: { size: 11 } }
+                    labels: { boxWidth: 12, boxHeight: 12, font: { size: 11 }, color: ink.text }
                 },
                 tooltip: {
+                    backgroundColor: ink.tooltipBg,
+                    titleColor: ink.tooltipText,
+                    bodyColor: ink.tooltipText,
                     callbacks: {
                         title: (items) => items.length
                             ? `Game time ${formatGameTime(items[0].parsed.x)}`
@@ -1799,10 +1803,11 @@ function createProgressChart() {
                     type: 'linear',
                     min: initialWindow.min,
                     max: initialWindow.max,
-                    title: { display: true, text: 'Game time since first change' },
+                    title: { display: true, text: 'Game time since first change', color: ink.text },
                     ticks: {
                         maxTicksLimit: 6,
                         font: { size: 10 },
+                        color: ink.text,
                         callback: (v) => formatGameTime(v)
                     },
                     grid: { display: false }
@@ -1810,6 +1815,7 @@ function createProgressChart() {
                 y: {
                     ticks: {
                         font: { size: 10 },
+                        color: ink.text,
                         // Compact ($1M, $250k) so wide values don't squeeze
                         // the plot off narrow phone screens.
                         callback: (v) => {
@@ -1819,7 +1825,8 @@ function createProgressChart() {
                             if (a >= 1000) return `$${parseFloat((n / 1000).toFixed(1))}k`;
                             return `$${n}`;
                         }
-                    }
+                    },
+                    grid: { color: ink.grid }
                 }
             }
         }
@@ -1827,7 +1834,37 @@ function createProgressChart() {
     progressChart.$defaultWindow = initialWindow;
 }
 
-// Show exactly one of the two leaderboard views at a time.
+// Chart.js needs colors in JS (CSS can't reach the canvas): keep them in
+// one place so light/night mode match the rest of the page.
+function chartInk() {
+    const dark = document.body?.dataset?.theme === 'dark';
+    return dark
+        ? { text: '#d1d5db', grid: 'rgba(156, 163, 175, 0.25)', tooltipBg: '#1f2937', tooltipText: '#f3f4f6' }
+        : { text: '#374151', grid: 'rgba(156, 163, 175, 0.35)', tooltipBg: '#ffffff', tooltipText: '#111827' };
+}
+// Repaint an existing chart after a theme switch.
+function repaintChartForTheme() {
+    if (!progressChart) return;
+    const ink = chartInk();
+    const opt = progressChart.options || {};
+    try {
+        if (opt.plugins?.legend?.labels) opt.plugins.legend.labels.color = ink.text;
+        if (opt.plugins?.tooltip) {
+            opt.plugins.tooltip.backgroundColor = ink.tooltipBg;
+            opt.plugins.tooltip.titleColor = ink.tooltipText;
+            opt.plugins.tooltip.bodyColor = ink.tooltipText;
+        }
+        if (opt.scales?.x) {
+            if (opt.scales.x.ticks) opt.scales.x.ticks.color = ink.text;
+            if (opt.scales.x.title) opt.scales.x.title.color = ink.text;
+        }
+        if (opt.scales?.y) {
+            if (opt.scales.y.ticks) opt.scales.y.ticks.color = ink.text;
+            if (opt.scales.y.grid) opt.scales.y.grid.color = ink.grid;
+        }
+        progressChart.update('none');
+    } catch {}
+}
 function showLeaderboardView(view) {
     const tableWrap = document.getElementById('leaderboardTableWrap');
     const chartWrap = document.getElementById('leaderboardChartWrap');
@@ -1944,6 +1981,7 @@ function applyTheme(mode, opts = {}) {
         const meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.setAttribute('content', m === 'dark' ? '#111827' : '#5fd7a9');
     } catch {}
+    try { repaintChartForTheme(); } catch {}
     try { if (!opts.skipSave) localStorage.setItem('fgTheme', m); } catch {}
 }
 document.getElementById('themeBtn')?.addEventListener('click', () => {
@@ -3913,7 +3951,7 @@ function populateRollTable() {
         else rollValues[k] = shuffleOn ? shuffledRolls(baseValues[k], k, currentRoomCode) : baseValues[k];
     }
     const helpEl = document.querySelector('.roll-help');
-    if (helpEl) helpEl.textContent = 'Roll (real dice work too), tap your number above, then tap the payout — any roll 1-6 can pay best or worst, table reshuffles after every payout';
+    if (helpEl) helpEl.textContent = 'Roll (real dice work too), tap your number above, then tap the payout — tap a crop name to halve or double it for that one roll; the table reshuffles after every payout';
     try { paintRollColumn(); } catch {}
     
     // Get the quantities from the contenteditable cells
@@ -4561,7 +4599,7 @@ document.getElementById('resetButton').addEventListener('click', (e) => {
         if (desc) desc.textContent = 'You are not host — this resets your own farm and leaderboard entry.';
     } else {
         if (title) title.textContent = 'Reset Game';
-        if (desc) desc.textContent = 'Resets your farm and clears your leaderboard entry.';
+        if (desc) desc.textContent = 'Clears the global leaderboard for every player, then starts your farm fresh.';
     }
     showModal();
 });
@@ -4572,8 +4610,7 @@ document.getElementById('extraRulesButton').addEventListener('click', showExtraR
 // Event listener for the confirm reset button in the modal — host resets room, others reset self (imposterirl style)
 document.getElementById('confirmReset').addEventListener('click', async (event) => {
     event.preventDefault();
-    if (currentRoomCode && isHost) await resetRoomForHost();
-    else await performReset();
+    await resetGameSession();
     hideModal();
 });
 
@@ -4903,56 +4940,52 @@ async function resetRoomForHost() {
     } catch (err) { console.error('Error resetting room', err); }
 }
 
-async function resetLeaderboardForAllPlayers() {
+// Global mode (no room): Game Reset clears the GLOBAL leaderboard for
+// everyone, then starts this player's farm fresh. In-room resets stay
+// room-scoped (resetRoomForHost) or self-only for guests (performReset) —
+// see resetGameSession, the single router both modal paths use.
+async function resetGlobalGame() {
     try {
         await authReady;
         invalidatePendingLeaderboardSaves();
-
-        // Put the delete behind the same queue as leaderboard writes. This
-        // prevents a save from recreating a document while the reset is still
-        // deleting it, and makes later saves run after the reset completes.
+        // Behind the leaderboard write queue so a queued save can neither
+        // resurrect a doc mid-delete nor run before the clear finishes.
         const resetWrite = leaderboardWriteQueue.then(async () => {
             const querySnapshot = await getDocs(collection(db, 'leaderboard'));
-            const deletePromises = [];
-            querySnapshot.forEach((leaderboardDoc) => {
-                deletePromises.push(deleteDoc(leaderboardDoc.ref));
-            });
-            await Promise.all(deletePromises);
+            await Promise.all(querySnapshot.docs.map((d) => deleteDoc(d.ref)));
         });
         leaderboardWriteQueue = resetWrite.catch((err) => {
-            console.error('Error resetting leaderboard: ', err);
+            console.error('Error resetting global leaderboard: ', err);
             return undefined;
         });
         await resetWrite;
-        // Discard saves assembled while the delete was in flight. They carry
-        // the old game's metadata and must not recreate the just-cleared data.
+        // Saves assembled while the delete was in flight carry the old game
+        // and must not recreate what we just cleared.
         invalidatePendingLeaderboardSaves();
-        // A successful global reset starts a fresh local game clock as well.
-        // Keep the player's current board values, but do not carry history or
-        // the previous game's elapsed-time origin into the new leaderboard.
-        data.game = createGame();
-        resetHistoryCacheForNewGame();
-        saveQuantitiesToLocalStorage();
-        startGameClock();
-        const username = document.getElementById('editableUsername')?.innerText.trim();
-        const totalWorth = getCurrentTotalWorthFromDOM();
-        if (username && username !== 'Enter name' && totalWorth !== null) {
-            scheduleLeaderboardSave(totalWorth);
-        }
-        console.log('Leaderboard reset for all players');
-        hideModal();
     } catch (err) {
-        console.error('Error resetting leaderboard: ', err);
+        console.error('Error resetting global leaderboard: ', err);
     }
+    // Full local reset (fresh farm + game id); the save flow re-adds this
+    // player's fresh entry afterwards.
+    await performReset();
+    hideModal();
+}
+
+// Single router for both reset entry points (Confirm + modal title).
+// Host in a room => that room's board and everyone's farm; global play =>
+// the global board; guest in a room => only their own farm/entry.
+async function resetGameSession() {
+    if (currentRoomCode && isHost) return resetRoomForHost();
+    if (!currentRoomCode) return resetGlobalGame();
+    return performReset();
 }
 
 // Clicking the "Reset Game" title inside the modal follows the same rule as
-// Confirm: host resets the room, everyone else resets only themselves. It must
-// never wipe the global board (one misclick used to clear every room).
+// Confirm (see resetGameSession). It must never wipe the global board while
+// in a room — only host-reset (room) or global play do board-wide clears.
 async function resetFromModalTitle(e) {
     if (e) e.preventDefault();
-    if (currentRoomCode && isHost) await resetRoomForHost();
-    else await performReset();
+    await resetGameSession();
     hideModal();
 }
 const resetModalTitle = document.getElementById('modal-title');
@@ -5056,19 +5089,29 @@ async function resetForRoomStart() {
 // cash-floor and debt-cap invariants, so calculations (and the leaderboard
 // net worth derived from them) stay consistent. The ledger itself never
 // leaves the device. Edits are corrections, not actions: no undo journal.
-let ledgerEditMode = false;
-function setLedgerEditMode(on) {
-    ledgerEditMode = !!on;
-    const btn = document.getElementById('editLedgerBtn');
-    if (btn) {
-        btn.setAttribute('aria-pressed', String(ledgerEditMode));
-        btn.classList.toggle('is-on', ledgerEditMode);
-        btn.textContent = ledgerEditMode ? '✔️ Done editing' : '✏️ Edit entries';
+let ledgerEditSide = null; // null | 'cash' | 'loan' — each side edits on its own
+function setLedgerEditSide(side) {
+    ledgerEditSide = side === 'cash' || side === 'loan' ? side : null;
+    for (const s of ['cash', 'loan']) {
+        const btn = document.getElementById(s === 'cash' ? 'editCashBtn' : 'editLoanBtn');
+        if (!btn) continue;
+        const on = ledgerEditSide === s;
+        btn.setAttribute('aria-pressed', String(on));
+        btn.classList.toggle('is-on', on);
+        btn.textContent = on ? '✔ Done' : '✏️ Edit';
     }
-    document.getElementById('financialTable')?.classList.toggle('editing-ledger', ledgerEditMode);
-    if (!ledgerEditMode && document.activeElement?.blur) {
+    const table = document.getElementById('financialTable');
+    if (table) {
+        table.classList.toggle('editing-ledger', !!ledgerEditSide);
+        if (ledgerEditSide) table.dataset.editingSide = ledgerEditSide;
+        else delete table.dataset.editingSide;
+    }
+    if (!ledgerEditSide && document.activeElement?.blur) {
         try { document.activeElement.blur(); } catch {}
     }
+}
+function ledgerSideOf(cell) {
+    return cell.classList.contains('cash-note') || cell.classList.contains('cash-transaction') ? 'cash' : 'loan';
 }
 // Position of a rendered cell within its side's list is its ledger index:
 // render order always matches data order (newest first, max 10 shown).
@@ -5136,11 +5179,18 @@ function commitLedgerCell(cell, revert) {
     paintLedgerCell(cell, entry);
 }
 const LEDGER_EDIT_SELECTOR = '.cash-transaction, .loan-transaction, .cash-note, .loan-note';
-document.getElementById('editLedgerBtn')?.addEventListener('click', () => setLedgerEditMode(!ledgerEditMode));
+document.querySelectorAll('.edit-btn[data-side]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        const side = btn.dataset.side;
+        setLedgerEditSide(ledgerEditSide === side ? null : side);
+    });
+});
 document.getElementById('financialTable')?.addEventListener('click', (e) => {
-    if (!ledgerEditMode) return;
+    if (!ledgerEditSide) return;
     const cell = e.target.closest?.(LEDGER_EDIT_SELECTOR);
     if (!cell || cell.isContentEditable) return;
+    // Only the side whose Edit button is on responds — each side edits alone.
+    if (ledgerSideOf(cell) !== ledgerEditSide) return;
     armLedgerCell(cell);
 });
 document.getElementById('financialTable')?.addEventListener('keydown', (e) => {
@@ -5316,6 +5366,20 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     loan: 0
                 });
                 console.log(`Roll payout ${text} added to cash transactions`);
+                // A tap-double covers exactly one roll: clear the ½×/2× tap
+                // states now that this payout has been taken, so nobody
+                // carries a multiplier into the next turn by accident.
+                try {
+                    let clearedTap = false;
+                    document.querySelectorAll('.roll-table tr:not(:first-child) td:first-child').forEach((td) => {
+                        if ((td.getAttribute('data-state') || '0') !== '0') {
+                            td.setAttribute('data-state', '0');
+                            updateAssetDisplay(td, 0);
+                            clearedTap = true;
+                        }
+                    });
+                    if (clearedTap) syncDoubleToggles();
+                } catch {}
                 // Confirm the tap, then deal a fresh table: same six payouts
                 // per crop in a new random order for the next turn.
                 try {
@@ -5485,6 +5549,10 @@ window.addEventListener('DOMContentLoaded', (event) => {
     const rollTable = document.querySelector('.roll-table');
     const assetTds = rollTable.querySelectorAll('tr:not(:first-child) td:first-child');
     assetTds.forEach(td => {
+        // Doubling lives on the name, not a separate control: say so, and say
+        // it lasts one roll, so nobody assumes it sticks around.
+        td.title = 'Tap to cycle ½× → normal → 2× for the next payout only';
+        td.setAttribute('role', 'button');
         td.addEventListener('click', () => {
             const asset = td.textContent.split(' ')[0];
             let state = parseInt(td.getAttribute('data-state') || 0);
@@ -5519,15 +5587,14 @@ window.addEventListener('DOMContentLoaded', (event) => {
         return { td, state: parseInt(td?.getAttribute('data-state') || 0, 10) };
     }
     function syncDoubleToggles() {
-        const paint = (btnId, on, label) => {
-            const btn = document.getElementById(btnId);
-            if (!btn) return;
-            btn.setAttribute('aria-pressed', String(on));
-            btn.classList.toggle('is-on', on);
-            btn.textContent = `${on ? '●' : '○'} ${label}`;
+        const paint = (btnId, on) => {
+            const box = document.getElementById(btnId);
+            if (!box) return;
+            box.checked = !!on;
+            box.closest('.dbl-check')?.classList.toggle('is-on', !!on);
         };
-        paint('dblHayBtn', hayToggleOn(), 'Hay ×2');
-        paint('dblCornBtn', cornDoubled, 'Corn ×2');
+        paint('dblHayBtn', hayToggleOn());
+        paint('dblCornBtn', cornDoubled);
     }
     function setHayDoubled(on) {
         const table = document.querySelector('.roll-table');
@@ -5574,8 +5641,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
             else table.appendChild(row);
         }
     }
-    document.getElementById('dblHayBtn')?.addEventListener('click', () => setHayDoubled(!hayToggleOn()));
-    document.getElementById('dblCornBtn')?.addEventListener('click', () => setCornDoubled(!cornDoubled));
+    document.getElementById('dblHayBtn')?.addEventListener('change', () => setHayDoubled(!hayToggleOn()));
+    document.getElementById('dblCornBtn')?.addEventListener('change', () => setCornDoubled(!cornDoubled));
     syncDoubleToggles();
 
     function updateAssetDisplay(td, state) {

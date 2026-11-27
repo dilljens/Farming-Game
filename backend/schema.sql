@@ -63,6 +63,11 @@ CREATE TABLE IF NOT EXISTS trades (
 -- Offers predate created_by (buyer-created only); the column tells Accept
 -- whose click counts once sell-initiated offers exist.
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS created_by TEXT;
+-- Auctions collect bid history; open offers are claimable by anyone in the
+-- room. Both are written by the game (bids/open) and must exist here or
+-- PostgREST rejects the write with PGRST204.
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS bids JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS open BOOLEAN NOT NULL DEFAULT false;
 
 CREATE INDEX IF NOT EXISTS leaderboard_room_code_idx ON leaderboard (room_code);
 CREATE INDEX IF NOT EXISTS trades_room_code_idx ON trades (room_code);

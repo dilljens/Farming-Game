@@ -684,15 +684,21 @@ input, .editable {
     border-radius: 6px;
     box-sizing: border-box;
 }
-/* Ledger edit mode: editable cells read as editable, toggle reads on. */
-#editLedgerBtn.is-on {
+/* Ledger edit mode: editable cells read as editable, per-side button reads on. */
+.entry-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.edit-btn.is-on {
     background-color: #1f2937;
     color: #fff;
 }
-#financialTable.editing-ledger .cash-transaction,
-#financialTable.editing-ledger .loan-transaction,
-#financialTable.editing-ledger .cash-note,
-#financialTable.editing-ledger .loan-note {
+/* Only the side whose Edit button is on gets the dashed "editable" look. */
+#financialTable[data-editing-side="cash"] .cash-transaction,
+#financialTable[data-editing-side="cash"] .cash-note,
+#financialTable[data-editing-side="loan"] .loan-transaction,
+#financialTable[data-editing-side="loan"] .loan-note {
     outline: 2px dashed #3b82f6;
     outline-offset: -2px;
     cursor: text;
@@ -829,7 +835,12 @@ input[type="range"]::-moz-range-thumb {
 /* Leaderboard header: title + table/chart toggle */
 /* Doubled-roll toggles above the roll table: big tap targets mirroring
    the tap-the-name state (● on = doubled, ○ off). */
-.dbl-toggle {
+/* ×2 doubling: real checkboxes — a visible tick is clearer than ○/● glyphs,
+   and the whole pill is the label's tap target. */
+.dbl-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     min-height: 44px;
     padding: 6px 14px;
     border: 1px solid #d1d5db;
@@ -839,11 +850,20 @@ input[type="range"]::-moz-range-thumb {
     font-size: 14px;
     font-weight: 700;
     cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
 }
-.dbl-toggle.is-on {
-    background-color: #16a34a;
+.dbl-check input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: #16a34a;
+    cursor: pointer;
+}
+.dbl-check.is-on {
+    background-color: #dcfce7;
     border-color: #16a34a;
-    color: #ffffff;
+    color: #14532d;
 }
 
 .leaderboard-header {
@@ -1064,18 +1084,40 @@ body[data-theme="dark"] #financialTable tr:nth-child(even) td:not(.entry-cell) {
 body[data-theme="dark"] #financialTable td:empty::before { color: #4b5563; }
 body[data-theme="dark"] #financialTable [contenteditable="true"] { background-color: #422006; }
 body[data-theme="dark"] .undo-btn,
-body[data-theme="dark"] #editLedgerBtn {
+body[data-theme="dark"] .edit-btn {
     background-color: #374151;
     color: #e5e7eb;
 }
 body[data-theme="dark"] .undo-btn:hover,
-body[data-theme="dark"] #editLedgerBtn:hover { background-color: #4b5563; }
-body[data-theme="dark"] #editLedgerBtn.is-on { background-color: #f3f4f6; color: #111827; }
+body[data-theme="dark"] .edit-btn:hover { background-color: #4b5563; }
+body[data-theme="dark"] .edit-btn.is-on { background-color: #f3f4f6; color: #111827; }
+body[data-theme="dark"] .lb-toggle-btn {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+}
+body[data-theme="dark"] .lb-toggle-btn.active {
+    background-color: #16a34a;
+    border-color: #16a34a;
+    color: #ffffff;
+}
+/* The name cell is contenteditable on the page background. */
+body[data-theme="dark"] #editableUsername,
+body[data-theme="dark"] .editable {
+    background-color: #374151;
+    color: #f3f4f6;
+    caret-color: #f3f4f6;
+}
 /* Toggles, tabs, misc chrome */
-body[data-theme="dark"] .dbl-toggle {
+body[data-theme="dark"] .dbl-check {
     background-color: #1f2937;
     border-color: #4b5563;
     color: #d1d5db;
+}
+body[data-theme="dark"] .dbl-check.is-on {
+    background-color: #14532d;
+    border-color: #22c55e;
+    color: #dcfce7;
 }
 body[data-theme="dark"] #screenTabs { background: rgba(17, 24, 39, 0.96); border-color: #374151; }
 body[data-theme="dark"] #screenTabsStatus { color: #d1d5db; }
