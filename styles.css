@@ -1276,6 +1276,18 @@ body[data-theme="dark"] .chart-mini-title { color: #cbd5e1; }
     margin-top: 4px;
     margin-bottom: 8px;
 }
+/* Per-player luck bins need headroom for a stacked legend. */
+.chart-mini-wrap.chart-mini-tall {
+    height: clamp(200px, 28vh, 300px);
+}
+.chart-mini-caption {
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #4b5563;
+    text-align: center;
+}
+body[data-theme="dark"] .chart-mini-caption { color: #cbd5e1; }
 #chartGameSelect {
     max-width: 190px;
     background-color: #f9fafb;

@@ -14,7 +14,7 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" href="./icon-192.svg">
     <link rel="apple-touch-icon" href="./icon-192.svg">
-    <link rel="stylesheet" href="./styles.css?v=20261129c">
+    <link rel="stylesheet" href="./styles.css?v=20261129d">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -357,8 +357,9 @@
           <!-- What was rolled, and how lucky it was -->
           <div class="chart-mini-title">Rolls — what came up, and when</div>
           <div class="chart-mini-wrap"><canvas id="rollChart"></canvas></div>
-          <div class="chart-mini-title">Roll frequency — high rolls are lucky</div>
-          <div class="chart-mini-wrap"><canvas id="rollFreqChart"></canvas></div>
+          <div class="chart-mini-title">Roll frequency — one set per player, high rolls are lucky</div>
+          <div class="chart-mini-wrap chart-mini-tall"><canvas id="rollFreqChart"></canvas></div>
+          <div id="rollFreqCaption" class="chart-mini-caption"></div>
         </div>
       </div>
       <!-- Player-to-player trading sits below the leaderboard -->
@@ -866,7 +867,7 @@
   </div>
 </div>
 
-<script type="module" src="scripts.js?v=20261129c"></script>
+<script type="module" src="scripts.js?v=20261129d"></script>
 
 <div id="buildStamp" class="text-center text-[10px] text-gray-400 mt-2 mb-1"></div>
 

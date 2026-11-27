@@ -1394,6 +1394,9 @@ function sendDataToServerAfterSeed(totalWorth, username, generation) {
         harvester: harvesterQty,
         tractor: tractorQty,
         history: Array.isArray(myHistoryCache) ? myHistoryCache : [],
+        // Per-player roll log: every player's own faces sync so the luck
+        // chart can bin them individually. {t, v} mirrors the history format.
+        rollLog: Array.isArray(rollLog) ? rollLog.slice(-500) : [],
         // Amounts + memos travel with the row so the ledger survives a device
         // switch. Only my own doc is written, so nothing leaks between players.
         transactions: {
@@ -1600,12 +1603,21 @@ function updateLeaderboardTable(data) {
 let progressChart = null;
 let latestLeaderboardData = [];
 
-// Distinct per-player colors: roster sorted by name => evenly spaced hues, so
-// no two players in the same game land in the same color family. Same roster
-// => same colors on every client (hashing names alone clustered greens).
+// One stable palette for the whole game: name -> color, so a player reads the
+// same colour on the net-worth line, the rolls-over-time dots, and the luck
+// bins. Same roster => same colors on every client (hashing names alone
+// clustered greens, so index into a fixed categorical set instead).
+const PLAYER_PALETTE = ['#2563eb', '#16a34a', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#0ea5e9', '#f43f5e'];
+function playerColor(name) {
+    const s = String(name || '?');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return PLAYER_PALETTE[h % PLAYER_PALETTE.length];
+}
+// Keep the old name working: order-based index still maps into the palette.
 function paletteColor(index, total) {
-    const hue = total > 0 ? (index * 360) / total : 0;
-    return `hsl(${hue.toFixed(1)}, 70%, 45%)`;
+    const i = Number.isFinite(index) && index >= 0 ? Math.floor(index) : 0;
+    return PLAYER_PALETTE[i % PLAYER_PALETTE.length];
 }
 
 function buildChartDatasets(data) {
@@ -1622,7 +1634,7 @@ function buildChartDatasets(data) {
     return ordered.map((group, i) => {
         // Infinity buffer: true elapsed wall time, no gap compression.
         const elapsedHistory = buildElapsedHistory(group.history, start, Infinity);
-        const color = paletteColor(i, ordered.length);
+        const color = playerColor(group.username);
         // Label by the player's year (matches the board's Year column).
         const src = (latestLeaderboardData || []).find((p) => (p.username || '') === group.username
             && ((p.roomCode ?? null) === (group.roomCode ?? null)));
@@ -2017,14 +2029,53 @@ function refreshRollCharts() {
     const src = currentChartSource();
     const rolls = (src.rolls || []).filter(r => Number(r.v) >= 1 && Number(r.v) <= 6);
     const ink = chartInk();
-    // Rolls over time: one dot per roll, y = face value.
+    // Per-player luck: who is actually rolling hot? In the live game the roster
+// carries each player's own log (synced in their board doc); past archived
+// games only hold this device's rolls, so the chart says whose they are.
+function luckEntries() {
+    const src = currentChartSource();
+    if (src.current) {
+        const data = latestLeaderboardData || [];
+        if (!data.length) {
+            const rolls = (rollLog || []).filter(r => Number(r.v) >= 1 && Number(r.v) <= 6);
+            return rolls.length ? [{ username: myPlayerName(), rolls }] : [];
+        }
+        return data
+            .map((d) => ({ username: d.username || '?', rolls: (d.rollLog || d.rolls || []).filter(r => Number(r.v) >= 1 && Number(r.v) <= 6) }))
+            .filter((p) => p.rolls.length > 0);
+    }
+    const rolls = (src.rolls || []).filter(r => Number(r.v) >= 1 && Number(r.v) <= 6);
+    return rolls.length ? [{ username: 'Archived rolls', rolls }] : [];
+}
+function luckScore(counts) {
+    const total = counts.reduce((a, b) => a + b, 0);
+    if (!total) return 0;
+    // Weighted by face (1..6), centred so an honest die scores ~0 and a
+    // high-roller scores positive: (avg face − 3.5) / 2.5 → −1..+1.
+    const avg = counts.reduce((a, c, i) => a + c * (i + 1), 0) / total;
+    return (avg - 3.5) / 2.5;
+}
+function myPlayerName() {
+    try {
+        const n = (document.getElementById('editableUsername')?.innerText || '').trim();
+        return n && n !== 'Enter name' ? n : 'You';
+    } catch { return 'You'; }
+}
+// Rolls over time: one dot per roll, y = face value.
     const canvas1 = document.getElementById('rollChart');
     if (canvas1 && typeof Chart !== 'undefined') {
-        const points = rolls.map(r => ({ x: Number(r.t) || 0, y: Number(r.v) }));
+        const roster = players.length ? players.map(p => p.username) : ['no rolls yet'];
+        const palette = (i) => playerColor(roster[i]);
+        const sets = players.map((p, i) => ({
+            label: p.username,
+            data: p.rolls.map(r => ({ x: Number(r.t) || 0, y: Number(r.v) })),
+            backgroundColor: palette(i),
+            pointRadius: 3
+        }));
         if (!rollChart) {
             rollChart = new Chart(canvas1.getContext('2d'), {
                 type: 'scatter',
-                data: { datasets: [{ label: 'Roll', data: points, backgroundColor: '#16a34a', pointRadius: 3 }] },
+                data: { datasets: sets.length ? sets : [{ label: 'no rolls yet', data: [] }] },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: { legend: { display: false }, tooltip: { backgroundColor: ink.tooltipBg, titleColor: ink.tooltipText, bodyColor: ink.tooltipText } },
@@ -2035,21 +2086,30 @@ function refreshRollCharts() {
                 }
             });
         } else {
-            rollChart.data.datasets[0].data = points;
+            rollChart.data.datasets = sets.length ? sets : [{ label: 'no rolls yet', data: [] }];
             rollChart.options.scales.x.ticks.color = ink.text;
             rollChart.options.scales.y.ticks.color = ink.text;
+            if (rollChart.options.plugins?.legend) rollChart.options.plugins.legend.display = sets.length > 1;
+            rollChart.update('none');
+        }
+        if (rollChart && rollChart.options.plugins?.legend) {
+            rollChart.options.plugins.legend.display = sets.length > 1;
             rollChart.update('none');
         }
     }
-    // Frequency: how many of each face — 1 is the worst roll, 6 the best.
+    // Luck: one bar set per player — high-roll count minus low-roll count
+    // (6s minus 1s), so a bar above zero rolled lucky and below rolled cold.
     const canvas2 = document.getElementById('rollFreqChart');
     if (canvas2 && typeof Chart !== 'undefined') {
-        const counts = [1, 2, 3, 4, 5, 6].map(v => rolls.filter(r => Number(r.v) === v).length);
-        const colors = ['#b91c1c', '#dc2626', '#f59e0b', '#84cc16', '#16a34a', '#15803d'];
+        const luckSets = players.map((p, i) => {
+            const counts = [1, 2, 3, 4, 5, 6].map(v => p.rolls.filter(r => Number(r.v) === v).length);
+            return { label: p.username, data: counts, backgroundColor: palette(i), score: luckScore(counts), n: p.rolls.length };
+        });
+        luckSets.sort((a, b) => b.score - a.score);
         if (!rollFreqChart) {
             rollFreqChart = new Chart(canvas2.getContext('2d'), {
                 type: 'bar',
-                data: { labels: ROLL_LABELS, datasets: [{ label: 'Rolls', data: counts, backgroundColor: colors }] },
+                data: { labels: ROLL_LABELS, datasets: luckSets.map(({ label, data, backgroundColor }) => ({ label, data, backgroundColor })) },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: { legend: { display: false }, tooltip: { backgroundColor: ink.tooltipBg, titleColor: ink.tooltipText, bodyColor: ink.tooltipText } },
@@ -2060,11 +2120,16 @@ function refreshRollCharts() {
                 }
             });
         } else {
-            rollFreqChart.data.datasets[0].data = counts;
+            rollFreqChart.data.datasets = luckSets.map(({ label, data, backgroundColor }) => ({ label, data, backgroundColor }));
             rollFreqChart.options.scales.x.ticks.color = ink.text;
             rollFreqChart.options.scales.y.ticks.color = ink.text;
             rollFreqChart.update('none');
         }
+        try {
+            const line = luckSets.map(p => `${p.label}: ${p.n} rolls, luck ${p.score >= 0 ? '+' : ''}${p.score.toFixed(2)}`).join('   ·   ');
+            const cap = document.getElementById('rollFreqCaption');
+            if (cap) cap.textContent = luckSets.length ? line : 'No rolls logged yet.';
+        } catch {}
     }
 }
 document.getElementById('chartGameSelect')?.addEventListener('change', () => {

@@ -47,6 +47,8 @@ const COLUMN_MAP = {
         playerYear: 'player_year',
         // Ledger (amounts + memos) syncs with the player's board row.
         transactions: 'transactions',
+        // Per-player rolls feed the luck chart.
+        rollLog: 'roll_log',
         updatedAt: 'updated_at'
     },
     trades: {
