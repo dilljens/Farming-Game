@@ -35,13 +35,13 @@ import {
 } from './pricing.js';
 
 test('rules default off and ignore unknown keys', () => {
-    const off = { seasons: false, rubberband: false, estate: false, balance: false, events: false, shufflerolls: false, customecon: false, customharvest: false };
+    const off = { seasons: false, rubberband: false, estate: false, balance: false, events: false, shufflerolls: false, showrolls: true, customecon: false, customharvest: false };
     assert.deepEqual(normalizeRules(undefined), { ...off, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, doubles: { on: true, min: 250000, mult: 2 }, tuning: DEFAULT_TUNING });
-    assert.deepEqual(normalizeRules({ seasons: true, bogus: true }), { ...off, seasons: true, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, doubles: { on: true, min: 250000, mult: 2 }, tuning: DEFAULT_TUNING });
+    assert.deepEqual(normalizeRules({ seasons: true, bogus: true, showrolls: false }), { ...off, seasons: true, showrolls: false, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, doubles: { on: true, min: 250000, mult: 2 }, tuning: DEFAULT_TUNING });
 });
 
 test('retired market/scarcity keys are ignored, old rooms just lose the rule', () => {
-    const off = { seasons: false, rubberband: false, estate: false, balance: false, events: false, shufflerolls: false, customecon: false, customharvest: false };
+    const off = { seasons: false, rubberband: false, estate: false, balance: false, events: false, shufflerolls: false, showrolls: true, customecon: false, customharvest: false };
     assert.deepEqual(normalizeRules({ market: true, scarcity: true, tuning: { market: 200, scarcity: 200 } }),
         { ...off, econ: DEFAULT_ECON, harvest: DEFAULT_HARVEST, doubles: { on: true, min: 250000, mult: 2 }, tuning: DEFAULT_TUNING });
 });

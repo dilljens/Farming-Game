@@ -47,7 +47,7 @@
 // hay only ever discounts. Every other asset may rise above base.
 // Player-to-player trades are negotiated and never adjusted.
 
-export const RULE_KEYS = ['seasons', 'rubberband', 'estate', 'balance', 'events', 'shufflerolls', 'customecon', 'customharvest'];
+export const RULE_KEYS = ['seasons', 'rubberband', 'estate', 'balance', 'events', 'shufflerolls', 'showrolls', 'customecon', 'customharvest'];
 
 // Assets each rule touches. Cows/ridges: cost is bonus-driven in the modal;
 // rubberband still applies there, the rest leave ridges alone.
@@ -79,6 +79,8 @@ export function normalizeRules(rules) {
     const src = rules && typeof rules === 'object' ? rules : {};
     const out = {};
     for (const key of RULE_KEYS) out[key] = src[key] === true;
+    // Show-rolls defaults ON (rooms from before the key show values).
+    out.showrolls = src.showrolls === false ? false : true;
     out.econ = normalizeEcon(src.econ);
     out.harvest = normalizeHarvest(src.harvest);
     out.doubles = normalizeDoubles(src.doubles);

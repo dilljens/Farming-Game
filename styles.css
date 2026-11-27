@@ -921,6 +921,8 @@ input[type="range"]::-moz-range-thumb {
     accent-color: #16a34a;
     cursor: pointer;
 }
+/* Host-only settings: players see the host's value, dimmed. */
+.dbl-check.host-only { opacity: .55; }
 .dbl-check.is-on {
     background-color: #dcfce7;
     border-color: #16a34a;

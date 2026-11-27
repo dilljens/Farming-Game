@@ -323,6 +323,9 @@ function startRoomDocListener() {
         // interest, buy bounds, and roll payouts so guests follow the host.
         try { updateTotals(); } catch {}
         try { populateRollTable(); } catch {}
+        // Room visibility rule rides the same doc: sync the checkbox and
+        // repaint so everyone follows the host with no refresh.
+        try { syncRollVisibilityUI(); populateRollTable(); } catch {}
         // host reset signal — mirror imposterirl resetGameForNewRound via room doc
         const resetAt = data.lastHostResetAt;
         if (resetAt && !isHost) {
@@ -2220,6 +2223,7 @@ function setScreen(name, opts = {}) {
             if (progressChart) { progressChart.resize(); progressChart.update('none'); }
         } catch {}
     }
+    try { syncRollVisibilityUI(); } catch {}
     syncTradeButtons(key);
     try { window.scrollTo({ top: 0, behavior: opts.instant ? 'auto' : 'smooth' }); } catch { window.scrollTo(0, 0); }
 }
@@ -2440,7 +2444,7 @@ async function finishMakeRoom(rules) {
 // A preset fills the whole form; any hand edit flips the scenario to Custom.
 const RULE_LABELS = {
     seasons: 'Seasons', rubberband: 'Rubber-band', estate: 'Estate',
-    balance: 'Balance', events: 'Boom&Bust', shufflerolls: 'Shuffle rolls', customecon: 'Economy', customharvest: 'Harvest'
+    balance: 'Balance', events: 'Boom&Bust', shufflerolls: 'Shuffle rolls', showrolls: 'Show rolls', customecon: 'Economy', customharvest: 'Harvest'
 };
 const RULE_DESCRIPTIONS = {
     seasons: 'Prices start normal and walk up and down as the room harvests: each crop runs its own cycle sized by player count, peaking at +25%.',
@@ -2449,6 +2453,7 @@ const RULE_DESCRIPTIONS = {
     balance: 'Crowded crops cost up to $1,000 over base in $100 tickets; ignored ones discount the same way. Hay caps at $20k, fruit floors at $20k.',
     events: 'Each crop walks its own random path: every room harvest moves a crop ±$100, zero-sum across crops and capped. Over-held crops also drift down and under-held crops drift up ($100 tickets, up to ±$500).',
     shufflerolls: 'Tables reshuffle after every collected payout: the same six payouts per crop in a fresh random order each time — any roll 1-6 can pay best or worst.',
+    showrolls: 'Show every payout on the roll table. Off = values stay masked (•••) until a player taps one. Applies to the whole room.',
     customecon: 'Enables your economy numbers below (unticked = $50k cap, 10% interest, 20% down).',
     customharvest: 'Enables your harvest numbers below (unticked = standard hay tiers and equipment bonus).'
 };
@@ -3148,13 +3153,11 @@ function revealRollColumn(n) {
 // A deal is live until a payout is taken from it. After that the table keeps
 // showing the SAME numbers (the ones you collected from) and only re-deals
 // when you mark your next roll — so anything on screen is always collectable.
-let rollDealCollected = false;
 function reshuffleRollTables() {
     liveRollValues = {};
     for (const k of Object.keys(BASE_ROLL_VALUES)) {
         liveRollValues[k] = shuffleRollsRandom(BASE_ROLL_VALUES[k]);
     }
-    rollDealCollected = false;
     clearRollColumn();
     try { populateRollTable(); } catch {}
     // One quick pulse so the post-tap reorder reads as intentional.
@@ -3187,8 +3190,6 @@ function setRollColumn(n) {
     if (!table) return;
     n = parseInt(n, 10);
     if (!(n >= 1 && n <= 6)) return;
-    // Marking a roll starts the next deal: a fresh table for the new turn.
-    if (rollDealCollected) reshuffleRollTables();
     table.dataset.lastRoll = String(n);
     // Marking a face is how real-dice tables record their roll.
     if (typeof recordRoll === 'function') { try { recordRoll(n); } catch {} }
@@ -4368,14 +4369,26 @@ function numberWithCommasAndDecimals(x) {
 const ROLL_MASK = '•••';
 // Payout visibility is a setting you pick: regular (visible) or hidden until
 // tapped. Default is regular, so a fresh device sees the whole table.
-const ROLL_VISIBLE_KEY = 'fgRollVisible';
+// Roll visibility is a HOST room rule (Show rolls): visible table or masks
+// until tapped. Default ON, so rooms from before the key show values.
+// The checkbox mirrors the host (dimmed for players) and updates live via the
+// room-doc listener.
+function syncRollVisibilityUI() {
+    const visChk = document.getElementById('rollVisibleChk');
+    if (!visChk) return;
+    visChk.checked = rollValuesVisible();
+    visChk.disabled = !isHost;
+    visChk.closest('.dbl-check')?.classList.toggle('host-only', !isHost && !!currentRoomCode);
+    visChk.title = !currentRoomCode ? 'Show every payout, or keep them hidden until tapped'
+        : isHost ? 'Show every payout, or keep them hidden until tapped'
+        : 'Host sets this for the room';
+}
 function rollValuesVisible() {
     try {
-        const saved = localStorage.getItem(ROLL_VISIBLE_KEY);
-        if (saved === '0') return false;
-        if (saved === '1') return true;
-    } catch {}
-    return true; // regular rolls: values shown
+        const r = currentRoomRules;
+        if (!r || typeof r !== 'object') return true;
+        return r.showrolls !== false;
+    } catch { return true; }
 }
 function hideRollAmount(btn, formatted) {
     btn.dataset.amount = formatted;
@@ -5167,6 +5180,150 @@ document.getElementById('payPerAcreCustom')?.addEventListener('input', () => {
     updatePayPerAcreDisplay();
 });
 
+// --- Operating-expense gate: one bill is due after every roll -------------
+// The roll's payout is collected first; then the player must handle an
+// operating cost before continuing: per-acre, interest (with the same
+// penalty-borrow as the Pay Interest button), a custom amount, or a $0
+// conditional. Every paid leg notes 'Operating expense · <detail>' so the
+// ledger says what it was for. No dismiss path: the game cannot continue
+// unpaid.
+let opexRoll = null;
+let opexExpectingPerAcre = false;
+function showOpexGate(roll) {
+    opexRoll = roll;
+    const num = document.getElementById('opexRollNum');
+    if (num) num.textContent = String(roll ?? '?');
+    const custom = document.getElementById('opexCustom');
+    if (custom) custom.value = '';
+    const hint = document.getElementById('opexHint');
+    if (hint) hint.classList.add('hidden');
+    try {
+        updateTotals();
+        const amt = document.getElementById('opexInterestAmt');
+        if (amt) {
+            const due = getCurrentInterestValue();
+            amt.textContent = due > 0 ? `(due: $${due.toLocaleString()})` : '';
+        }
+    } catch {}
+    const modal = document.getElementById('opexModal');
+    if (modal) modal.classList.remove('hidden');
+}
+function hideOpexGate() {
+    document.getElementById('opexModal')?.classList.add('hidden');
+    opexRoll = null;
+}
+function opexNote(detail) {
+    return detail ? `Operating expense · ${detail}` : 'Operating expense';
+}
+// After the four-choice gate: per-acre uses the existing modal flow so
+// presets, borrow and validation all behave the same.
+document.getElementById('opexPayAcreBtn')?.addEventListener('click', () => {
+    hideOpexGate();
+    opexExpectingPerAcre = true;
+    isGainMode = false;
+    updateModalForMode();
+    showPayPerAcreModal();
+    try { undoToast('Pick your per-acre amount — it posts as an operating expense'); } catch {}
+});
+document.getElementById('opexInterestBtn')?.addEventListener('click', () => {
+    updateTotals();
+    const interest = getCurrentInterestValue();
+    if (!(interest > 0)) {
+        const cashBefore = ledgerLen('cash');
+        pushUndoAction({
+            label: `Operating expense · interest $0 (nothing due, roll ${opexRoll ?? '?'})`,
+            cash: ledgerLen('cash') - cashBefore,
+            loan: 0
+        });
+        updateActionButtonStates();
+        hideOpexGate();
+        undoToast('No interest due — $0 logged as an operating expense');
+        return;
+    }
+    const currentCash = getCurrentCashTotal();
+    if (currentCash < interest) {
+        const loan = expenseLoanAmount(interest);
+        if (getCurrentLoanTotal() + loan > debtCap()) {
+            const hint = document.getElementById('opexHint');
+            if (hint) {
+                hint.textContent = `Debt cap $${debtCap().toLocaleString()} blocks the $${loan.toLocaleString()} loan — pay down debt first.`;
+                hint.classList.remove('hidden');
+            }
+            updateActionButtonStates();
+            return;
+        }
+        if (borrowForExpense(interest, opexNote(`interest, roll ${opexRoll ?? '?'}`))) {
+            manualInterestOverride = null;
+            updateTotals();
+            updateActionButtonStates();
+            hideOpexGate();
+            undoToast(`Operating expense · interest $${interest.toLocaleString()} (borrowed, roll ${opexRoll ?? '?'}) — recorded`);
+        }
+        return;
+    }
+    const cashBefore = ledgerLen('cash');
+    addCashTransactionValue(-interest, opexNote(`interest, roll ${opexRoll ?? '?'}`));
+    manualInterestOverride = null;
+    updateInterest();
+    updateActionButtonStates();
+    pushUndoAction({
+        label: `Operating expense · interest $${interest.toLocaleString()} (roll ${opexRoll ?? '?'})`,
+        cash: ledgerLen('cash') - cashBefore,
+        loan: 0
+    });
+    hideOpexGate();
+    undoToast(`Operating expense · interest $${interest.toLocaleString()} — recorded`);
+});
+document.getElementById('opexCustomBtn')?.addEventListener('click', () => {
+    const el = document.getElementById('opexCustom');
+    const n = Math.round(parseFloat(String(el?.value || '').replace(/,/g, '')) || 0);
+    if (!(n > 0)) {
+        const hint = document.getElementById('opexHint');
+        if (hint) { hint.textContent = 'Enter an amount above $0, or use Conditional.'; hint.classList.remove('hidden'); }
+        return;
+    }
+    updateTotals();
+    if (getCurrentCashTotal() < n) {
+        const loan = expenseLoanAmount(n);
+        if (getCurrentLoanTotal() + loan > debtCap()) {
+            const hint = document.getElementById('opexHint');
+            if (hint) {
+                hint.textContent = `Short $${(n - getCurrentCashTotal()).toLocaleString()} and the cap blocks the $${loan.toLocaleString()} loan — use Conditional or pay down debt.`;
+                hint.classList.remove('hidden');
+            }
+            updateActionButtonStates();
+            return;
+        }
+        if (borrowForExpense(n, opexNote(`custom, roll ${opexRoll ?? '?'}`))) {
+            updateActionButtonStates();
+            hideOpexGate();
+            undoToast(`Operating expense · custom $${n.toLocaleString()} (borrowed) — recorded`);
+        }
+        return;
+    }
+    const cashBefore = ledgerLen('cash');
+    addCashTransactionValue(-n, opexNote(`custom, roll ${opexRoll ?? '?'}`));
+    updateActionButtonStates();
+    pushUndoAction({
+        label: `Operating expense · custom $${n.toLocaleString()} (roll ${opexRoll ?? '?'})`,
+        cash: ledgerLen('cash') - cashBefore,
+        loan: 0
+    });
+    hideOpexGate();
+    undoToast(`Operating expense · custom $${n.toLocaleString()} — recorded`);
+});
+document.getElementById('opexZeroBtn')?.addEventListener('click', () => {
+    const cashBefore = ledgerLen('cash');
+    pushUndoAction({
+        label: `Operating expense · conditional $0 (roll ${opexRoll ?? '?'})`,
+        cash: ledgerLen('cash') - cashBefore,
+        loan: 0
+    });
+    updateActionButtonStates();
+    hideOpexGate();
+    undoToast(`Conditional logged — $0 operating expense for roll ${opexRoll ?? '?'}`);
+});
+
 // Event listener for the confirm pay per acre button
 // Mount St. Helens: the eruption preset — $100 for every acre held, paid in
 // one tap (Total × $100 preset, then the normal pay path so undo/ledger and
@@ -5194,6 +5351,12 @@ document.getElementById('confirmPayPerAcre').addEventListener('click', (event) =
     event.preventDefault();
     performPayPerAcre();
     hidePayPerAcreModal();
+    // A per-acre payment through the expense gate counts as the roll's
+    // operating expense, not a miscellaneous pay.
+    if (opexExpectingPerAcre) {
+        opexExpectingPerAcre = false;
+        try { undoToast('Operating expense posted — on with the next roll'); } catch {}
+    }
 });
 
 // Event listener for the borrow-for-expense button (pay mode, cash short:
@@ -5381,7 +5544,8 @@ function performPayPerAcre() {
             return;
         }
         // Pay the amount
-        addCashTransactionValue(-totalPayment, 'Pay per acre');
+        addCashTransactionValue(-totalPayment, opexExpectingPerAcre ? opexNote(`pay per acre, roll ${opexRoll ?? '?'}`) : 'Pay per acre');
+        opexExpectingPerAcre = false;
         pushUndoAction({
             label: `Per-acre pay $${totalPayment.toLocaleString()}`,
             cash: ledgerLen('cash') - acreCashBefore,
@@ -5924,16 +6088,21 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     });
                     if (clearedTap) syncDoubleToggles();
                 } catch {}
-                // Spot the value just collected, mask the rest of THIS deal.
-                // The re-deal waits for the next roll selection.
+                // Re-deal immediately on collect: every roll shows a fresh
+                // table, and the display is ALWAYS the values you collected
+                // from is no longer true — the next deal is. The opex gate
+                // opens on top of it.
                 try {
-                    maskAllRollAmounts();
+                    reshuffleRollTables();
                     revealRollAmount(btn);
-                    rollDealCollected = true;
                 } catch {}
                 try {
-                    undoToast(`+$${value.toLocaleString()} ${tapAsset} · roll ${tapRoll} collected — mark your next roll for a new table`);
+                    undoToast(`+$${value.toLocaleString()} ${tapAsset} · roll ${tapRoll} collected`);
                 } catch {}
+                // Mandatory stop: one operating bill per roll, due before the
+                // next one can be marked. No payout-side de-reveal happens
+                // until the expense is handled.
+                try { showOpexGate(tapRoll); } catch {}
 
             });
         }
@@ -6198,13 +6367,23 @@ window.addEventListener('DOMContentLoaded', (event) => {
     document.getElementById('dblHayBtn')?.addEventListener('change', (e) => setHayDoubled(!!e.target.checked));
     document.getElementById('dblCornBtn')?.addEventListener('change', (e) => setCornDoubled(!!e.target.checked));
     // Roll visibility setting: repaint the table in the chosen mode.
+    // The room's Show-rolls rule owns the checkbox: players mirror the host.
+    syncRollVisibilityUI();
     const visChk = document.getElementById('rollVisibleChk');
     if (visChk) {
         visChk.checked = rollValuesVisible();
-        visChk.addEventListener('change', (e) => {
-            try { localStorage.setItem(ROLL_VISIBLE_KEY, e.target.checked ? '1' : '0'); } catch {}
+        visChk.disabled = !isHost;
+        visChk.closest('.dbl-check')?.classList.toggle('host-only', !isHost);
+        visChk.title = isHost ? 'Show every payout, or keep them hidden until tapped' : 'Host sets this for the room';
+        visChk.addEventListener('change', async (e) => {
+            if (!isHost || !currentRoomCode) { e.target.checked = rollValuesVisible(); return; }
+            try {
+                await authReady;
+                const next = { ...normalizeRules(currentRoomRules), showrolls: !!e.target.checked };
+                await saveRoomSettings(next);
+                undoToast(next.showrolls ? 'Room: roll values shown to everyone' : 'Room: roll values hidden until tapped');
+            } catch {}
             try { populateRollTable(); } catch {}
-            undoToast(e.target.checked ? 'Roll values shown' : 'Roll values hidden until tapped');
         });
     }
     syncDoubleToggles();
