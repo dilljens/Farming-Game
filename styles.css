@@ -409,6 +409,21 @@ body[data-theme="dark"] #rollDealBanner {
     box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.45);
 }
 
+/* Row hover shows the payout span for that crop: the range of what the six
+   faces pay this deal (which face pays what stays hidden). */
+.roll-table tr[data-range]:hover td:first-child::after {
+    content: attr(data-range);
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #6b7280;
+    letter-spacing: 0;
+}
+body[data-theme="dark"] .roll-table tr[data-range]:hover td:first-child::after {
+    color: #cbd5e1;
+}
+
 /* Masked payouts: unknown until tapped. */
 .roll-table button.roll-cell-button.is-masked {
     color: #9ca3af;

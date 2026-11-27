@@ -1937,11 +1937,21 @@ function chartWorthRange(datasets) {
 // --- Past-game archive: every finished game's own history + rolls, so the
 // Chart view can look back at earlier games on this device.
 const GAME_ARCHIVE_KEY = 'fgGameArchive';
-const GAME_ARCHIVE_MAX = 10;
+const GAME_ARCHIVE_MONTHS = 6;   // history window: the last six months of games
+function archiveCutoff() {
+    const d = new Date();
+    d.setMonth(d.getMonth() - GAME_ARCHIVE_MONTHS);
+    return d.getTime();
+}
 function readGameArchive() {
     try {
         const raw = JSON.parse(localStorage.getItem(GAME_ARCHIVE_KEY) || '[]');
-        return Array.isArray(raw) ? raw.filter(g => g && g.id) : [];
+        const cutoff = archiveCutoff();
+        return (Array.isArray(raw) ? raw : []).filter((g) => {
+            if (!g || !g.id) return false;
+            const t = Number(g.createdAt) || new Date(g.createdAt || 0).getTime();
+            return Number.isFinite(t) && t >= cutoff;   // last 6 months only
+        });
     } catch { return []; }
 }
 function archiveCurrentGame() {
@@ -1960,7 +1970,13 @@ function archiveCurrentGame() {
             history: history.slice(-600),
             rolls: rolls.slice(-500)
         });
-        localStorage.setItem(GAME_ARCHIVE_KEY, JSON.stringify(list.slice(0, GAME_ARCHIVE_MAX)));
+        // Window, not a count: keep everything from the last six months.
+        const cutoff = archiveCutoff();
+        const kept = list.filter((g) => {
+            const t = Number(g.createdAt) || new Date(g.createdAt || 0).getTime();
+            return Number.isFinite(t) && t >= cutoff;
+        });
+        localStorage.setItem(GAME_ARCHIVE_KEY, JSON.stringify(kept));
     } catch {}
 }
 function currentChartSource() {
@@ -1982,8 +1998,10 @@ function fillChartGameSelect() {
     readGameArchive().forEach((g, i) => {
         const opt = document.createElement('option');
         opt.value = g.id;
-        const when = g.createdAt ? new Date(g.createdAt).toLocaleDateString() : 'earlier';
-        opt.textContent = `Game ${i + 1} · ${when} · Year ${g.year || 1}`;
+        const when = g.createdAt
+            ? new Date(g.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+            : 'unknown date';
+        opt.textContent = `${when} · Year ${g.year || 1}`;
         sel.appendChild(opt);
     });
     if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
@@ -4412,6 +4430,24 @@ function populateRollTable() {
                 hideRollAmount(payoutButton, numberWithCommasAndDecimals(profit)); // value kept, masked until tapped
       });
     });
+
+    // Range hint per crop row: hovering a row shows the span of payouts on
+    // offer in this deal (all six faces), without revealing which is which.
+    try {
+        const money = (n) => '$' + Math.round(n).toLocaleString();
+        document.querySelectorAll('.roll-table tr:not(:first-child)').forEach((row) => {
+            const vals = [...row.querySelectorAll('button.roll-cell-button')]
+                .map((b) => parseFloat(String(b.dataset.amount || '').replace(/,/g, '')))
+                .filter((n) => Number.isFinite(n));
+            if (!vals.length) return;
+            const lo = Math.min(...vals);
+            const hi = Math.max(...vals);
+            const range = lo === hi ? money(lo) : `${money(lo)} – ${money(hi)}`;
+            const crop = (row.cells[0]?.textContent || '').split(' ')[0] || 'Crop';
+            row.dataset.range = range;
+            row.title = `${crop} pays ${range} this deal`;
+        });
+    } catch {}
   }
 
   
