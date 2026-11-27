@@ -862,17 +862,11 @@ function shiftAndInsertTransaction(inputId, transactionClass, numericValue, note
         
         // Add new transaction to the beginning of the global data array
         data.transactions[transactionType].unshift(txEntry(parsed, note));
-        
-        // Select all the transaction cells for cash or loan
-        const transactionCells = document.querySelectorAll(`.${transactionClass}`);
-        
-        // Update only the visible cells (first 10 from data)
-        const visibleTransactions = data.transactions[transactionType].slice(0, 10);
-        visibleTransactions.forEach((entry, index) => {
-            if (transactionCells[index]) {
-                transactionCells[index].textContent = numberWithCommasAndDecimals(txAmount(entry));
-            }
-        });
+
+        // Render through the shared list renderer: it paints the amount AND
+        // its memo (updating cells piecemeal left the Note column blank until
+        // the next reload, so quick entries looked unsynced).
+        updateTransactionLists({ cash: data.transactions.cash, loan: data.transactions.loan });
 
         // Clear the input element
         inputElement.value = '';
@@ -2822,9 +2816,20 @@ function flashRollTable(ms = 1000) {
     const buttons = [...document.querySelectorAll('.roll-table button.roll-cell-button')];
     if (!buttons.length) return;
     buttons.forEach(revealRollAmount);
+    // Label the reveal: these numbers are the NEXT deal, not the payout that
+    // was just collected (that confusion made the table look "wrong").
+    try {
+        const banner = document.getElementById('rollDealBanner');
+        if (banner) banner.classList.remove('hidden');
+        document.querySelector('.roll-table')?.classList.add('is-preview');
+    } catch {}
     clearTimeout(flashRollTable._t);
     flashRollTable._t = setTimeout(() => {
         maskAllRollAmounts();
+        try {
+            document.getElementById('rollDealBanner')?.classList.add('hidden');
+            document.querySelector('.roll-table')?.classList.remove('is-preview');
+        } catch {}
         // A roll can be marked while the flash is running — keep its column
         // visible instead of hiding the number they're about to collect.
         const n = parseInt(document.querySelector('.roll-table')?.dataset.lastRoll || '', 10);
@@ -5525,7 +5530,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 // Confirm the tap, then deal a fresh table: same six payouts
                 // per crop in a new random order for the next turn.
                 try {
-                    undoToast(`+$${value.toLocaleString()} ${tapAsset} · roll ${tapRoll} — table reshuffled`);
+                    undoToast(`+$${value.toLocaleString()} ${tapAsset} · roll ${tapRoll} collected — new deal below`);
                 } catch {}
                 reshuffleRollTables();
             });
