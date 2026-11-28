@@ -1029,22 +1029,10 @@ function updateActionButtonStates() {
         setButtonDisabled(payPerAcreBtn, disabled);
     }
 
-    // Uncle Burt card: disabled (greyed, honest title) when the player can't
-    // cover the financing. useCapture: the gated handler must run before any
-    // other click handler on this button so a disabled press never reaches
-    // the buy.
-    try {
-        const b = document.getElementById('uncleBurtBtn');
-        if (b) {
-            const { down, loan, feasible } = (typeof burtHayBounds === 'function') ? burtHayBounds() : { down: 0, loan: 0, feasible: false };
-            b.disabled = !feasible;
-            b.classList.toggle('opacity-50', !feasible);
-            b.classList.toggle('cursor-not-allowed', !feasible);
-            b.title = feasible
-                ? `Event card: 1 hay for $7,500 ($${down.toLocaleString()} down + $${loan.toLocaleString()} loan)`
-                : 'Event card: 1 hay for $7,500 — not affordable right now';
-        }
-    } catch {}
+    // Uncle Burt card (in the Buy modal, Hay only): disabled and dimmed when
+    // the player can't cover the financing, with an honest title naming the
+    // split.
+    try { syncBurtInModal(); } catch {}
     // Short on cash just opens the Pay Per Acre modal in pay mode: the
     // player picks a preset or types the exact total, then Pays (or
     // Borrows when short). Nothing moves until they confirm inside.
@@ -6575,6 +6563,17 @@ window.addEventListener('DOMContentLoaded', (event) => {
 // rest on the loan, debt-cap gated, one undoable action, qty +1, ledger
 // lines carry their own notes so memos never desync from amounts).
 const UNCLE_BURT_HAY_PRICE = 7500;
+function syncBurtInModal() {
+    const b = document.getElementById('uncleBurtBtn');
+    if (!b) return;
+    const { down, loan, feasible } = (typeof burtHayBounds === 'function') ? burtHayBounds() : { down: 0, loan: 0, feasible: false };
+    b.disabled = !feasible;
+    b.classList.toggle('opacity-50', !feasible);
+    b.classList.toggle('cursor-not-allowed', !feasible);
+    b.title = feasible
+        ? `Event card: Uncle Burt sells 1 hay for a flat $7,500 ($${down.toLocaleString()} down + $${loan.toLocaleString()} loan)`
+        : 'Event card: Uncle Burt sells 1 hay for $7,500 — not affordable right now';
+}
 function burtHayBounds() {
     updateTotals();
     const downPct = Math.min(100, Math.max(0, Number(roomEcon().downPct) || 0)) / 100;
@@ -6618,6 +6617,7 @@ function buyUncleBurtHay() {
     populateRollTable();
     saveQuantitiesToLocalStorage();
     updateActionButtonStates();
+    try { syncBurtInModal(); } catch {}
     undoToast('Uncle Burt sold you 1 hay for $7,500');
     return true;
 }
@@ -6749,6 +6749,12 @@ function buyUncleBurtHay() {
         // room covers it (probes the already-scaled cost each step so a
         // lower mult is never overcharged).
         stepBulkToFeasible();
+        // Uncle Burt only makes sense when the modal is buying hay.
+        try {
+            const burt = document.getElementById('burtRowWrap');
+            if (burt) burt.classList.toggle('hidden', asset !== 'hay');
+        } catch {}
+        try { syncBurtInModal(); } catch {}
         buyModal.classList.remove('hidden');
     }
 

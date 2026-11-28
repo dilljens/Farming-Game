@@ -780,6 +780,44 @@ input, .editable {
 #shortOnCashBtn:hover, #borrowInterestBtn:hover {
     background-color: #d97706;
 }
+/* Property-sheet action colors: red = pay money out, amber = borrow.
+   Classed per intent (.btn-pay / .btn-borrow) so the meaning survives the
+   grass-green .buy-btn base. Dark twins included. */
+.buy-btn.btn-pay {
+    background: linear-gradient(180deg, #e2574c, #b93a32);
+    border-color: #8e2b25;
+    color: #fff;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 1px 2px rgba(140, 40, 30, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.buy-btn.btn-pay:hover { background: linear-gradient(180deg, #ef6a5f, #c8443a); }
+.buy-btn.btn-pay:active { background: #a5342c; }
+.buy-btn.btn-borrow {
+    background: linear-gradient(180deg, #f5b942, #d9941c);
+    border-color: #a66f10;
+    color: #2b1c05;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+    box-shadow: 0 1px 2px rgba(140, 95, 10, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.buy-btn.btn-borrow:hover { background: linear-gradient(180deg, #f9c55c, #e2a422); }
+.buy-btn.btn-borrow:active { background: #c98d18; }
+body[data-theme="dark"] .buy-btn.btn-pay {
+    background: linear-gradient(180deg, #c0453a, #932e27);
+    border-color: #6e201b;
+    color: #ffe9e6;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .2);
+}
+body[data-theme="dark"] .buy-btn.btn-pay:hover { background: linear-gradient(180deg, #d05548, #a2342c); }
+body[data-theme="dark"] .buy-btn.btn-pay:active { background: #7e281f; }
+body[data-theme="dark"] .buy-btn.btn-borrow {
+    background: linear-gradient(180deg, #b45309, #8a420a);
+    border-color: #6e3407;
+    color: #fef3c7;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, .4);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .25);
+}
+body[data-theme="dark"] .buy-btn.btn-borrow:hover { background: linear-gradient(180deg, #c26110, #96500c); }
+body[data-theme="dark"] .buy-btn.btn-borrow:active { background: #743c08; }
 
 .buy-btn.is-disabled {
     opacity: 0.45;
@@ -883,6 +921,15 @@ input, .editable {
 }
 .burt-btn:hover { background: linear-gradient(180deg, #ffefc2, #dfa93a); }
 .burt-btn:active { background: #d9a436; }
+/* Full-width event-card version shown inside the Buy modal. */
+.burt-btn.burt-card {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 15px;
+    border-radius: 10px;
+}
+#burtRowWrap.hidden { display: none; }
 .burt-btn:disabled { opacity: .45; filter: grayscale(.7); cursor: not-allowed; }
 body[data-theme="dark"] .burt-btn {
     border-color: #b45309;
