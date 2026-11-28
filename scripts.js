@@ -6478,26 +6478,6 @@ window.addEventListener('DOMContentLoaded', (event) => {
         } catch { return; }
         buyUncleBurtHay();
     }, true);
-    // Roll visibility setting: repaint the table in the chosen mode.
-    // The room's Show-rolls rule owns the checkbox: players mirror the host.
-    syncRollVisibilityUI();
-    const visChk = document.getElementById('rollVisibleChk');
-    if (visChk) {
-        visChk.checked = rollValuesVisible();
-        visChk.disabled = !isHost;
-        visChk.closest('.dbl-check')?.classList.toggle('host-only', !isHost);
-        visChk.title = isHost ? 'Show every payout, or keep them hidden until tapped' : 'Host sets this for the room';
-        visChk.addEventListener('change', async (e) => {
-            if (!isHost || !currentRoomCode) { e.target.checked = rollValuesVisible(); return; }
-            try {
-                await authReady;
-                const next = { ...normalizeRules(currentRoomRules), showrolls: !!e.target.checked };
-                await saveRoomSettings(next);
-                undoToast(next.showrolls ? 'Room: roll values shown to everyone' : 'Room: roll values hidden until tapped');
-            } catch {}
-            try { populateRollTable(); } catch {}
-        });
-    }
     syncDoubleToggles();
 
     function updateAssetDisplay(td, state) {
