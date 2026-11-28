@@ -867,6 +867,31 @@ input, .editable {
     margin: 0 4px 0 0;
     padding: 2px 6px;
 }
+/* Uncle Burt lives inside the Hay buy cell: a small event badge, not a
+   full-width button — Buy stays the primary action. */
+.burt-btn {
+    display: inline-block;
+    margin: 0 0 0 2px;
+    padding: 2px 6px;
+    font-size: 14px;
+    line-height: 1;
+    border: 1px solid #8a6d2e;
+    border-radius: 9999px;
+    background: linear-gradient(180deg, #ffe9b3, #e8b64c);
+    box-shadow: 0 1px 2px rgba(62, 42, 18, 0.2), inset 0 1px 0 #fff;
+    cursor: pointer;
+}
+.burt-btn:hover { background: linear-gradient(180deg, #ffefc2, #dfa93a); }
+.burt-btn:active { background: #d9a436; }
+.burt-btn:disabled { opacity: .45; filter: grayscale(.7); cursor: not-allowed; }
+body[data-theme="dark"] .burt-btn {
+    border-color: #b45309;
+    background: linear-gradient(180deg, #b45309, #92400e);
+    color: #fef3c7;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .25);
+}
+body[data-theme="dark"] .burt-btn:hover { background: linear-gradient(180deg, #c26110, #9a4a0f); }
+body[data-theme="dark"] .burt-btn:active { background: #7c3a0c; }
 
 /* Slider styles */
 input[type="range"] {
@@ -1136,12 +1161,12 @@ body[data-view="desktop"] [data-screen-panel].screen-hidden {
     }
 }
 /* ================= Night mode =================
-   One dataset hook (body[data-theme="dark"]) restyles the whole game.
-   Only neutral Tailwind utilities are remapped — colored action buttons
-   (buy/sell/pay/trade) keep their colors in both modes. */
+   Cozy barn-night: deep espresso page, lamp-lit amber surfaces, cream text.
+   Every paper/amber/light control below gets a dark twin so dark-on-light
+   AND light-on-dark both read. When in doubt: dark bar + cream text. */
 body[data-theme="dark"] {
-    background-color: #0b1220;
-    color: #f8fafc;
+    background-color: #171008;
+    color: #f8f0dd;
     color-scheme: dark;
 }
 /* Contrast pass: every panel and table cell states its own text colour so
@@ -1209,96 +1234,157 @@ body[data-theme="dark"] .roll-table button.roll-cell-button {
 body[data-theme="dark"] .roll-table button.roll-cell-button:hover { background-color: #475569; }
 body[data-theme="dark"] .roll-table button.roll-cell-button.is-masked { color: #94a3b8; }
 body[data-theme="dark"] .roll-table button.roll-cell-button:active { background-color: #6b7280; }
-body[data-theme="dark"] .roll-table th.is-roll-col { background-color: #b45309; }
+body[data-theme="dark"] .roll-table th.is-roll-col { background-color: #b45309; color: #fef3c7; }
 body[data-theme="dark"] .roll-table td.is-roll-col button.roll-cell-button {
-    background-color: #92400e;
+    background: linear-gradient(180deg, #7c4a12, #5b360b);
     border-color: #f59e0b;
-    color: #fff;
+    color: #fef3c7;
 }
-body[data-theme="dark"] .roll-table tr:not(:first-child) td:first-child[data-state="1"] { background-color: #7f1d1d; }
-body[data-theme="dark"] .roll-table tr:not(:first-child) td:first-child[data-state="2"] { background-color: #14532d; }
+body[data-theme="dark"] .roll-table tr:not(:first-child) td:first-child[data-state="1"] { background-color: #7f1d1d; color: #fecaca; }
+body[data-theme="dark"] .roll-table tr:not(:first-child) td:first-child[data-state="2"] { background-color: #14532d; color: #bbf7d0; }
+body[data-theme="dark"] .roll-table button.roll-cell-button.is-linked { box-shadow: 0 0 0 2px #fbbf24; }
 /* Property sheet */
+body[data-theme="dark"] table { background-color: #241a10; border-color: #573f22; }
+body[data-theme="dark"] th, body[data-theme="dark"] td { border-color: #4a3820; }
 body[data-theme="dark"] .qty-cell,
-body[data-theme="dark"] .qty-wrap { background-color: #172554; color: #f8fafc; }
+body[data-theme="dark"] .qty-wrap { background-color: #3a2a14; color: #fdeecd; }
 body[data-theme="dark"] .qty-btn {
-    background-color: #475569;
-    border-color: #94a3b8;
-    color: #ffffff;
+    background: linear-gradient(180deg, #8a6420, #5f450f);
+    border-color: #a37c2c;
+    color: #fef3c7;
+    box-shadow: 0 1px 2px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.25);
 }
-body[data-theme="dark"] .qty-btn:hover { background-color: #64748b; }
-body[data-theme="dark"] .qty-btn:active { background-color: #94a3b8; }
-body[data-theme="dark"] .highlight { background-color: #047857; color: #f8fafc; }
-body[data-theme="dark"] .market-note { color: #cbd5e1; }
-body[data-theme="dark"] .info-btn { background-color: #374151; color: #e5e7eb; }
-body[data-theme="dark"] .info-btn:active { background-color: #4b5563; }
-body[data-theme="dark"] .info-tip { color: #9ca3af; }
+body[data-theme="dark"] .qty-btn:hover { background: linear-gradient(180deg, #9c7426, #6d5018); }
+body[data-theme="dark"] .qty-btn:active { background: #4e3a0d; }
+body[data-theme="dark"] .highlight { background-color: #4d7c0f; color: #f7fee7; }
+body[data-theme="dark"] .market-note { color: #d6c298; }
+body[data-theme="dark"] td.editable { background-color: #3a2a14; color: #fdeecd; }
+body[data-theme="dark"] input[type="number"] {
+    background-color: #2c2010;
+    border-color: #6b5326;
+    color: #fdeecd;
+}
+body[data-theme="dark"] .info-btn { background-color: #4a3517; color: #fdeecd; }
+body[data-theme="dark"] .info-btn:active { background-color: #5f4a20; }
+body[data-theme="dark"] .info-tip { color: #d6c298; }
 /* Cash / loan entry */
-body[data-theme="dark"] .entry-cell { background-color: #1e293b; color: #f8fafc; }
+body[data-theme="dark"] .entry-cell { background-color: #241a10; color: #f8f0dd; }
 body[data-theme="dark"] #cashInput,
 body[data-theme="dark"] #loanInput {
-    background-color: #334155;
-    border-color: #64748b;
-    color: #f8fafc;
-    caret-color: #f8fafc;
+    background-color: #2c2010;
+    border-color: #6b5326;
+    color: #fdeecd;
+    caret-color: #fdeecd;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .5);
 }
 body[data-theme="dark"] .tx-note-input {
-    background-color: #334155;
-    border-color: #64748b;
-    color: #f8fafc;
+    background-color: #2c2010;
+    border-color: #6b5326;
+    color: #e8d5a8;
 }
-body[data-theme="dark"] .sign-seg { border-color: #64748b; }
-body[data-theme="dark"] .sign-seg button { background-color: #475569; color: #f1f5f9; }
-body[data-theme="dark"] .sign-seg button + button { border-color: #64748b; }
+body[data-theme="dark"] .sign-seg { border-color: #6b5326; }
+body[data-theme="dark"] .sign-seg button { background-color: #4a3517; color: #f3e2b8; }
+body[data-theme="dark"] .sign-seg button + button { border-color: #6b5326; }
+body[data-theme="dark"] .sign-seg button[data-sign="-"][aria-pressed="true"] { background-color: #b91c1c; color: #fff; }
+body[data-theme="dark"] .sign-seg button[data-sign="+"][aria-pressed="true"] { background-color: #15803d; color: #fff; }
 body[data-theme="dark"] .cash-note,
-body[data-theme="dark"] .loan-note { color: #cbd5e1; }
-body[data-theme="dark"] .note-head { color: #cbd5e1; }
-body[data-theme="dark"] #financialTable tr:nth-child(even) td:not(.entry-cell) { background-color: #1e293b; }
-body[data-theme="dark"] #financialTable td:empty::before { color: #64748b; }
-body[data-theme="dark"] #financialTable [contenteditable="true"] { background-color: #422006; }
+body[data-theme="dark"] .loan-note { color: #d6c298; }
+body[data-theme="dark"] .note-head { color: #d6c298; }
+body[data-theme="dark"] #financialTable tr:nth-child(even) td:not(.entry-cell) { background-color: #20170c; }
+body[data-theme="dark"] #financialTable td:empty::before { color: #6b5326; }
+body[data-theme="dark"] #financialTable [contenteditable="true"] { background-color: #3a2a14; color: #fdeecd; }
+body[data-theme="dark"] #financialTable tr[data-linked-roll] td { background-color: #4a2f10; }
+body[data-theme="dark"] #financialTable tr[data-linked-roll] td:first-child { box-shadow: inset 4px 0 0 #f59e0b; }
 body[data-theme="dark"] .undo-btn,
 body[data-theme="dark"] .edit-btn {
-    background-color: #374151;
-    color: #e5e7eb;
+    background: linear-gradient(180deg, #6b5326, #4a3517);
+    border-color: #a37c2c;
+    color: #fdf3d7;
+    box-shadow: 0 1px 2px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.2);
 }
 body[data-theme="dark"] .undo-btn:hover,
-body[data-theme="dark"] .edit-btn:hover { background-color: #4b5563; }
-body[data-theme="dark"] .edit-btn.is-on { background-color: #f3f4f6; color: #111827; }
+body[data-theme="dark"] .edit-btn:hover { background: linear-gradient(180deg, #7d6132, #57401c); }
+body[data-theme="dark"] .undo-btn:active,
+body[data-theme="dark"] .edit-btn:active { background: #3a2a12; }
+body[data-theme="dark"] .edit-btn.is-on { background: linear-gradient(180deg, #fdeecd, #ecd9a8); color: #2b2118; }
+body[data-theme="dark"] #opexGotLine.is-linked::before { color: #fbbf24; }
+/* Host-only settings: players see the host's value, dimmed. */
+/* Toggles, tabs, misc chrome — all dark-on-dark, all cream text. */
+body[data-theme="dark"] .dbl-check {
+    background: linear-gradient(180deg, #4a3517, #33240e);
+    border-color: #a37c2c;
+    color: #fdeecd;
+    box-shadow: 0 1px 2px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.15);
+}
+body[data-theme="dark"] .dbl-check input[type="checkbox"] { accent-color: #f59e0b; }
+body[data-theme="dark"] .dbl-check.is-on {
+    background: linear-gradient(180deg, #6d5018, #4e3a0d);
+    border-color: #f59e0b;
+    color: #fef3c7;
+}
 body[data-theme="dark"] .lb-toggle-btn {
-    background-color: #374151;
-    border-color: #4b5563;
-    color: #e5e7eb;
+    background: linear-gradient(180deg, #4a3517, #33240e);
+    border-color: #a37c2c;
+    color: #fdeecd;
 }
 body[data-theme="dark"] .lb-toggle-btn.active {
-    background-color: #16a34a;
-    border-color: #16a34a;
-    color: #ffffff;
+    background: linear-gradient(180deg, #4d7c0f, #3f6212);
+    border-color: #65a30d;
+    color: #f7fee7;
 }
-/* The name cell is contenteditable on the page background. */
-body[data-theme="dark"] #editableUsername,
-body[data-theme="dark"] .editable {
-    background-color: #374151;
-    color: #f3f4f6;
-    caret-color: #f3f4f6;
+body[data-theme="dark"] #screenTabs { background: rgba(23, 16, 8, 0.97); border-color: #4a3820; }
+body[data-theme="dark"] #screenTabsStatus { color: #e8d5a8; }
+body[data-theme="dark"] #screenTabs button[data-screen] {
+    background: linear-gradient(180deg, #3a2a14, #2a1e0c);
+    border-color: #6b5326;
+    color: #f3e2b8;
 }
-/* Toggles, tabs, misc chrome */
-body[data-theme="dark"] .dbl-check {
+body[data-theme="dark"] #screenTabs button[data-screen][aria-selected="true"] {
+    background: linear-gradient(180deg, #4d7c0f, #3f6212);
+    border-color: #65a30d;
+    color: #f7fee7;
+}
+/* Bottom sheets, dice card, trade inboxes: dark card + cream text. */
+body[data-theme="dark"] #diceComponent,
+body[data-theme="dark"] #roomQrWrap,
+body[data-theme="dark"] #tradeInbox {
+    background-color: #241a10;
+    border-color: #573f22;
+    color: #f8f0dd;
+}
+body[data-theme="dark"] #diceDisplay { color: #fef3c7; }
+body[data-theme="dark"] .chart-mini-title { color: #e8d5a8; }
+body[data-theme="dark"] #rollDealBanner {
+    background-color: #4a2f10;
+    border-color: #b45309;
+    color: #fde68a;
+}
+body[data-theme="dark"] .leaderboard-header,
+body[data-theme="dark"] .lb-view-toggle { color: #f8f0dd; }
+body[data-theme="dark"] #tradeInboxHint { color: #d6c298; }
+/* Entry form — the modal (white in light) becomes a dark card. */
+body[data-theme="dark"] .entry-cell { color: inherit; }
+/* Legacy slate night rules below are superseded by the barn-night
+   block above (kept, harmless: later matching rules already won). */
+/* Toggles, tabs, misc chrome (inherited old rules follow) */
+body[data-theme="dark-x"] .dbl-check {
     background-color: #1f2937;
     border-color: #4b5563;
     color: #d1d5db;
 }
-body[data-theme="dark"] .dbl-check.is-on {
+body[data-theme="dark-x"] .dbl-check.is-on {
     background-color: #14532d;
     border-color: #22c55e;
     color: #dcfce7;
 }
-body[data-theme="dark"] #screenTabs { background: rgba(11, 18, 32, 0.97); border-color: #64748b; }
-body[data-theme="dark"] #screenTabsStatus { color: #e2e8f0; }
-body[data-theme="dark"] #screenTabs button[data-screen] {
+body[data-theme="dark-x"] #screenTabs { background: rgba(11, 18, 32, 0.97); border-color: #64748b; }
+body[data-theme="dark-x"] #screenTabsStatus { color: #e2e8f0; }
+body[data-theme="dark-x"] #screenTabs button[data-screen] {
     background: #1e293b;
     border-color: #64748b;
     color: #f1f5f9;
 }
-body[data-theme="dark"] .pay-per-acre-table button.pay-acre-button:not(.selected) {
+body[data-theme="dark-x"] .pay-per-acre-table button.pay-acre-button:not(.selected) {
     background-color: #374151;
     color: #e5e7eb;
     border-color: #4b5563;

@@ -393,9 +393,6 @@
       <div id="tradeInbox" class="hidden w-full max-w-lg mx-auto my-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-left text-sm"></div>
       <!-- Trade actions live beside the auction/offer board -->
       <!-- Player Trades — side-by-side buttons pop up the buy/sell forms -->
-      <div class="text-center my-3 flex items-center justify-center gap-3 flex-wrap" role="group" aria-label="Event cards">
-        <button id="uncleBurtBtn" type="button" class="px-5 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-base" title="Event card: buy 1 hay for a flat $7,500 (financed like the buy modal)">🧑‍🌾 Uncle Burt — hay $7,500</button>
-      </div>
       <div id="tradeButtons" class="text-center my-3 flex items-center justify-center gap-3 flex-wrap">
         <button id="customBuyBtn" type="button" class="px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-base">Buy from player</button>
         <button id="customSellBtn" type="button" class="px-5 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-base">Sell to player</button>
@@ -478,7 +475,7 @@
       <th>Net</th>
     </tr>
     <tr data-acres-per-unit="10">
-      <td class="asset-cell"><button class="buy-btn" data-asset="hay">Buy</button> Hay</td>
+      <td class="asset-cell"><button class="buy-btn" data-asset="hay">Buy</button> Hay <button id="uncleBurtBtn" type="button" class="burt-btn" title="Event card: Uncle Burt sells 1 hay for a flat $7,500 (financed like the buy modal)">🧑‍🌾</button></td>
       <td class="acres">0</td>
       <td class="qty-cell">
         <div class="qty-wrap">
